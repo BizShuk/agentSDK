@@ -1,0 +1,14 @@
+# Local build/cache artifacts
+bin/
+dist/
+*.exe
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store

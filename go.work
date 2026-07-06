@@ -1,0 +1,10 @@
+go 1.26
+
+use (
+	.
+	./mcp
+	./provider/anthropic
+	./provider/google
+	./provider/openaicompat
+	./sample/logdoctor
+)

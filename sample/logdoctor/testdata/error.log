@@ -1,0 +1,6 @@
+2026-07-03T10:00:00Z INFO startup complete
+2026-07-03T10:00:01Z WARN config file missing; using defaults
+2026-07-03T10:00:02Z ERROR database connection refused: 127.0.0.1:5432
+2026-07-03T10:00:03Z ERROR database connection refused: 127.0.0.1:5432
+2026-07-03T10:00:04Z INFO retrying in 5s
+2026-07-03T10:00:09Z FATAL database unavailable; giving up

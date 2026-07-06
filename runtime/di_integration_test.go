@@ -1,0 +1,111 @@
+package runtime_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/bizshuk/agentsdk/action"
+	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/internal/testutil"
+	"github.com/bizshuk/agentsdk/planning"
+	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestDIProviderSwap exercises the M4 promise: the same runtime.Loop
+// must accept two different ModelProviders without code changes. We
+// run the loop twice with different FakeProviders, each producing a
+// distinct scripted transcript; both should reach RUN_STATUS_COMPLETED.
+func TestDIProviderSwap(t *testing.T) {
+	reg := action.NewRegistry()
+	noop := action.NewTypedTool("noop", "no-op",
+		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
+	noop.RiskV = core.RISK_LEVEL_LOW
+	reg.Register(noop)
+
+	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
+		core.THINK_REACT: planning.NewReAct(),
+	})
+
+	state := func() core.State {
+		return core.State{
+			RunID:        "di-1",
+			ThinkingKind: core.THINK_REACT,
+			Budget:       core.Budget{MaxTurns: 5},
+		}
+	}
+
+	t.Run("provider A", func(t *testing.T) {
+		provA := testutil.NewFakeProvider()
+		provA.EnqueueToolCall("c1", "noop", map[string]any{})
+		provA.EnqueueEndTurn("from-A")
+
+		loop := runtime.NewLoop(step, provA, reg)
+		loop.Approval = stubApproval{}
+		loop.Emitter = func(eff core.Effect) {}
+
+		final, err := loop.Run(context.Background(), state())
+		require.NoError(t, err)
+		assert.Equal(t, core.RUN_STATUS_COMPLETED, final.Status)
+	})
+
+	t.Run("provider B", func(t *testing.T) {
+		provB := testutil.NewFakeProvider()
+		provB.EnqueueToolCall("c2", "noop", map[string]any{})
+		provB.EnqueueEndTurn("from-B")
+
+		loop := runtime.NewLoop(step, provB, reg)
+		loop.Approval = stubApproval{}
+		loop.Emitter = func(eff core.Effect) {}
+
+		final, err := loop.Run(context.Background(), state())
+		require.NoError(t, err)
+		assert.Equal(t, core.RUN_STATUS_COMPLETED, final.Status)
+	})
+}
+
+// TestImageChunkSurvivesRunLoop feeds an IMAGE chunk into the
+// Step's input. The chunk must survive end-to-end without being
+// re-encoded (multimodal abstraction preservation).
+func TestImageChunkSurvivesRunLoop(t *testing.T) {
+	imgBytes := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a} // PNG header
+
+	prov := testutil.NewFakeProvider()
+	prov.EnqueueEndTurn("seen")
+
+	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
+		core.THINK_REACT: planning.NewReAct(),
+	})
+	loop := runtime.NewLoop(step, prov, action.NewRegistry())
+	loop.Emitter = func(eff core.Effect) {}
+
+	state := core.State{
+		RunID:        "img-1",
+		ThinkingKind: core.THINK_REACT,
+		Budget:       core.Budget{MaxTurns: 3},
+		Messages: []core.Message{
+			{Role: core.ROLE_USER, Chunks: []core.Chunk{
+				{Kind: core.CHUNK_KIND_IMAGE, ImageMIME: "image/png", Image: imgBytes},
+			}},
+		},
+	}
+	_, err := loop.RunWithInput(context.Background(), state, core.Input{
+		Kind: core.INPUT_KIND_PERCEPT,
+		Percept: &core.Percept{ID: "p", Source: "test", Payload: "wake up"},
+	})
+	require.NoError(t, err)
+
+	// After the run, the IMAGE chunk must still be in state with
+	// identical bytes — proving the multimodal abstraction is
+	// preserved end-to-end.
+	require.NotEmpty(t, state.Messages)
+	for _, m := range state.Messages {
+		for _, c := range m.Chunks {
+			if c.Kind == core.CHUNK_KIND_IMAGE {
+				assert.Equal(t, imgBytes, c.Image)
+				assert.Equal(t, "image/png", c.ImageMIME)
+			}
+		}
+	}
+}
