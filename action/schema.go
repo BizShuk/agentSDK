@@ -33,15 +33,15 @@ func SchemaJSON[T any]() (json.RawMessage, error) {
 	return json.Marshal(s)
 }
 
-// SchemaForTool composes a full core.ToolSchema for a tool with the
+// SchemaForTool composes a full core.ToolSpec for a tool with the
 // given Args type. The Name / Description / Risk fields come from the
 // caller; Parameters is the reflected JSON schema for T.
-func SchemaForTool[T any](name, desc string, risk core.RiskLevel) (core.ToolSchema, error) {
+func SchemaForTool[T any](name, desc string, risk core.RiskLevel) (core.ToolSpec, error) {
 	raw, err := SchemaJSON[T]()
 	if err != nil {
-		return core.ToolSchema{}, fmt.Errorf("schema reflect %q: %w", name, err)
+		return core.ToolSpec{}, fmt.Errorf("schema reflect %q: %w", name, err)
 	}
-	return core.ToolSchema{
+	return core.ToolSpec{
 		Name:        name,
 		Description: desc,
 		Risk:        risk,

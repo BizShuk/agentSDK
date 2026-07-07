@@ -38,10 +38,10 @@ func (r *Registry) Get(name string) (core.Tool, bool) {
 }
 
 // List returns schemas of all registered tools (copy).
-func (r *Registry) List() []core.ToolSchema {
+func (r *Registry) List() []core.ToolSpec {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]core.ToolSchema, 0, len(r.tools))
+	out := make([]core.ToolSpec, 0, len(r.tools))
 	for _, t := range r.tools {
 		out = append(out, t.Schema())
 	}
@@ -86,6 +86,6 @@ func marshalArgs(args map[string]any) (json.RawMessage, error) {
 //
 // Implementations live under mcp/ (added in M3).
 type ToolSource interface {
-	Discover(ctx context.Context) ([]core.ToolSchema, error)
+	Discover(ctx context.Context) ([]core.ToolSpec, error)
 	Call(ctx context.Context, name string, args json.RawMessage) (core.ToolResult, error)
 }

@@ -27,7 +27,7 @@ import (
 type DefaultApprovalPolicy struct{}
 
 // Decide implements core.ApprovalPolicy.
-func (DefaultApprovalPolicy) Decide(_ struct{}, autonomy core.AutonomyLevel, _ core.CallToolEffect, schema core.ToolSchema) core.ApprovalAction {
+func (DefaultApprovalPolicy) Decide(_ struct{}, autonomy core.AutonomyLevel, _ core.CallToolInstruction, schema core.ToolSpec) core.ApprovalAction {
 	risk := schema.Risk
 	return gridLookup(autonomy, risk)
 }

@@ -25,7 +25,7 @@ type TypedTool[TArgs any, TOut any] struct {
 	Fn     func(ctx context.Context, args TArgs) (TOut, error)
 
 	schemaOnce sync.Once
-	schema     core.ToolSchema
+	schema     core.ToolSpec
 	schemaErr  error
 }
 
@@ -52,7 +52,7 @@ func (t *TypedTool[TArgs, TOut]) Description() string { return t.DescV }
 // Schema returns the JSON schema for the tool's args (computed once
 // and cached). Errors during reflection are surfaced as an empty
 // schema — the rest of the tool still works, just without a schema.
-func (t *TypedTool[TArgs, TOut]) Schema() core.ToolSchema {
+func (t *TypedTool[TArgs, TOut]) Schema() core.ToolSpec {
 	t.schemaOnce.Do(func() {
 		s, err := SchemaForTool[TArgs](t.NameV, t.DescV, t.RiskV)
 		t.schemaErr = err
