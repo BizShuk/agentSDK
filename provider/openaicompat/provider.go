@@ -155,7 +155,7 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 					}
 					if len(part.Choices) > 0 {
 						if delta := part.Choices[0].Delta; delta.Content != "" {
-							ch <- core.ModelChunk{Kind: core.CHUNK_KIND_TEXT, Text: delta.Content}
+							ch <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: delta.Content}
 						}
 					}
 				}
@@ -173,8 +173,8 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 func (p *Provider) CountTokens(_ context.Context, msgs []core.Message) (int, error) {
 	n := 0
 	for _, m := range msgs {
-		for _, c := range m.Chunks {
-			if c.Kind == core.CHUNK_KIND_TEXT {
+		for _, c := range m.Parts {
+			if c.Kind == core.PART_KIND_PLAIN_TEXT {
 				n += len(c.Text)/4 + 1
 			}
 		}
@@ -291,11 +291,11 @@ func flattenMessage(m core.Message) (string, []toolCall, []flatToolResult) {
 	var sb strings.Builder
 	var tcs []toolCall
 	var trs []flatToolResult
-	for _, c := range m.Chunks {
+	for _, c := range m.Parts {
 		switch c.Kind {
-		case core.CHUNK_KIND_TEXT:
+		case core.PART_KIND_PLAIN_TEXT:
 			sb.WriteString(c.Text)
-		case core.CHUNK_KIND_TOOL_USE:
+		case core.PART_KIND_TOOL_USE:
 			if c.ToolUse != nil {
 				args, _ := json.Marshal(c.ToolUse.Args)
 				tcs = append(tcs, toolCall{
@@ -306,7 +306,7 @@ func flattenMessage(m core.Message) (string, []toolCall, []flatToolResult) {
 					}{Name: c.ToolUse.Name, Arguments: string(args)},
 				})
 			}
-		case core.CHUNK_KIND_TOOL_RESULT:
+		case core.PART_KIND_TOOL_RESULT:
 			if c.ToolResult != nil {
 				trs = append(trs, flatToolResult{
 					CallID: c.ToolResult.CallID,
@@ -319,7 +319,7 @@ func flattenMessage(m core.Message) (string, []toolCall, []flatToolResult) {
 	return sb.String(), tcs, trs
 }
 
-func toOpenAITools(schemas []core.ToolSchema) []toolDef {
+func toOpenAITools(schemas []core.ToolSpec) []toolDef {
 	out := make([]toolDef, 0, len(schemas))
 	for _, s := range schemas {
 		td := toolDef{Type: "function"}

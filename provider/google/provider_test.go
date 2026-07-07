@@ -26,7 +26,7 @@ func TestCountTokens(t *testing.T) {
 	p, err := google.New(context.Background(), google.WithAPIKey("AIza-test"))
 	require.NoError(t, err)
 	n, err := p.CountTokens(context.Background(), []core.Message{
-		{Role: core.ROLE_USER, Chunks: []core.Chunk{{Kind: core.CHUNK_KIND_TEXT, Text: "hello"}}},
+		{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hello"}}},
 	})
 	require.NoError(t, err)
 	assert.Greater(t, n, 0)

@@ -69,11 +69,11 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 		defer close(ch)
 		mr, err := p.Generate(ctx, req)
 		if err != nil {
-			ch <- core.ModelChunk{Kind: core.CHUNK_KIND_TEXT, Text: ""}
+			ch <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: ""}
 			return
 		}
 		if mr.Text != "" {
-			ch <- core.ModelChunk{Kind: core.CHUNK_KIND_TEXT, Text: mr.Text}
+			ch <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: mr.Text}
 		}
 		ch <- core.ModelChunk{Done: true}
 	}()
@@ -85,8 +85,8 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 func (p *Provider) CountTokens(_ context.Context, msgs []core.Message) (int, error) {
 	n := 0
 	for _, m := range msgs {
-		for _, c := range m.Chunks {
-			if c.Kind == core.CHUNK_KIND_TEXT {
+		for _, c := range m.Parts {
+			if c.Kind == core.PART_KIND_PLAIN_TEXT {
 				n += len(c.Text)/4 + 1
 			}
 		}
@@ -106,17 +106,17 @@ func toAnthropicMessages(msgs []core.Message) []anthropic.MessageParam {
 			role = anthropic.MessageParamRoleAssistant
 		}
 		var blocks []anthropic.ContentBlockParamUnion
-		for _, c := range m.Chunks {
+		for _, c := range m.Parts {
 			switch c.Kind {
-			case core.CHUNK_KIND_TEXT:
+			case core.PART_KIND_PLAIN_TEXT:
 				if c.Text != "" {
 					blocks = append(blocks, anthropic.NewTextBlock(c.Text))
 				}
-			case core.CHUNK_KIND_TOOL_USE:
+			case core.PART_KIND_TOOL_USE:
 				if c.ToolUse != nil {
 					blocks = append(blocks, anthropic.NewToolUseBlock(c.ToolUse.ID, c.ToolUse.Args, c.ToolUse.Name))
 				}
-			case core.CHUNK_KIND_TOOL_RESULT:
+			case core.PART_KIND_TOOL_RESULT:
 				if c.ToolResult != nil {
 					outStr := stringify(c.ToolResult.Output)
 					blocks = append(blocks, anthropic.NewToolResultBlock(c.ToolResult.CallID, outStr, c.ToolResult.Error != ""))
@@ -131,7 +131,7 @@ func toAnthropicMessages(msgs []core.Message) []anthropic.MessageParam {
 	return out
 }
 
-func toAnthropicTools(schemas []core.ToolSchema) []anthropic.ToolUnionParam {
+func toAnthropicTools(schemas []core.ToolSpec) []anthropic.ToolUnionParam {
 	out := make([]anthropic.ToolUnionParam, 0, len(schemas))
 	for _, s := range schemas {
 		var inputSchema any

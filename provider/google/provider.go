@@ -1,7 +1,7 @@
 // Package google adapts google.golang.org/genai to core.ModelProvider.
 //
 // The Gemini API supports multimodal inputs natively — agentsdk's
-// core.Chunk (Text / Audio / Image) maps to genai.Part; we forward
+// core.Part (Text / Audio / Image) maps to genai.Part; we forward
 // images as inline parts so the model can see them.
 package google
 
@@ -75,7 +75,7 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 			return
 		}
 		if mr.Text != "" {
-			ch <- core.ModelChunk{Kind: core.CHUNK_KIND_TEXT, Text: mr.Text}
+			ch <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: mr.Text}
 		}
 		ch <- core.ModelChunk{Done: true}
 	}()
@@ -86,8 +86,8 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 func (p *Provider) CountTokens(_ context.Context, msgs []core.Message) (int, error) {
 	n := 0
 	for _, m := range msgs {
-		for _, c := range m.Chunks {
-			if c.Kind == core.CHUNK_KIND_TEXT {
+		for _, c := range m.Parts {
+			if c.Kind == core.PART_KIND_PLAIN_TEXT {
 				n += len(c.Text)/4 + 1
 			}
 		}
@@ -105,13 +105,13 @@ func toGenaiParts(msgs []core.Message) []*genai.Part {
 	// concatenate all text + images from every message.
 	var parts []*genai.Part
 	for _, m := range msgs {
-		for _, c := range m.Chunks {
+		for _, c := range m.Parts {
 			switch c.Kind {
-			case core.CHUNK_KIND_TEXT:
+			case core.PART_KIND_PLAIN_TEXT:
 				if c.Text != "" {
 					parts = append(parts, genai.NewPartFromText(c.Text))
 				}
-			case core.CHUNK_KIND_IMAGE:
+			case core.PART_KIND_IMAGE:
 				if len(c.Image) > 0 {
 					mime := c.ImageMIME
 					if mime == "" {
@@ -125,7 +125,7 @@ func toGenaiParts(msgs []core.Message) []*genai.Part {
 	return parts
 }
 
-func toGenaiTools(schemas []core.ToolSchema) []*genai.Tool {
+func toGenaiTools(schemas []core.ToolSpec) []*genai.Tool {
 	out := make([]*genai.Tool, 0, len(schemas))
 	for _, s := range schemas {
 		out = append(out, &genai.Tool{

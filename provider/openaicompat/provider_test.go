@@ -43,7 +43,7 @@ func TestProviderRoundTripAgainstFakeOllama(t *testing.T) {
 	assert.Equal(t, "openaicompat:llama3.2", p.Name())
 
 	req := core.ModelRequest{Messages: []core.Message{
-		{Role: core.ROLE_USER, Chunks: []core.Chunk{{Kind: core.CHUNK_KIND_TEXT, Text: "hi"}}},
+		{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"}}},
 	}}
 	mr, err := p.Generate(context.Background(), req)
 	require.NoError(t, err)
@@ -64,7 +64,7 @@ func TestProviderIncludesBearerHeader(t *testing.T) {
 	p, err := openaicompat.New(openaicompat.WithBaseURL(srv.URL), openaicompat.WithAPIKey("sk-test"))
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
-		Messages: []core.Message{{Role: core.ROLE_USER, Chunks: []core.Chunk{{Kind: core.CHUNK_KIND_TEXT, Text: "x"}}}},
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
 	})
 	require.NoError(t, err)
 	assert.True(t, strings.Contains(sawAuth, "Bearer sk-test"))
@@ -79,7 +79,7 @@ func TestProviderPropagatesError(t *testing.T) {
 	p, err := openaicompat.New(openaicompat.WithBaseURL(srv.URL))
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
-		Messages: []core.Message{{Role: core.ROLE_USER, Chunks: []core.Chunk{{Kind: core.CHUNK_KIND_TEXT, Text: "x"}}}},
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "429")
@@ -97,7 +97,7 @@ func TestProviderSkipsBearerForLocalHost(t *testing.T) {
 	p, err := openaicompat.New(openaicompat.WithBaseURL(srv.URL), openaicompat.WithAPIKey(""))
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
-		Messages: []core.Message{{Role: core.ROLE_USER, Chunks: []core.Chunk{{Kind: core.CHUNK_KIND_TEXT, Text: "x"}}}},
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
 	})
 	require.NoError(t, err)
 	assert.Empty(t, sawAuth)

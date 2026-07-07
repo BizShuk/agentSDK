@@ -36,7 +36,7 @@ func TestGenerateAgainstFakeServer(t *testing.T) {
 	// The adapter's CountTokens is heuristic — verify it returns a
 	// positive count on a non-empty transcript.
 	n, err := p.CountTokens(context.Background(), []core.Message{
-		{Role: core.ROLE_USER, Chunks: []core.Chunk{{Kind: core.CHUNK_KIND_TEXT, Text: "hello world"}}},
+		{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hello world"}}},
 	})
 	require.NoError(t, err)
 	assert.Greater(t, n, 0)
