@@ -1,11 +1,11 @@
-// Package runtime is the shell around core.Step. It dispatches effects
-// to the bound ports (model, tools, store, notifier) and folds the
-// results back as Inputs.
+// Package runtime is the shell around core.Decide. It dispatches
+// instructions to the bound ports (model, tools, store, notifier) and
+// folds the results back as Events.
 //
 // M2 integrates the middleware chain: Retry / Timeout / Budget / Loopguard
 // wrap the dispatcher (retry → timeout → budget → loopguard → base).
 // M3 / M4 slots in tracing, sandbox, approval, spotlight / sanitizer at
-// the appropriate positions without changing the public Loop API.
+// the appropriate positions without changing the public Engine API.
 package runtime
 
 import (
@@ -20,19 +20,19 @@ import (
 	"github.com/bizshuk/agentsdk/middleware/loopguard"
 )
 
-// Emitter is the callback for EFFECT_EMIT — typically wired to cli.Codec
+// Emitter is the callback for INSTRUCTION_EMIT — typically wired to cli.Codec
 // or a websocket writer.
-type Emitter func(core.Effect)
+type Emitter func(core.Instruction)
 
-// Loop is the agent runtime. All fields are required except Middleware
+// Engine is the agent runtime. All fields are required except Middleware
 // (nil = uses DefaultMiddleware: retry → timeout → budget → loopguard),
-// Approval (nil = no approval gate), and Emit (nil = drops emit effects).
-type Loop struct {
-	Step       core.Step
+// Approval (nil = no approval gate), and Emit (nil = drops emit instructions).
+type Engine struct {
+	Step       core.Decide
 	Model      core.ModelProvider
 	Tools      core.ToolRegistry
 	Store      core.StateStore
-	WAL        core.WAL
+	Log        core.WriteAheadLog
 	Approval   core.ApprovalPolicy
 	Notifier   core.Notifier
 	Emitter    Emitter
@@ -40,12 +40,12 @@ type Loop struct {
 
 	// chain is the resolved chain — built lazily on first dispatch.
 	chain     middleware.Dispatcher
-	chainOnce boolError
+	chainOnce onceFlag
 }
 
-// NewLoop is a constructor that accepts nil-able optionals and defaults them.
-func NewLoop(step core.Step, model core.ModelProvider, tools core.ToolRegistry) *Loop {
-	return &Loop{Step: step, Model: model, Tools: tools}
+// NewEngine is a constructor that accepts nil-able optionals and defaults them.
+func NewEngine(step core.Decide, model core.ModelProvider, tools core.ToolRegistry) *Engine {
+	return &Engine{Step: step, Model: model, Tools: tools}
 }
 
 // DefaultMiddleware returns the M2 chain: retry → timeout → budget → loopguard.
@@ -59,154 +59,185 @@ func DefaultMiddleware() middleware.Middleware {
 	)
 }
 
-// resolve returns the bound middleware chain, building it once on first
-// use. Callers may override Loop.Middleware to inject their own chain.
-func (l *Loop) resolve() middleware.Middleware {
-	if l.Middleware != nil {
-		return l.Middleware
+// resolveChain returns the bound middleware chain, building it once on first
+// use. Callers may override Engine.Middleware to inject their own chain.
+func (e *Engine) resolveChain() middleware.Middleware {
+	if e.Middleware != nil {
+		return e.Middleware
 	}
 	return DefaultMiddleware()
 }
 
-// dispatch is the terminal Next — what the middleware chain wraps.
+// runInstruction is the terminal Next — what the middleware chain wraps.
 // Implements the core.ModelProvider / ToolRegistry calls and other ports.
-func (l *Loop) dispatch(ctx context.Context, s core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
-	switch eff.Kind {
-	case core.EFFECT_CALL_MODEL:
-		if eff.CallModel == nil {
-			return s, nil, false, fmt.Errorf("call_model effect missing CallModel")
+func (e *Engine) runInstruction(ctx context.Context, s core.State, inst core.Instruction) (core.State, *core.Event, bool, error) {
+	switch inst.Kind {
+	case core.INSTRUCTION_CALL_MODEL:
+		if inst.CallModel == nil {
+			return s, nil, false, fmt.Errorf("call_model instruction missing CallModel")
 		}
-		if l.Model == nil {
-			return s, nil, false, fmt.Errorf("call_model effect but no Model bound")
+		if e.Model == nil {
+			return s, nil, false, fmt.Errorf("call_model instruction but no Model bound")
 		}
-		mr, err := l.Model.Generate(ctx, core.ModelRequest{
-			Messages: eff.CallModel.Messages,
-			Tools:    eff.CallModel.Tools,
+		tools := inst.CallModel.Tools
+		if len(tools) == 0 && e.Tools != nil {
+			tools = e.Tools.List()
+		}
+		mr, err := e.Model.Generate(ctx, core.ModelRequest{
+			Messages: inst.CallModel.Messages,
+			Tools:    tools,
 		})
 		if err != nil {
 			return s, nil, false, fmt.Errorf("model generate: %w", err)
 		}
-		return s, &core.Input{
-			Kind:        core.INPUT_KIND_MODEL_RESULT,
+		// Append assistant message with tool_use parts so the next
+		// CALL_MODEL sees the full Anthropic-style turn pairing
+		// (assistant tool_use → tool result).
+		if len(mr.ToolCalls) > 0 || mr.Text != "" {
+			var parts []core.Part
+			if mr.Text != "" {
+				parts = append(parts, core.Part{
+					Kind: core.PART_KIND_PLAIN_TEXT,
+					Text: mr.Text,
+				})
+			}
+			for _, tc := range mr.ToolCalls {
+				parts = append(parts, core.Part{
+					Kind: core.PART_KIND_TOOL_USE,
+					ToolUse: &core.ToolUseChunk{
+						ID:   tc.ID,
+						Name: tc.Name,
+						Args: tc.Args,
+					},
+				})
+			}
+			s.Messages = append(s.Messages, core.Message{
+				Role:   core.ROLE_ASSISTANT,
+				Parts:  parts,
+				Ts:     time.Now().UTC(),
+			})
+		}
+		return s, &core.Event{
+			Kind:        core.EVENT_MODEL_REPLY,
 			ModelResult: &mr,
 			ReceivedAt:  time.Now().UTC(),
 		}, false, nil
 
-	case core.EFFECT_CALL_TOOL:
-		if eff.CallTool == nil {
-			return s, nil, false, fmt.Errorf("call_tool effect missing CallTool")
+	case core.INSTRUCTION_CALL_TOOL:
+		if inst.CallTool == nil {
+			return s, nil, false, fmt.Errorf("call_tool instruction missing CallTool")
 		}
-		if l.Tools == nil {
-			return s, nil, false, fmt.Errorf("call_tool effect but no Tools bound")
+		if e.Tools == nil {
+			return s, nil, false, fmt.Errorf("call_tool instruction but no Tools bound")
 		}
-		res := l.Tools.Call(ctx, eff.CallTool.Call)
-		chunkOut := core.ToolResultChunk{
+		res := e.Tools.Call(ctx, inst.CallTool.Call)
+		chunkOut := core.ToolResultPart{
 			CallID: res.CallID, Name: res.Name, OK: res.OK,
 			Output: res.Output, Error: res.Error,
 		}
 		s.Messages = append(s.Messages, core.Message{
 			Role: core.ROLE_TOOL,
-			Chunks: []core.Chunk{
-				{Kind: core.CHUNK_KIND_TOOL_RESULT, ToolResult: &chunkOut},
+			Parts: []core.Part{
+				{Kind: core.PART_KIND_TOOL_RESULT, ToolResult: &chunkOut},
 			},
 			Ts: time.Now().UTC(),
 		})
-		return s, &core.Input{
-			Kind:       core.INPUT_KIND_TOOL_RESULT,
+		return s, &core.Event{
+			Kind:       core.EVENT_TOOL_RESULT,
 			ToolResult: &res,
 			ReceivedAt: time.Now().UTC(),
 		}, false, nil
 
-	case core.EFFECT_REQUEST_APPROVAL:
-		if eff.RequestApproval == nil {
-			return s, nil, false, fmt.Errorf("request_approval effect missing payload")
+	case core.INSTRUCTION_REQUEST_APPROVAL:
+		if inst.RequestApproval == nil {
+			return s, nil, false, fmt.Errorf("request_approval instruction missing payload")
 		}
 		pa := core.PendingApproval{
-			ID:          eff.RequestApproval.ApprovalID,
-			Reason:      eff.RequestApproval.Reason,
-			Risk:        eff.RequestApproval.Risk,
-			Summary:     eff.RequestApproval.Summary,
-			ToolCall:    eff.RequestApproval.ToolCall,
+			ID:          inst.RequestApproval.ApprovalID,
+			Reason:      inst.RequestApproval.Reason,
+			Risk:        inst.RequestApproval.Risk,
+			Summary:     inst.RequestApproval.Summary,
+			ToolCall:    inst.RequestApproval.ToolCall,
 			RequestedAt: time.Now().UTC(),
 		}
 		s.PendingApprovals = append(s.PendingApprovals, pa)
 		s.Status = core.RUN_STATUS_PAUSED_APPROVAL
 		return s, nil, true, nil
 
-	case core.EFFECT_NOTIFY:
-		if eff.Notify != nil && l.Notifier != nil {
-			_ = l.Notifier.Notify(ctx, fmt.Sprintf("[%s] %s", eff.Notify.Level, eff.Notify.Message))
+	case core.INSTRUCTION_NOTIFY:
+		if inst.Notify != nil && e.Notifier != nil {
+			_ = e.Notifier.Notify(ctx, fmt.Sprintf("[%s] %s", inst.Notify.Level, inst.Notify.Message))
 		}
 		return s, nil, false, nil
 
-	case core.EFFECT_CHECKPOINT:
-		if l.Store != nil {
-			_ = l.Store.Save(ctx, s)
+	case core.INSTRUCTION_CHECKPOINT:
+		if e.Store != nil {
+			_ = e.Store.Save(ctx, s)
 		}
 		return s, nil, false, nil
 
-	case core.EFFECT_EMIT:
-		// Already emitted by Loop.Run before dispatch. Nothing to do.
+	case core.INSTRUCTION_EMIT:
+		// Already emitted by Engine.Run before dispatch. Nothing to do.
 		return s, nil, false, nil
 
-	case core.EFFECT_DONE:
+	case core.INSTRUCTION_DONE:
 		s.Status = core.RUN_STATUS_COMPLETED
 		return s, nil, true, nil
 
 	default:
-		return s, nil, false, fmt.Errorf("unknown effect kind: %s", eff.Kind)
+		return s, nil, false, fmt.Errorf("unknown instruction kind: %s", inst.Kind)
 	}
 }
 
-// ensureChain builds the wrapped dispatch function the first time it is
+// buildChain builds the wrapped dispatch function the first time it is
 // needed. We capture chain functions inside runtime state so the middleware
 // chain can have its own bookkeeping between dispatch calls.
-func (l *Loop) ensureChain() middleware.Next {
-	if !l.chainOnce.value {
-		base := middleware.Next(l.dispatch)
-		l.chain = middleware.Dispatcher(l.resolve()(base))
-		l.chainOnce.value = true
+func (e *Engine) buildChain() middleware.Next {
+	if !e.chainOnce.value {
+		base := middleware.Next(e.runInstruction)
+		e.chain = middleware.Dispatcher(e.resolveChain()(base))
+		e.chainOnce.value = true
 	}
-	return middleware.Next(l.chain)
+	return middleware.Next(e.chain)
 }
 
-// boolError is a tiny once-guard type to avoid sync.Once overhead.
-type boolError struct{ value bool }
+// onceFlag is a tiny once-guard type to avoid sync.Once overhead.
+type onceFlag struct{ value bool }
 
 // Run drives the run from `state` until a terminal status is reached or
-// the context is canceled. The first iteration has no Input — patterns
+// the context is canceled. The first iteration has no Event — rules
 // are expected to read state.Messages / state.PendingApprovals instead.
 //
 // Returns the final State and any terminal error.
-func (l *Loop) Run(ctx context.Context, state core.State) (core.State, error) {
-	return l.runWithInput(ctx, state, core.Input{})
+func (e *Engine) Run(ctx context.Context, state core.State) (core.State, error) {
+	return e.runStep(ctx, state, core.Event{})
 }
 
 // Resume loads a paused run by ID and replays the WAL, then continues
 // from the last checkpoint. The runtime never re-issues model calls during
 // replay — the WAL already contains ModelResult entries.
-func (l *Loop) Resume(ctx context.Context, runID string) (core.State, error) {
-	if l.Store == nil {
+func (e *Engine) Resume(ctx context.Context, runID string) (core.State, error) {
+	if e.Store == nil {
 		return core.State{}, fmt.Errorf("resume requires Store")
 	}
-	s, err := l.Store.Load(ctx, runID)
+	s, err := e.Store.Load(ctx, runID)
 	if err != nil {
 		return core.State{}, err
 	}
-	// For M2, replay is delegated to checkpoint.Recover if a WAL is bound.
-	// The simple case is "Load + Run with empty input"; with a WAL we
-	// can replay prior Inputs by feeding them in order. We pass them as a
-	// queued slice handled by runWithInput.
-	if l.WAL == nil {
-		return l.Run(ctx, s)
+	// For M2, replay is delegated to checkpoint.Recoverer if a Log is bound.
+	// The simple case is "Load + Run with empty input"; with a Log we
+	// can replay prior Events by feeding them in order. We pass them as a
+	// queued slice handled by runStep.
+	if e.Log == nil {
+		return e.Run(ctx, s)
 	}
-	inputs, err := l.WAL.Replay(ctx, runID, s.LastInputSeq)
+	events, err := e.Log.Read(ctx, runID, s.LastInputSeq)
 	if err != nil {
 		return core.State{}, fmt.Errorf("resume replay: %w", err)
 	}
-	for _, in := range inputs {
+	for _, ev := range events {
 		var err error
-		s, err = l.runWithInput(ctx, s, in)
+		s, err = e.runStep(ctx, s, ev)
 		if err != nil {
 			return s, err
 		}
@@ -214,12 +245,12 @@ func (l *Loop) Resume(ctx context.Context, runID string) (core.State, error) {
 	return s, nil
 }
 
-// SubmitApproval injects an out-of-band HITL decision.
-func (l *Loop) SubmitApproval(ctx context.Context, runID string, decision core.ApprovalDecision, decidedBy string) (core.State, error) {
-	if l.Store == nil {
-		return core.State{}, fmt.Errorf("submit approval requires Store")
+// SubmitHumanDecision injects an out-of-band HITL decision.
+func (e *Engine) SubmitHumanDecision(ctx context.Context, runID string, decision core.ApprovalDecision, decidedBy string) (core.State, error) {
+	if e.Store == nil {
+		return core.State{}, fmt.Errorf("submit decision requires Store")
 	}
-	s, err := l.Store.Load(ctx, runID)
+	s, err := e.Store.Load(ctx, runID)
 	if err != nil {
 		return core.State{}, err
 	}
@@ -232,25 +263,25 @@ func (l *Loop) SubmitApproval(ctx context.Context, runID string, decision core.A
 			break
 		}
 	}
-	if err := l.Store.Save(ctx, s); err != nil {
+	if err := e.Store.Save(ctx, s); err != nil {
 		return core.State{}, err
 	}
-	input := core.Input{
-		Kind:             core.INPUT_KIND_APPROVAL_DECISION,
-		ApprovalDecision: &decision,
-		ReceivedAt:       time.Now().UTC(),
+	event := core.Event{
+		Kind:          core.EVENT_HUMAN_DECISION,
+		HumanDecision: &decision,
+		ReceivedAt:    time.Now().UTC(),
 	}
-	return l.runWithInput(ctx, s, input)
+	return e.runStep(ctx, s, event)
 }
 
-// RunWithInput is exported so tests / sample can drive a one-shot
-// deterministic loop with a caller-provided first input.
-func (l *Loop) RunWithInput(ctx context.Context, state core.State, seed core.Input) (core.State, error) {
-	return l.runWithInput(ctx, state, seed)
+// RunWithEvent is exported so tests / sample can drive a one-shot
+// deterministic loop with a caller-provided first event.
+func (e *Engine) RunWithEvent(ctx context.Context, state core.State, seed core.Event) (core.State, error) {
+	return e.runStep(ctx, state, seed)
 }
 
-// runWithInput is the shared engine for Run and RunWithInput.
-func (l *Loop) runWithInput(ctx context.Context, state core.State, input core.Input) (core.State, error) {
+// runStep is the shared engine for Run and RunWithEvent.
+func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event) (core.State, error) {
 	if state.Budget.StartedAt.IsZero() {
 		state.Budget.StartedAt = time.Now().UTC()
 	}
@@ -258,52 +289,52 @@ func (l *Loop) runWithInput(ctx context.Context, state core.State, input core.In
 		state.Status = core.RUN_STATUS_RUNNING
 	}
 
-	chain := l.ensureChain()
+	chain := e.buildChain()
 	current := state
 
 	for {
-		// Pre-populate scratch from the incoming input BEFORE Step runs, so
-		// patterns can read it via Decide. Patterns are pure and cannot
-		// inspect Input directly.
+		// Pre-populate working memory from the incoming event BEFORE Decide runs,
+		// so rules can read it via NextStep. Rules are pure and cannot
+		// inspect Event directly.
 		preStep := current.Clone()
-		if preStep.Scratch == nil {
-			preStep.Scratch = make(map[string]any, 4)
+		if preStep.WorkingMemory == nil {
+			preStep.WorkingMemory = make(map[string]any, 4)
 		}
-		// end_turn / max_tokens / error → short-circuit to DONE before Step
-		// sees the input. This avoids the case where ReAct (or any pattern
-		// that set its phase to "act" on the prior turn) would otherwise
-		// emit DONE on stale scratch.
-		if input.ModelResult != nil && len(input.ModelResult.ToolCalls) == 0 {
+		// end_turn / max_tokens / error → short-circuit to DONE before
+		// Decide sees the event. This avoids the case where ThinkThenAct
+		// (or any rule that set its phase to "dispatch" on the prior turn)
+		// would otherwise emit DONE on stale working memory.
+		if event.ModelResult != nil && len(event.ModelResult.ToolCalls) == 0 {
 			preStep.Status = core.RUN_STATUS_COMPLETED
-			if l.Store != nil {
-				_ = l.Store.Save(ctx, preStep)
+			if e.Store != nil {
+				_ = e.Store.Save(ctx, preStep)
 			}
 			return preStep, nil
 		}
-		if input.ModelResult != nil && len(input.ModelResult.ToolCalls) > 0 {
-			preStep.Scratch["react.last_call_id"] = input.ModelResult.ToolCalls[0]
+		if event.ModelResult != nil && len(event.ModelResult.ToolCalls) > 0 {
+			preStep.WorkingMemory["think_then_act.pending_call"] = event.ModelResult.ToolCalls[0]
 		}
-		if input.ToolResult != nil {
-			preStep.Scratch["react.last_result_signature"] = input.ToolResult.CallID
+		if event.ToolResult != nil {
+			preStep.WorkingMemory["think_then_act.last_result"] = event.ToolResult.CallID
 		}
 
-		next, effects := l.Step(preStep, input)
+		next, instructions := e.Step(preStep, event)
 		next.Turn = current.Turn + 1
 		next.Budget.UsedTurns = next.Turn
 		next.UpdatedAt = time.Now().UTC()
 
-		var nextInput *core.Input
+		var nextEvent *core.Event
 		terminal := false
-		for _, eff := range effects {
-			if l.Emitter != nil {
-				l.Emitter(eff)
+		for _, inst := range instructions {
+			if e.Emitter != nil {
+				e.Emitter(inst)
 			}
-			updated, out, term, err := chain(ctx, next, eff)
+			updated, out, term, err := chain(ctx, next, inst)
 			if err != nil {
 				next.Status = core.RUN_STATUS_FAILED
 				next.UpdatedAt = time.Now().UTC()
-				if l.Store != nil {
-					_ = l.Store.Save(ctx, next)
+				if e.Store != nil {
+					_ = e.Store.Save(ctx, next)
 				}
 				// Surface BudgetExceededError verbatim — callers can
 				// errors.As against harness.BudgetExceededError{}.
@@ -313,17 +344,17 @@ func (l *Loop) runWithInput(ctx context.Context, state core.State, input core.In
 			if term {
 				terminal = true
 				if out != nil {
-					nextInput = out
+					nextEvent = out
 				}
 				break
 			}
-			if out != nil && nextInput == nil {
-				nextInput = out
+			if out != nil && nextEvent == nil {
+				nextEvent = out
 			}
 		}
 
-		if l.Store != nil {
-			_ = l.Store.Save(ctx, next)
+		if e.Store != nil {
+			_ = e.Store.Save(ctx, next)
 		}
 
 		if terminal {
@@ -333,21 +364,21 @@ func (l *Loop) runWithInput(ctx context.Context, state core.State, input core.In
 			return next, nil
 		}
 
-		if nextInput == nil {
+		if nextEvent == nil {
 			next.Status = core.RUN_STATUS_COMPLETED
-			if l.Store != nil {
-				_ = l.Store.Save(ctx, next)
+			if e.Store != nil {
+				_ = e.Store.Save(ctx, next)
 			}
 			return next, nil
 		}
 
-		if l.WAL != nil {
-			_ = l.WAL.Append(ctx, next.RunID, next.LastInputSeq+1, *nextInput)
+		if e.Log != nil {
+			_ = e.Log.Append(ctx, next.RunID, next.LastInputSeq+1, *nextEvent)
 			next.LastInputSeq++
 		}
 
 		current = next
-		input = *nextInput
+		event = *nextEvent
 	}
 }
 
