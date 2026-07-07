@@ -29,32 +29,32 @@ type addOut struct {
 // stubApproval always allows.
 type stubApproval struct{}
 
-func (stubApproval) Decide(_ struct{}, _ core.AutonomyLevel, _ core.CallToolEffect, _ core.ToolSchema) core.ApprovalAction {
+func (stubApproval) Decide(_ struct{}, _ core.AutonomyLevel, _ core.CallToolInstruction, _ core.ToolSpec) core.ApprovalAction {
 	return core.APPROVAL_ACTION_ALLOW
 }
 
 // TestReActOneToolCall drives a single read-then-end loop:
 //   FakeProvider queues (1) end_turn → expect loop to exit on DONE.
 func TestReActEndTurnExitsLoop(t *testing.T) {
-	prov := testutil.NewFakeProvider()
+	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("done")
 
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_REACT: planning.NewReAct(),
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
 
-	loop := runtime.NewLoop(step, prov, action.NewRegistry())
-	loop.Emitter = func(eff core.Effect) {}
+	loop := runtime.NewEngine(step, prov, action.NewRegistry())
+	loop.Emitter = func(eff core.Instruction) {}
 	state := core.State{
 		RunID:        "r1",
-		ThinkingKind: core.THINK_REACT,
+		ReasoningStyle: core.REASON_REACT,
 		Budget:       core.Budget{MaxTurns: 5},
 	}
 
 	final, err := loop.Run(context.Background(), state)
 	require.NoError(t, err)
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, final.Status)
-	assert.Equal(t, 1, prov.CallCount())
+	assert.Equal(t, 1, prov.RequestCount())
 }
 
 // TestReActOneToolCall exercises CALL_TOOL → CALL_MODEL → DONE:
@@ -63,7 +63,7 @@ func TestReActEndTurnExitsLoop(t *testing.T) {
 //   3. Pattern advances to OBSERVE → emits CALL_MODEL
 //   4. FakeProvider returns end_turn → loop exits DONE
 func TestReActOneToolCallThenEnd(t *testing.T) {
-	prov := testutil.NewFakeProvider()
+	prov := testutil.NewScriptedProvider()
 	prov.EnqueueToolCall("c1", "add", map[string]any{"n1": 2, "n2": 3})
 	prov.EnqueueEndTurn("the sum is 5")
 
@@ -75,31 +75,31 @@ func TestReActOneToolCallThenEnd(t *testing.T) {
 	addTool.RiskV = core.RISK_LEVEL_LOW
 	reg.Register(addTool)
 
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_REACT: planning.NewReAct(),
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
 
-	loop := runtime.NewLoop(step, prov, reg)
+	loop := runtime.NewEngine(step, prov, reg)
 	loop.Approval = stubApproval{}
-	loop.Emitter = func(eff core.Effect) {}
+	loop.Emitter = func(eff core.Instruction) {}
 	state := core.State{
 		RunID:        "r1",
-		ThinkingKind: core.THINK_REACT,
+		ReasoningStyle: core.REASON_REACT,
 		Budget:       core.Budget{MaxTurns: 10},
 	}
 
 	final, err := loop.Run(context.Background(), state)
 	require.NoError(t, err)
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, final.Status)
-	assert.Equal(t, 2, prov.CallCount())
+	assert.Equal(t, 2, prov.RequestCount())
 	// The transcript should contain the tool message with the sum.
 	foundToolMsg := false
 	for _, m := range final.Messages {
 		if m.Role == core.ROLE_TOOL {
-			require.Len(t, m.Chunks, 1)
-			assert.Equal(t, core.CHUNK_KIND_TOOL_RESULT, m.Chunks[0].Kind)
-			require.NotNil(t, m.Chunks[0].ToolResult)
-			assert.True(t, m.Chunks[0].ToolResult.OK)
+			require.Len(t, m.Parts, 1)
+			assert.Equal(t, core.PART_KIND_TOOL_RESULT, m.Parts[0].Kind)
+			require.NotNil(t, m.Parts[0].ToolResult)
+			assert.True(t, m.Parts[0].ToolResult.OK)
 			foundToolMsg = true
 		}
 	}
@@ -110,7 +110,7 @@ func TestReActOneToolCallThenEnd(t *testing.T) {
 // no CALL_MODEL at all — the blueprint is installed via scratch and
 // the pattern dispatches every step, then DONE.
 func TestPlannerExecutorDispatchesBlueprint(t *testing.T) {
-	prov := testutil.NewFakeProvider()
+	prov := testutil.NewScriptedProvider()
 	// Two steps; neither requires an LLM call (blueprint seeded via scratch).
 	prov.EnqueueEndTurn("unused")
 
@@ -120,13 +120,13 @@ func TestPlannerExecutorDispatchesBlueprint(t *testing.T) {
 	noop.RiskV = core.RISK_LEVEL_LOW
 	reg.Register(noop)
 
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_PLANNER_EXECUTOR: planning.NewPlannerExecutor(),
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_PLAN_THEN_RUN: planning.NewPlanThenRun(),
 	})
 
 	state := core.State{
 		RunID:        "r1",
-		ThinkingKind: core.THINK_PLANNER_EXECUTOR,
+		ReasoningStyle: core.REASON_PLAN_THEN_RUN,
 		Budget:       core.Budget{MaxTurns: 5},
 	}
 	planning.SeedBlueprint(&state, []core.ToolCall{
@@ -134,15 +134,15 @@ func TestPlannerExecutorDispatchesBlueprint(t *testing.T) {
 		{ID: "s2", Name: "noop", Args: map[string]any{}},
 	})
 
-	loop := runtime.NewLoop(step, prov, reg)
+	loop := runtime.NewEngine(step, prov, reg)
 	loop.Approval = stubApproval{}
-	loop.Emitter = func(eff core.Effect) {}
+	loop.Emitter = func(eff core.Instruction) {}
 
 	final, err := loop.Run(context.Background(), state)
 	require.NoError(t, err)
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, final.Status)
 	// Two tool calls were dispatched, no model calls needed (blueprint seeded).
-	assert.Equal(t, 0, prov.CallCount())
+	assert.Equal(t, 0, prov.RequestCount())
 }
 
 // TestBudgetExceededStopsLoop verifies the budget guard.
@@ -152,7 +152,7 @@ func TestPlannerExecutorDispatchesBlueprint(t *testing.T) {
 // which produces another tool_use. The loop keeps running until the
 // turn budget trips.
 func TestBudgetExceededStopsLoop(t *testing.T) {
-	prov := testutil.NewFakeProvider()
+	prov := testutil.NewScriptedProvider()
 	for i := 0; i < 100; i++ {
 		prov.EnqueueToolCall(fmt.Sprintf("c%d", i), "noop", map[string]any{})
 	}
@@ -163,16 +163,16 @@ func TestBudgetExceededStopsLoop(t *testing.T) {
 	noop.RiskV = core.RISK_LEVEL_LOW
 	reg.Register(noop)
 
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_REACT: planning.NewReAct(),
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
 
-	loop := runtime.NewLoop(step, prov, reg)
+	loop := runtime.NewEngine(step, prov, reg)
 	loop.Approval = stubApproval{}
-	loop.Emitter = func(eff core.Effect) {}
+	loop.Emitter = func(eff core.Instruction) {}
 	state := core.State{
 		RunID:        "r1",
-		ThinkingKind: core.THINK_REACT,
+		ReasoningStyle: core.REASON_REACT,
 		Budget:       core.Budget{MaxTurns: 3},
 	}
 
@@ -184,23 +184,23 @@ func TestBudgetExceededStopsLoop(t *testing.T) {
 
 // TestStoreAndWAL are wired through the loop and round-trip via MemStore / MemWAL.
 func TestStoreAndWAL(t *testing.T) {
-	prov := testutil.NewFakeProvider()
+	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("done")
 
 	store := testutil.NewMemStore()
 	wal := testutil.NewMemWAL()
 
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_REACT: planning.NewReAct(),
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
-	loop := runtime.NewLoop(step, prov, action.NewRegistry())
-	loop.Emitter = func(eff core.Effect) {}
+	loop := runtime.NewEngine(step, prov, action.NewRegistry())
+	loop.Emitter = func(eff core.Instruction) {}
 	loop.Store = store
-	loop.WAL = wal
+	loop.Log = wal
 
 	state := core.State{
 		RunID:        "r1",
-		ThinkingKind: core.THINK_REACT,
+		ReasoningStyle: core.REASON_REACT,
 		Budget:       core.Budget{MaxTurns: 5},
 	}
 	final, err := loop.Run(context.Background(), state)
@@ -214,29 +214,29 @@ func TestStoreAndWAL(t *testing.T) {
 	assert.Equal(t, final.Turn, loaded.Turn)
 
 	// WAL recorded at least one input
-	replayed, err := wal.Replay(context.Background(), "r1", 0)
+	replayed, err := wal.Read(context.Background(), "r1", 0)
 	require.NoError(t, err)
 	assert.NotEmpty(t, replayed)
 }
 
-// TestNotifyIsCalled ensures the Notifier is invoked for EFFECT_NOTIFY.
+// TestNotifyIsCalled ensures the Notifier is invoked for INSTRUCTION_NOTIFY.
 func TestNotifyIsCalled(t *testing.T) {
-	prov := testutil.NewFakeProvider()
+	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("done")
 
 	// Use the Router stub which emits NOTIFY + DONE in one Decide call.
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_ROUTER: planning.NewRouter(),
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_PICK_AGENT: planning.NewChooseAgent(),
 	})
 
-	notifier := &testutil.CapturingNotifier{}
-	loop := runtime.NewLoop(step, prov, action.NewRegistry())
+	notifier := &testutil.RecordingNotifier{}
+	loop := runtime.NewEngine(step, prov, action.NewRegistry())
 	loop.Notifier = notifier
-	loop.Emitter = func(eff core.Effect) {}
+	loop.Emitter = func(eff core.Instruction) {}
 
 	state := core.State{
 		RunID:        "r1",
-		ThinkingKind: core.THINK_ROUTER,
+		ReasoningStyle: core.REASON_PICK_AGENT,
 		Budget:       core.Budget{MaxTurns: 3},
 	}
 	_, err := loop.Run(context.Background(), state)
@@ -247,31 +247,31 @@ func TestNotifyIsCalled(t *testing.T) {
 
 // TestRunWithInputSeedsFirstTurn lets a test inject an input directly.
 func TestRunWithInputSeedsFirstTurn(t *testing.T) {
-	prov := testutil.NewFakeProvider()
+	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("ack")
 
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_REACT: planning.NewReAct(),
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
-	loop := runtime.NewLoop(step, prov, action.NewRegistry())
-	loop.Emitter = func(eff core.Effect) {}
+	loop := runtime.NewEngine(step, prov, action.NewRegistry())
+	loop.Emitter = func(eff core.Instruction) {}
 
 	state := core.State{
 		RunID:        "r1",
-		ThinkingKind: core.THINK_REACT,
+		ReasoningStyle: core.REASON_REACT,
 		Budget:       core.Budget{MaxTurns: 5},
 	}
 
-	_, err := loop.RunWithInput(context.Background(), state, core.Input{
-		Kind: core.INPUT_KIND_PERCEPT,
-		Percept: &core.Percept{
+	_, err := loop.RunWithEvent(context.Background(), state, core.Event{
+		Kind: core.EVENT_OBSERVATION,
+		Observation: &core.Observation{
 			ID: "p1", Source: "test",
 			ObservedAt: time.Now().UTC(),
 			Payload: "wake up",
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 1, prov.CallCount())
+	assert.Equal(t, 1, prov.RequestCount())
 }
 
 // silence unused imports if json/never gets used

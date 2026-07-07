@@ -11,102 +11,102 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 )
 
-// FakeProvider is a deterministic, scripted ModelProvider.
+// ScriptedProvider is a deterministic, scripted ModelProvider.
 //
 // Tests queue up an ordered list of ModelResults; Generate / Stream
 // consume them in order. When the queue is empty, Generate returns
 // ErrQueueEmpty. This lets tests reproduce arbitrary transcript shapes
 // (end_turn / tool_use / etc.) without any network access.
-type FakeProvider struct {
+type ScriptedProvider struct {
 	mu      sync.Mutex
 	queue   []core.ModelResult
 	calls   int
 	streams int
-	// OnGenerate is an optional side-effect hook fired before returning
+	// OnRequest is an optional side-effect hook fired before returning
 	// the head of the queue. Useful for capturing the request that
 	// triggered a particular scripted response.
-	OnGenerate func(req core.ModelRequest)
+	OnRequest func(req core.ModelRequest)
 }
 
-// NewFakeProvider constructs an empty queue.
-func NewFakeProvider() *FakeProvider { return &FakeProvider{} }
+// NewScriptedProvider constructs an empty queue.
+func NewScriptedProvider() *ScriptedProvider { return &ScriptedProvider{} }
 
 // Enqueue appends scripted results.
-func (f *FakeProvider) Enqueue(rs ...core.ModelResult) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.queue = append(f.queue, rs...)
+func (s *ScriptedProvider) Enqueue(rs ...core.ModelResult) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.queue = append(s.queue, rs...)
 }
 
 // EnqueueToolCall is sugar for a single tool_use response.
-func (f *FakeProvider) EnqueueToolCall(id, name string, args map[string]any) {
-	f.Enqueue(core.ModelResult{
+func (s *ScriptedProvider) EnqueueToolCall(id, name string, args map[string]any) {
+	s.Enqueue(core.ModelResult{
 		StopReason: "tool_use",
 		ToolCalls:  []core.ToolCall{{ID: id, Name: name, Args: args}},
 	})
 }
 
 // EnqueueEndTurn is sugar for a final assistant message.
-func (f *FakeProvider) EnqueueEndTurn(text string) {
-	f.Enqueue(core.ModelResult{
+func (s *ScriptedProvider) EnqueueEndTurn(text string) {
+	s.Enqueue(core.ModelResult{
 		StopReason: "end_turn",
 		Text:       text,
 	})
 }
 
 // Name implements core.ModelProvider.
-func (f *FakeProvider) Name() string { return "fake" }
+func (s *ScriptedProvider) Name() string { return "scripted" }
 
 // Generate pops the next scripted result. Errors if the queue is empty.
-func (f *FakeProvider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
-	f.mu.Lock()
-	if f.OnGenerate != nil {
-		f.OnGenerate(req)
+func (s *ScriptedProvider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
+	s.mu.Lock()
+	if s.OnRequest != nil {
+		s.OnRequest(req)
 	}
-	if len(f.queue) == 0 {
-		f.mu.Unlock()
+	if len(s.queue) == 0 {
+		s.mu.Unlock()
 		return core.ModelResult{}, ErrQueueEmpty
 	}
-	r := f.queue[0]
-	f.queue = f.queue[1:]
-	f.calls++
-	f.mu.Unlock()
+	r := s.queue[0]
+	s.queue = s.queue[1:]
+	s.calls++
+	s.mu.Unlock()
 	return r, nil
 }
 
 // Stream emits the head of the queue as a single chunked result.
-func (f *FakeProvider) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
-	f.mu.Lock()
-	if len(f.queue) == 0 {
-		f.mu.Unlock()
+func (s *ScriptedProvider) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
+	s.mu.Lock()
+	if len(s.queue) == 0 {
+		s.mu.Unlock()
 		return nil, ErrQueueEmpty
 	}
-	r := f.queue[0]
-	f.queue = f.queue[1:]
-	f.calls++
-	f.streams++
-	f.mu.Unlock()
+	r := s.queue[0]
+	s.queue = s.queue[1:]
+	s.calls++
+	s.streams++
+	s.mu.Unlock()
 	ch := make(chan core.ModelChunk, 1)
 	defer close(ch)
-	ch <- core.ModelChunk{Kind: core.CHUNK_KIND_TEXT, Text: r.Text, Done: true}
+	ch <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: r.Text, Done: true}
 	return ch, nil
 }
 
 // CountTokens returns 1 per message — good enough for tests that don't
 // assert on token usage.
-func (f *FakeProvider) CountTokens(ctx context.Context, msgs []core.Message) (int, error) {
+func (s *ScriptedProvider) CountTokens(ctx context.Context, msgs []core.Message) (int, error) {
 	return len(msgs), nil
 }
 
-// CallCount returns how many times Generate was called.
-func (f *FakeProvider) CallCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.calls
+// RequestCount returns how many times Generate was called.
+func (s *ScriptedProvider) RequestCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls
 }
 
 // ErrQueueEmpty is returned when Generate is called with no scripted results left.
-var ErrQueueEmpty = errors.New("fake provider queue empty")
+var ErrQueueEmpty = errors.New("scripted provider queue empty")
 
 // Ensure error type can be compared via errors.Is in tests.
 func init() {

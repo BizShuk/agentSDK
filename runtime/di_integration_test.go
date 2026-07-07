@@ -24,26 +24,26 @@ func TestDIProviderSwap(t *testing.T) {
 	noop.RiskV = core.RISK_LEVEL_LOW
 	reg.Register(noop)
 
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_REACT: planning.NewReAct(),
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
 
 	state := func() core.State {
 		return core.State{
 			RunID:        "di-1",
-			ThinkingKind: core.THINK_REACT,
+			ReasoningStyle: core.REASON_REACT,
 			Budget:       core.Budget{MaxTurns: 5},
 		}
 	}
 
 	t.Run("provider A", func(t *testing.T) {
-		provA := testutil.NewFakeProvider()
+		provA := testutil.NewScriptedProvider()
 		provA.EnqueueToolCall("c1", "noop", map[string]any{})
 		provA.EnqueueEndTurn("from-A")
 
-		loop := runtime.NewLoop(step, provA, reg)
+		loop := runtime.NewEngine(step, provA, reg)
 		loop.Approval = stubApproval{}
-		loop.Emitter = func(eff core.Effect) {}
+		loop.Emitter = func(eff core.Instruction) {}
 
 		final, err := loop.Run(context.Background(), state())
 		require.NoError(t, err)
@@ -51,13 +51,13 @@ func TestDIProviderSwap(t *testing.T) {
 	})
 
 	t.Run("provider B", func(t *testing.T) {
-		provB := testutil.NewFakeProvider()
+		provB := testutil.NewScriptedProvider()
 		provB.EnqueueToolCall("c2", "noop", map[string]any{})
 		provB.EnqueueEndTurn("from-B")
 
-		loop := runtime.NewLoop(step, provB, reg)
+		loop := runtime.NewEngine(step, provB, reg)
 		loop.Approval = stubApproval{}
-		loop.Emitter = func(eff core.Effect) {}
+		loop.Emitter = func(eff core.Instruction) {}
 
 		final, err := loop.Run(context.Background(), state())
 		require.NoError(t, err)
@@ -71,28 +71,28 @@ func TestDIProviderSwap(t *testing.T) {
 func TestImageChunkSurvivesRunLoop(t *testing.T) {
 	imgBytes := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a} // PNG header
 
-	prov := testutil.NewFakeProvider()
+	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("seen")
 
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_REACT: planning.NewReAct(),
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
-	loop := runtime.NewLoop(step, prov, action.NewRegistry())
-	loop.Emitter = func(eff core.Effect) {}
+	loop := runtime.NewEngine(step, prov, action.NewRegistry())
+	loop.Emitter = func(eff core.Instruction) {}
 
 	state := core.State{
 		RunID:        "img-1",
-		ThinkingKind: core.THINK_REACT,
+		ReasoningStyle: core.REASON_REACT,
 		Budget:       core.Budget{MaxTurns: 3},
 		Messages: []core.Message{
-			{Role: core.ROLE_USER, Chunks: []core.Chunk{
-				{Kind: core.CHUNK_KIND_IMAGE, ImageMIME: "image/png", Image: imgBytes},
+			{Role: core.ROLE_USER, Parts: []core.Part{
+				{Kind: core.PART_KIND_IMAGE, ImageMIME: "image/png", Image: imgBytes},
 			}},
 		},
 	}
-	_, err := loop.RunWithInput(context.Background(), state, core.Input{
-		Kind: core.INPUT_KIND_PERCEPT,
-		Percept: &core.Percept{ID: "p", Source: "test", Payload: "wake up"},
+	_, err := loop.RunWithEvent(context.Background(), state, core.Event{
+		Kind: core.EVENT_OBSERVATION,
+		Observation: &core.Observation{ID: "p", Source: "test", Payload: "wake up"},
 	})
 	require.NoError(t, err)
 
@@ -101,8 +101,8 @@ func TestImageChunkSurvivesRunLoop(t *testing.T) {
 	// preserved end-to-end.
 	require.NotEmpty(t, state.Messages)
 	for _, m := range state.Messages {
-		for _, c := range m.Chunks {
-			if c.Kind == core.CHUNK_KIND_IMAGE {
+		for _, c := range m.Parts {
+			if c.Kind == core.PART_KIND_IMAGE {
 				assert.Equal(t, imgBytes, c.Image)
 				assert.Equal(t, "image/png", c.ImageMIME)
 			}

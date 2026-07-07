@@ -61,43 +61,43 @@ type storeError struct{ msg string }
 
 func (e *storeError) Error() string { return e.msg }
 
-// MemWAL is an in-memory WAL for tests.
+// MemWAL is an in-memory WriteAheadLog for tests.
 type MemWAL struct {
 	mu     sync.Mutex
-	byRun  map[string][]core.Input
+	byRun  map[string][]core.Event
 }
 
 // NewMemWAL returns an empty WAL.
-func NewMemWAL() *MemWAL { return &MemWAL{byRun: make(map[string][]core.Input)} }
+func NewMemWAL() *MemWAL { return &MemWAL{byRun: make(map[string][]core.Event)} }
 
-// Append implements core.WAL.
-func (w *MemWAL) Append(_ context.Context, runID string, seq int, in core.Input) error {
+// Append implements core.WriteAheadLog.
+func (w *MemWAL) Append(_ context.Context, runID string, seq int, in core.Event) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.byRun[runID] = append(w.byRun[runID], in)
 	return nil
 }
 
-// Replay implements core.WAL.
-func (w *MemWAL) Replay(_ context.Context, runID string, sinceSeq int) ([]core.Input, error) {
+// Read implements core.WriteAheadLog.
+func (w *MemWAL) Read(_ context.Context, runID string, sinceSeq int) ([]core.Event, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	all := w.byRun[runID]
 	if sinceSeq >= len(all) {
 		return nil, nil
 	}
-	out := append([]core.Input(nil), all[sinceSeq:]...)
+	out := append([]core.Event(nil), all[sinceSeq:]...)
 	return out, nil
 }
 
-// Truncate implements core.WAL.
-func (w *MemWAL) Truncate(_ context.Context, runID string, uptoSeq int) error {
+// TruncateFrom implements core.WriteAheadLog.
+func (w *MemWAL) TruncateFrom(_ context.Context, runID string, uptoSeq int) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	all := w.byRun[runID]
 	if uptoSeq >= len(all) {
 		return nil
 	}
-	w.byRun[runID] = append([]core.Input(nil), all[uptoSeq:]...)
+	w.byRun[runID] = append([]core.Event(nil), all[uptoSeq:]...)
 	return nil
 }

@@ -34,7 +34,11 @@ func New(opts ...Option) (*Provider, error) {
 	if cfg.apiKey == "" {
 		return nil, fmt.Errorf("anthropic: API key not set (use WithAPIKey or ANTHROPIC_API_KEY)")
 	}
-	client := anthropic.NewClient(option.WithAPIKey(cfg.apiKey))
+	clientOpts := []option.RequestOption{option.WithAPIKey(cfg.apiKey)}
+	if cfg.baseURL != "" {
+		clientOpts = append(clientOpts, option.WithBaseURL(cfg.baseURL))
+	}
+	client := anthropic.NewClient(clientOpts...)
 	return &Provider{client: client, model: cfg.model}, nil
 }
 
@@ -107,6 +111,10 @@ func toAnthropicMessages(msgs []core.Message) []anthropic.MessageParam {
 			case core.CHUNK_KIND_TEXT:
 				if c.Text != "" {
 					blocks = append(blocks, anthropic.NewTextBlock(c.Text))
+				}
+			case core.CHUNK_KIND_TOOL_USE:
+				if c.ToolUse != nil {
+					blocks = append(blocks, anthropic.NewToolUseBlock(c.ToolUse.ID, c.ToolUse.Args, c.ToolUse.Name))
 				}
 			case core.CHUNK_KIND_TOOL_RESULT:
 				if c.ToolResult != nil {

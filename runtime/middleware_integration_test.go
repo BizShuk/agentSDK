@@ -21,7 +21,7 @@ import (
 // interleaving CALL_MODEL — which would reset the counter). The guard
 // must surface REQUEST_APPROVAL on the 5th consecutive call.
 func TestRuntimeLoopguardTripInRealtime(t *testing.T) {
-	prov := testutil.NewFakeProvider()
+	prov := testutil.NewScriptedProvider()
 	// Provider is irrelevant — pattern bypasses LLM entirely.
 
 	reg := action.NewRegistry()
@@ -30,15 +30,15 @@ func TestRuntimeLoopguardTripInRealtime(t *testing.T) {
 	noop.RiskV = core.RISK_LEVEL_LOW
 	reg.Register(noop)
 
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_REACT: &stuckPattern{},
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: &stuckPattern{},
 	})
-	loop := runtime.NewLoop(step, prov, reg)
+	loop := runtime.NewEngine(step, prov, reg)
 	loop.Approval = stubApproval{}
-	loop.Emitter = func(eff core.Effect) {}
+	loop.Emitter = func(eff core.Instruction) {}
 
 	state := core.State{
-		RunID: "r1", ThinkingKind: core.THINK_REACT,
+		RunID: "r1", ReasoningStyle: core.REASON_REACT,
 		Budget: core.Budget{MaxTurns: 20},
 	}
 	final, err := loop.Run(context.Background(), state)
@@ -53,11 +53,11 @@ func TestRuntimeLoopguardTripInRealtime(t *testing.T) {
 // no CALL_MODEL intervenes to reset the counter.
 type stuckPattern struct{}
 
-func (stuckPattern) Kind() core.ThinkingKind { return core.THINK_REACT }
-func (stuckPattern) Decide(state core.State) (core.State, []core.Effect) {
-	return state, []core.Effect{{
-		Kind: core.EFFECT_CALL_TOOL,
-		CallTool: &core.CallToolEffect{
+func (s *stuckPattern) Kind() core.ReasoningStyle { return core.REASON_REACT }
+func (s *stuckPattern) NextStep(state core.State) (core.State, []core.Instruction) {
+	return state, []core.Instruction{
+		{Kind: core.INSTRUCTION_CALL_TOOL,
+		CallTool: &core.CallToolInstruction{
 			Call: core.ToolCall{ID: "c", Name: "noop", Args: map[string]any{}},
 		},
 	}}
@@ -67,7 +67,7 @@ func (stuckPattern) Decide(state core.State) (core.State, []core.Effect) {
 // integration with the runtime: when Budget.UsedTurns >= MaxTurns, the
 // loop exits with a BudgetExceededError wrapped by IsBudgetExceeded.
 func TestRuntimeBudgetExceededExitsRun(t *testing.T) {
-	prov := testutil.NewFakeProvider()
+	prov := testutil.NewScriptedProvider()
 	for i := 0; i < 100; i++ {
 		prov.EnqueueToolCall("c", "noop", map[string]any{})
 	}
@@ -77,15 +77,15 @@ func TestRuntimeBudgetExceededExitsRun(t *testing.T) {
 	noop.RiskV = core.RISK_LEVEL_LOW
 	reg.Register(noop)
 
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_REACT: planning.NewReAct(),
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
-	loop := runtime.NewLoop(step, prov, reg)
+	loop := runtime.NewEngine(step, prov, reg)
 	loop.Approval = stubApproval{}
-	loop.Emitter = func(eff core.Effect) {}
+	loop.Emitter = func(eff core.Instruction) {}
 
 	state := core.State{
-		RunID: "r1", ThinkingKind: core.THINK_REACT,
+		RunID: "r1", ReasoningStyle: core.REASON_REACT,
 		Budget: core.Budget{MaxTurns: 3},
 	}
 	final, err := loop.Run(context.Background(), state)
@@ -99,26 +99,26 @@ func TestRuntimeBudgetExceededExitsRun(t *testing.T) {
 // remaining scripted results.
 func TestRuntimeResumeFromWAL(t *testing.T) {
 	dir := t.TempDir()
-	store, err := filestore.NewFileStateStore(dir)
+	store, err := filestore.NewJSONFileStateStore(dir)
 	require.NoError(t, err)
-	wal, err := filestore.NewFileWAL(dir)
+	wal, err := filestore.NewJSONLFileLog(dir)
 	require.NoError(t, err)
 
-	prov := testutil.NewFakeProvider()
+	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("done")
 
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_ROUTER: planning.NewRouter(),
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_PICK_AGENT: planning.NewChooseAgent(),
 	})
-	loop := runtime.NewLoop(step, prov, action.NewRegistry())
+	loop := runtime.NewEngine(step, prov, action.NewRegistry())
 	loop.Middleware = identityChain()
 	loop.Store = store
-	loop.WAL = wal
-	loop.Emitter = func(eff core.Effect) {}
+	loop.Log = wal
+	loop.Emitter = func(eff core.Instruction) {}
 
 	// First run — Router stub emits one NOTIFY + DONE.
 	state := core.State{
-		RunID: "r1", ThinkingKind: core.THINK_ROUTER,
+		RunID: "r1", ReasoningStyle: core.REASON_PICK_AGENT,
 		Status: core.RUN_STATUS_RUNNING,
 		Budget: core.Budget{MaxTurns: 5},
 		LastInputSeq: 0,
@@ -127,7 +127,7 @@ func TestRuntimeResumeFromWAL(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify state was persisted.
-	replayed, err := wal.Replay(context.Background(), "r1", 0)
+	replayed, err := wal.Read(context.Background(), "r1", 0)
 	require.NoError(t, err)
 	_ = replayed
 
