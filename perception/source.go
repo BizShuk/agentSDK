@@ -1,5 +1,5 @@
 // Package perception is the input side of the agent loop: external sources
-// emit Percepts, which the runtime folds into Inputs and feeds to Step.
+// emit Observations, which the runtime folds into Events and feeds to Decide.
 package perception
 
 import (
@@ -9,41 +9,41 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 )
 
-// Source emits percepts on a channel. The runtime reads until ctx is done
-// or the channel is closed. Implementations live in sample/* (e.g. log
-// tailer) or domain adapters.
-type Source interface {
+// ObservationSource emits observations on a channel. The runtime reads until
+// ctx is done or the channel is closed. Implementations live in sample/*
+// (e.g. log tailer) or domain adapters.
+type ObservationSource interface {
 	// Name is a stable identifier for diagnostics ("logfile:/var/log/sys").
 	Name() string
-	// Percepts returns a channel. Closing the channel signals "no more for now".
-	Percepts(ctx context.Context) <-chan core.Percept
+	// Observations returns a channel. Closing the channel signals "no more for now".
+	Observations(ctx context.Context) <-chan core.Observation
 }
 
-// Multi fans several Sources into one channel. Used when one agent watches
-// several streams. Order is best-effort: each goroutine pushes as data
-// arrives. Determinism is not promised across sources.
-type Multi struct {
-	Sources []Source
+// FanIn merges several ObservationSources into one channel. Used when one
+// agent watches several streams. Order is best-effort: each goroutine
+// pushes as data arrives. Determinism is not promised across sources.
+type FanIn struct {
+	Sources []ObservationSource
 }
 
-// Percepts implements Source.
+// Observations implements ObservationSource.
 //
 // Closes the returned channel once every source has finished (its own
-// channel was closed). Order is best-effort — each source goroutine pushes
-// as data arrives; cross-source order is non-deterministic.
-func (m *Multi) Percepts(ctx context.Context) <-chan core.Percept {
-	out := make(chan core.Percept, 32)
-	if len(m.Sources) == 0 {
+// channel was closed). Order is best-effort — each source goroutine
+// pushes as data arrives; cross-source order is non-deterministic.
+func (f *FanIn) Observations(ctx context.Context) <-chan core.Observation {
+	out := make(chan core.Observation, 32)
+	if len(f.Sources) == 0 {
 		close(out)
 		return out
 	}
 	var wg sync.WaitGroup
-	for _, s := range m.Sources {
+	for _, s := range f.Sources {
 		s := s
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ch := s.Percepts(ctx)
+			ch := s.Observations(ctx)
 			for {
 				select {
 				case <-ctx.Done():
@@ -68,5 +68,5 @@ func (m *Multi) Percepts(ctx context.Context) <-chan core.Percept {
 	return out
 }
 
-// Name returns "multi" for diagnostics.
-func (m *Multi) Name() string { return "multi" }
+// Name returns "fan_in" for diagnostics.
+func (f *FanIn) Name() string { return "fan_in" }
