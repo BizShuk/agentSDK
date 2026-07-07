@@ -1,39 +1,39 @@
 package core
 
-// Step is the pure transition function. Given (state, input) it produces
-// the next state and a list of effects the runtime must execute.
+// Decide is the pure transition function. Given (state, event) it produces
+// the next state and a list of instructions the runtime must execute.
 //
 // Strict contract:
 //   - no I/O
-//   - deterministic given (state, scratch)
+//   - deterministic given (state, working memory)
 //   - returns a nil State change when nothing changed
-//   - returns an empty effect slice ONLY for terminal inputs (ApprovalDecision / Resume);
+//   - returns an empty instruction slice ONLY for terminal events (HumanDecision / Resume);
 //
-//	otherwise an empty slice means the pattern did not act — the runtime
+//	otherwise an empty slice means the rule did not act — the runtime
 //	will surface this as a stuck loop via loopguard in M2.
 //
-// NewStep is the single dispatch point: it picks the ThinkingPattern by
-// state.ThinkingKind. Callers cannot bypass the registry.
-type Step func(state State, input Input) (State, []Effect)
+// NewDecide is the single dispatch point: it picks the DecisionRule by
+// state.ReasoningStyle. Callers cannot bypass the registry.
+type Decide func(state State, event Event) (State, []Instruction)
 
-// NewStep returns a Step that dispatches on state.ThinkingKind.
+// NewDecide returns a Decide that dispatches on state.ReasoningStyle.
 //
-// Reasoning lives in the per-pattern Decide methods. The runtime only needs
-// to feed inputs in order. The two-stage call (set kind → call Decide) keeps
-// the Step contract pure: state carries the routing decision.
-func NewStep(patterns map[ThinkingKind]ThinkingPattern) Step {
-	return func(state State, input Input) (State, []Effect) {
-		kind := state.ThinkingKind
-		p, ok := patterns[kind]
+// Reasoning lives in the per-rule NextStep methods. The runtime only needs
+// to feed events in order. The two-stage call (set kind → call NextStep)
+// keeps the Decide contract pure: state carries the routing decision.
+func NewDecide(rules map[ReasoningStyle]DecisionRule) Decide {
+	return func(state State, event Event) (State, []Instruction) {
+		kind := state.ReasoningStyle
+		r, ok := rules[kind]
 		if !ok {
-			// Pattern not registered — emit a NOTIFY effect and return unchanged.
-			return state, []Effect{
-				{Kind: EFFECT_NOTIFY, Notify: &NotifyEffect{
+			// Rule not registered — emit a NOTIFY instruction and return unchanged.
+			return state, []Instruction{
+				{Kind: INSTRUCTION_NOTIFY, Notify: &NotifyInstruction{
 					Level:   "error",
-					Message: "unknown thinking kind: " + string(kind),
+					Message: "unknown reasoning style: " + string(kind),
 				}},
 			}
 		}
-		return p.Decide(state)
+		return r.NextStep(state)
 	}
 }

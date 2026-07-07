@@ -2,13 +2,16 @@
 //
 // core has zero vendor dependencies — only the Go standard library.
 // All I/O is performed at the runtime shell; this package only describes
-// state transitions and effects.
+// state transitions and instructions.
 //
 // Per the user's project convention, package-level constants are
 // SCREAMING_SNAKE_CASE; staticcheck ST1003 needs an exclusion for const.
 package core
 
-import "time"
+import (
+	"maps"
+	"time"
+)
 
 // AutonomyLevel is the graduated trust level for tool execution and mutation.
 // L0 — fully manual (every action requires human approval)
@@ -101,14 +104,18 @@ func (b Budget) now() time.Time {
 }
 
 // State is the serialized, persistent snapshot of a run.
-// Every field must be JSON-marshalable; Checkpointer round-trips through State.
+// Every field must be JSON-marshalable; Recoverer round-trips through State.
+//
+// Field-name JSON tags are kept stable (scratch / thinking_kind) so
+// persisted state from before the rename loads cleanly through the
+// v1→v2 migration shim in memory/filestore.
 type State struct {
 	RunID            string             `json:"run_id"`
 	Turn             int                `json:"turn"`
 	Autonomy         AutonomyLevel      `json:"autonomy"`
-	ThinkingKind     ThinkingKind       `json:"thinking_kind"`
+	ReasoningStyle   ReasoningStyle     `json:"thinking_kind"` // tag preserved for back-compat
 	Messages         []Message          `json:"messages"`
-	Scratch          map[string]any     `json:"scratch,omitempty"`
+	WorkingMemory    map[string]any     `json:"scratch,omitempty"` // Go field renamed; wire tag kept
 	PendingApprovals []PendingApproval  `json:"pending_approvals,omitempty"`
 	Budget           Budget             `json:"budget"`
 	Status           RunStatus          `json:"status"`
@@ -118,28 +125,26 @@ type State struct {
 
 // Clone returns a deep-enough copy suitable for callers that mutate the
 // returned state. Messages and PendingApprovals are deep-copied so callers
-// can freely mutate any nested chunk without affecting the original.
-// Scratch is shallow-copied (treated as opaque blob by the runtime).
+// can freely mutate any nested part without affecting the original.
+// WorkingMemory is shallow-copied (treated as opaque blob by the runtime).
 func (s State) Clone() State {
 	out := s
 	if s.Messages != nil {
 		msgs := make([]Message, len(s.Messages))
 		for i, m := range s.Messages {
 			msgs[i] = m
-			if m.Chunks != nil {
-				ch := make([]Chunk, len(m.Chunks))
-				copy(ch, m.Chunks)
-				msgs[i].Chunks = ch
+			if m.Parts != nil {
+				ps := make([]Part, len(m.Parts))
+				copy(ps, m.Parts)
+				msgs[i].Parts = ps
 			}
 		}
 		out.Messages = msgs
 	}
-	if s.Scratch != nil {
-		sc := make(map[string]any, len(s.Scratch))
-		for k, v := range s.Scratch {
-			sc[k] = v
-		}
-		out.Scratch = sc
+	if s.WorkingMemory != nil {
+		wm := make(map[string]any, len(s.WorkingMemory))
+		maps.Copy(wm, s.WorkingMemory)
+		out.WorkingMemory = wm
 	}
 	if s.PendingApprovals != nil {
 		pa := make([]PendingApproval, len(s.PendingApprovals))

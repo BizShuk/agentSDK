@@ -18,18 +18,18 @@ type ModelProvider interface {
 	CountTokens(ctx context.Context, msgs []Message) (int, error)
 }
 
-// ModelRequest is the bridge between Step-produced effects and the provider.
+// ModelRequest is the bridge between Decide-produced instructions and the provider.
 type ModelRequest struct {
-	Messages  []Message     `json:"messages"`
-	Tools     []ToolSchema  `json:"tools,omitempty"`
-	MaxTokens int           `json:"max_tokens,omitempty"`
-	StopReasons []string    `json:"stop_reasons,omitempty"`
+	Messages    []Message    `json:"messages"`
+	Tools       []ToolSpec   `json:"tools,omitempty"`
+	MaxTokens   int          `json:"max_tokens,omitempty"`
+	StopReasons []string     `json:"stop_reasons,omitempty"`
 }
 
 // StateStore persists State. Implementations must be safe for concurrent use
 // across runs — RunID is the namespace.
 //
-// File-backed default lives in memory/filestore.FileStateStore (M2).
+// File-backed default lives in memory/filestore.JSONFileStateStore.
 type StateStore interface {
 	Save(ctx context.Context, s State) error
 	Load(ctx context.Context, runID string) (State, error)
@@ -37,14 +37,13 @@ type StateStore interface {
 	Delete(ctx context.Context, runID string) error
 }
 
-// WAL is the append-only replay log. Replay returns every Input whose Seq > sinceSeq.
-// Effective recovery: load State, replay Inputs since LastInputSeq.
-//
-// File-backed default lives in memory/filestore.FileWAL (M2).
-type WAL interface {
-	Append(ctx context.Context, runID string, seq int, in Input) error
-	Replay(ctx context.Context, runID string, sinceSeq int) ([]Input, error)
-	Truncate(ctx context.Context, runID string, uptoSeq int) error
+// WriteAheadLog is the append-only event log used for crash recovery.
+// (Database term: append-only log of events; recovery replays from
+// "sinceSeq" forward without re-issuing model calls.)
+type WriteAheadLog interface {
+	Append(ctx context.Context, runID string, seq int, ev Event) error
+	Read(ctx context.Context, runID string, sinceSeq int) ([]Event, error)
+	TruncateFrom(ctx context.Context, runID string, uptoSeq int) error
 }
 
 // ToolRegistry resolves a tool call to a tool by name. Concrete impl lives in
@@ -53,7 +52,7 @@ type WAL interface {
 type ToolRegistry interface {
 	Register(t Tool)
 	Get(name string) (Tool, bool)
-	List() []ToolSchema
+	List() []ToolSpec
 	Call(ctx context.Context, call ToolCall) ToolResult
 }
 
@@ -63,7 +62,7 @@ type ToolRegistry interface {
 type Tool interface {
 	Name() string
 	Description() string
-	Schema() ToolSchema
+	Schema() ToolSpec
 	Risk() RiskLevel
 	Call(ctx context.Context, args json.RawMessage) (ToolResult, error)
 }

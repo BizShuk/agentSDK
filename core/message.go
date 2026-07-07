@@ -12,19 +12,19 @@ const (
 	ROLE_TOOL      Role = "tool"
 )
 
-// ChunkKind is the discriminator for multimodal chunks.
-type ChunkKind string
+// PartKind is the discriminator for multimodal parts.
+type PartKind string
 
 const (
-	CHUNK_KIND_TEXT       ChunkKind = "text"
-	CHUNK_KIND_AUDIO      ChunkKind = "audio"
-	CHUNK_KIND_IMAGE      ChunkKind = "image"
-	CHUNK_KIND_TOOL_USE   ChunkKind = "tool_use"
-	CHUNK_KIND_TOOL_RESULT ChunkKind = "tool_result"
+	PART_KIND_PLAIN_TEXT  PartKind = "plain_text"
+	PART_KIND_AUDIO       PartKind = "audio"
+	PART_KIND_IMAGE       PartKind = "image"
+	PART_KIND_TOOL_USE    PartKind = "tool_use"
+	PART_KIND_TOOL_RESULT PartKind = "tool_result"
 )
 
-// ToolResultChunk is an embedded tool result inside an assistant-style message.
-type ToolResultChunk struct {
+// ToolResultPart is an embedded tool result inside an assistant-style message.
+type ToolResultPart struct {
 	CallID string `json:"call_id"`
 	Name   string `json:"name"`
 	OK     bool   `json:"ok"`
@@ -32,30 +32,30 @@ type ToolResultChunk struct {
 	Error  string `json:"error,omitempty"`
 }
 
-// Chunk is one fragment of a Message — text, audio, image, tool_use, or tool_result.
-// Step does not inspect Chunks directly; the LLM provider deals with conversion.
-// runtime passes Chunks through unchanged so providers see a faithful transcript.
-type Chunk struct {
-	Kind       ChunkKind       `json:"kind"`
+// Part is one fragment of a Message — text, audio, image, tool_use, or tool_result.
+// Decide does not inspect Parts directly; the LLM provider deals with conversion.
+// runtime passes Parts through unchanged so providers see a faithful transcript.
+type Part struct {
+	Kind       PartKind        `json:"kind"`
 	Text       string          `json:"text,omitempty"`
 	Audio      []byte          `json:"audio,omitempty"`
 	AudioMIME  string          `json:"audio_mime,omitempty"`
 	Image      []byte          `json:"image,omitempty"`
 	ImageMIME  string          `json:"image_mime,omitempty"`
 	ToolUse    *ToolUseChunk   `json:"tool_use,omitempty"`
-	ToolResult *ToolResultChunk `json:"tool_result,omitempty"`
+	ToolResult *ToolResultPart `json:"tool_result,omitempty"`
 }
 
-// Message is a turn of the conversation — one role, many chunks.
+// Message is a turn of the conversation — one role, many parts.
 type Message struct {
-	Role Role       `json:"role"`
-	Chunks []Chunk  `json:"chunks"`
-	Ts     time.Time `json:"ts"`
+	Role  Role     `json:"role"`
+	Parts []Part   `json:"parts"`
+	Ts    time.Time `json:"ts"`
 }
 
-// AppendText returns a message with a new Text chunk added (helper for tests/sample).
+// AppendText returns a message with a new plain-text Part added (helper for tests/sample).
 func (m Message) AppendText(s string) Message {
 	out := m
-	out.Chunks = append(append([]Chunk(nil), m.Chunks...), Chunk{Kind: CHUNK_KIND_TEXT, Text: s})
+	out.Parts = append(append([]Part(nil), m.Parts...), Part{Kind: PART_KIND_PLAIN_TEXT, Text: s})
 	return out
 }

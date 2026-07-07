@@ -9,18 +9,18 @@ const (
 	APPROVAL_DECISION_ASK     ApprovalDecision = "ask" // request MORE info — requeue
 )
 
-// ApprovalAction describes what the policy decided about one CallTool effect.
+// ApprovalAction describes what the policy decided about one CallTool instruction.
 type ApprovalAction int
 
 const (
 	APPROVAL_ACTION_ALLOW ApprovalAction = iota // let it through
-	APPROVAL_ACTION_DENY                         // reject without surfacing
-	APPROVAL_ACTION_ASK                          // surface as RequestApproval effect
+	APPROVAL_ACTION_DENY                        // reject without surfacing
+	APPROVAL_ACTION_ASK                         // surface as RequestApproval instruction
 )
 
-// ApprovalPolicy decides whether an effect needs human sign-off.
+// ApprovalPolicy decides whether an instruction needs human sign-off.
 // The default implementation lives in action/approval_policy.go and reads
 // Autonomy + RiskLevel to choose. Test doubles belong in testutil.
 type ApprovalPolicy interface {
-	Decide(ctx struct{}, autonomy AutonomyLevel, eff CallToolEffect, schema ToolSchema) ApprovalAction
+	Decide(ctx struct{}, autonomy AutonomyLevel, eff CallToolInstruction, schema ToolSpec) ApprovalAction
 }
