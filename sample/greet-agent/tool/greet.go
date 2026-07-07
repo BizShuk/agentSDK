@@ -51,7 +51,7 @@ func (g *Greet) SetRisk(r sdkcore.RiskLevel) { g.Inner.SetRisk(r) }
 
 func (g *Greet) Name() string                        { return g.Inner.Name() }
 func (g *Greet) Description() string                 { return g.Inner.Description() }
-func (g *Greet) Schema() sdkcore.ToolSchema          { return g.Inner.Schema() }
+func (g *Greet) Schema() sdkcore.ToolSpec          { return g.Inner.Schema() }
 func (g *Greet) Risk() sdkcore.RiskLevel             { return g.Inner.Risk() }
 func (g *Greet) Call(ctx context.Context, raw json.RawMessage) (sdkcore.ToolResult, error) {
 	return g.Inner.Call(ctx, raw)
