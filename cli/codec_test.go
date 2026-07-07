@@ -16,8 +16,8 @@ import (
 func TestCodecRoundTripAllMessageTypes(t *testing.T) {
 	now := time.Now().UTC()
 	envs := []cli.Envelope{
-		{Type: cli.MSG_TYPE_PERCEPT, RunID: "r1", Timestamp: now,
-			Percept: &cli.PerceptPayload{ID: "p1", Source: "log", ObservedAt: now, Payload: "ERROR"}},
+		{Type: cli.MSG_TYPE_OBSERVATION, RunID: "r1", Timestamp: now,
+			Observation: &cli.ObservationPayload{ID: "p1", Source: "log", ObservedAt: now, Payload: "ERROR"}},
 		{Type: cli.MSG_TYPE_ASSISTANT, RunID: "r1", Timestamp: now,
 			Assistant: &cli.AssistantPayload{Text: "hi", StopReason: "end_turn"}},
 		{Type: cli.MSG_TYPE_TOOL_CALL, RunID: "r1", Timestamp: now,
@@ -26,7 +26,7 @@ func TestCodecRoundTripAllMessageTypes(t *testing.T) {
 			ToolResult: &cli.ToolResultPayload{CallID: "c1", Name: "add_todo", OK: true, Output: "todo-1"}},
 		{Type: cli.MSG_TYPE_APPROVAL_REQUEST, RunID: "r1", Timestamp: now,
 			Approval: &cli.ApprovalPayload{ID: "apr-1", Reason: "high_risk", Risk: "high", Summary: "delete prod", RequestedAt: now}},
-		{Type: cli.MSG_TYPE_APPROVAL_DECISION, RunID: "r1", Timestamp: now,
+		{Type: cli.MSG_TYPE_HUMAN_DECISION, RunID: "r1", Timestamp: now,
 			Decision: &cli.DecisionPayload{ApprovalID: "apr-1", Decision: "approve", DecidedBy: "operator", DecidedAt: now}},
 		{Type: cli.MSG_TYPE_CHECKPOINT, RunID: "r1", Timestamp: now,
 			Checkpoint: &cli.CheckpointPayload{RunID: "r1", Turn: 3, Reason: "auto"}},
@@ -60,7 +60,7 @@ func TestStateRoundTripPreservesMidRunApproval(t *testing.T) {
 		RunID:        "r-mid",
 		Turn:         3,
 		Status:       core.RUN_STATUS_PAUSED_APPROVAL,
-		ThinkingKind: core.THINK_REACT,
+		ReasoningStyle: core.REASON_REACT,
 		Autonomy:     core.AUTONOMY_L2,
 		Budget:       core.Budget{MaxTurns: 10, UsedTurns: 3},
 		PendingApprovals: []core.PendingApproval{{
@@ -86,8 +86,8 @@ func TestImageChunkSurvivesJSONRoundTrip(t *testing.T) {
 	state := core.State{
 		RunID: "r-img",
 		Messages: []core.Message{
-			{Role: core.ROLE_USER, Chunks: []core.Chunk{
-				{Kind: core.CHUNK_KIND_IMAGE, ImageMIME: "image/png", Image: []byte{0x89, 0x50, 0x4e, 0x47}},
+			{Role: core.ROLE_USER, Parts: []core.Part{
+				{Kind: core.PART_KIND_IMAGE, ImageMIME: "image/png", Image: []byte{0x89, 0x50, 0x4e, 0x47}},
 			}},
 		},
 	}
@@ -97,10 +97,10 @@ func TestImageChunkSurvivesJSONRoundTrip(t *testing.T) {
 	var out core.State
 	require.NoError(t, json.Unmarshal(raw, &out))
 	require.Len(t, out.Messages, 1)
-	require.Len(t, out.Messages[0].Chunks, 1)
-	assert.Equal(t, core.CHUNK_KIND_IMAGE, out.Messages[0].Chunks[0].Kind)
-	assert.Equal(t, "image/png", out.Messages[0].Chunks[0].ImageMIME)
-	assert.Equal(t, []byte{0x89, 0x50, 0x4e, 0x47}, out.Messages[0].Chunks[0].Image)
+	require.Len(t, out.Messages[0].Parts, 1)
+	assert.Equal(t, core.PART_KIND_IMAGE, out.Messages[0].Parts[0].Kind)
+	assert.Equal(t, "image/png", out.Messages[0].Parts[0].ImageMIME)
+	assert.Equal(t, []byte{0x89, 0x50, 0x4e, 0x47}, out.Messages[0].Parts[0].Image)
 }
 
 func TestCodecWriteErrorSugar(t *testing.T) {

@@ -19,37 +19,37 @@ import (
 type MessageType string
 
 const (
-	MSG_TYPE_PERCEPT             MessageType = "percept"
-	MSG_TYPE_ASSISTANT           MessageType = "assistant"
-	MSG_TYPE_TOOL_CALL           MessageType = "tool_call"
-	MSG_TYPE_TOOL_RESULT         MessageType = "tool_result"
-	MSG_TYPE_APPROVAL_REQUEST    MessageType = "approval_request"
-	MSG_TYPE_APPROVAL_DECISION   MessageType = "approval_decision"
-	MSG_TYPE_CHECKPOINT          MessageType = "checkpoint"
-	MSG_TYPE_RESULT              MessageType = "result"
-	MSG_TYPE_ERROR               MessageType = "error"
+	MSG_TYPE_OBSERVATION          MessageType = "observation"
+	MSG_TYPE_ASSISTANT            MessageType = "assistant"
+	MSG_TYPE_TOOL_CALL            MessageType = "tool_call"
+	MSG_TYPE_TOOL_RESULT          MessageType = "tool_result"
+	MSG_TYPE_APPROVAL_REQUEST     MessageType = "approval_request"
+	MSG_TYPE_HUMAN_DECISION       MessageType = "human_decision"
+	MSG_TYPE_CHECKPOINT           MessageType = "checkpoint"
+	MSG_TYPE_RESULT               MessageType = "result"
+	MSG_TYPE_ERROR                MessageType = "error"
 )
 
 // Envelope is one JSONL line on the wire. Exactly one of the payload
 // pointers is non-nil per Envelope.
 type Envelope struct {
-	Type       MessageType       `json:"type"`
-	RunID      string            `json:"run_id,omitempty"`
-	Turn       int               `json:"turn,omitempty"`
-	Timestamp  time.Time         `json:"ts"`
-	Percept    *PerceptPayload   `json:"percept,omitempty"`
-	Assistant  *AssistantPayload `json:"assistant,omitempty"`
-	ToolCall   *ToolCallPayload  `json:"tool_call,omitempty"`
-	ToolResult *ToolResultPayload `json:"tool_result,omitempty"`
-	Approval   *ApprovalPayload  `json:"approval,omitempty"`
-	Decision   *DecisionPayload  `json:"decision,omitempty"`
-	Checkpoint *CheckpointPayload `json:"checkpoint,omitempty"`
-	Result     *ResultPayload    `json:"result,omitempty"`
-	Error      *ErrorPayload     `json:"error,omitempty"`
+	Type          MessageType          `json:"type"`
+	RunID         string               `json:"run_id,omitempty"`
+	Turn          int                  `json:"turn,omitempty"`
+	Timestamp     time.Time            `json:"ts"`
+	Observation   *ObservationPayload  `json:"observation,omitempty"`
+	Assistant     *AssistantPayload    `json:"assistant,omitempty"`
+	ToolCall      *ToolCallPayload     `json:"tool_call,omitempty"`
+	ToolResult    *ToolResultPayload   `json:"tool_result,omitempty"`
+	Approval      *ApprovalPayload     `json:"approval,omitempty"`
+	Decision      *DecisionPayload     `json:"decision,omitempty"`
+	Checkpoint    *CheckpointPayload   `json:"checkpoint,omitempty"`
+	Result        *ResultPayload       `json:"result,omitempty"`
+	Error         *ErrorPayload        `json:"error,omitempty"`
 }
 
-// PerceptPayload mirrors core.Percept but uses only JSON-friendly fields.
-type PerceptPayload struct {
+// ObservationPayload mirrors core.Observation but uses only JSON-friendly fields.
+type ObservationPayload struct {
 	ID         string    `json:"id"`
 	Source     string    `json:"source"`
 	ObservedAt time.Time `json:"observed_at"`
