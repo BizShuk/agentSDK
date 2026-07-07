@@ -2,23 +2,23 @@ package planning
 
 import "github.com/bizshuk/agentsdk/core"
 
-// Reflexion: remember failures, retry with reflection.
+// LearnFromFailure: remember failures, retry with reflection (Shinn 2023).
 //
-// STUB: emits a single CALL_MODEL and DONE. Implementation deferred.
-type Reflexion struct{}
+// STUB: emits a single INSTRUCTION_CALL_MODEL and INSTRUCTION_DONE.
+type LearnFromFailure struct{}
 
-// NewReflexion returns the stub pattern.
-func NewReflexion() *Reflexion { return &Reflexion{} }
+// NewLearnFromFailure returns the stub rule.
+func NewLearnFromFailure() *LearnFromFailure { return &LearnFromFailure{} }
 
-// Kind returns THINK_REFLEXION.
-func (p *Reflexion) Kind() core.ThinkingKind { return core.THINK_REFLEXION }
+// Kind returns REASON_LEARN_FROM_FAILURE.
+func (p *LearnFromFailure) Kind() core.ReasoningStyle { return core.REASON_LEARN_FROM_FAILURE }
 
-// Decide emits a single CALL_MODEL and DONE.
-func (p *Reflexion) Decide(state core.State) (core.State, []core.Effect) {
+// NextStep emits a single INSTRUCTION_CALL_MODEL and INSTRUCTION_DONE.
+func (p *LearnFromFailure) NextStep(state core.State) (core.State, []core.Instruction) {
 	next := state.Clone()
 	next.UpdatedAt = nowOrZero(state)
-	return next, []core.Effect{
+	return next, []core.Instruction{
 		callModelFromMessages(state.Clone()),
-		doneEffect(),
+		doneInstruction(),
 	}
 }

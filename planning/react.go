@@ -1,76 +1,78 @@
-// Package planning hosts the six ThinkingPattern implementations.
-// Pattern Decide is a pure reducer: read state, write effects + scratch.
-// No I/O — runtime does dispatching based on the effects returned.
+// Package planning hosts the six DecisionRule implementations.
+// Each rule's NextStep is a pure reducer: read state, write instructions + working memory.
+// No I/O — runtime does dispatching based on the instructions returned.
 package planning
 
 import "github.com/bizshuk/agentsdk/core"
 
-// Scratch keys for ReAct — exported so tests / sample can drive the FSM.
+// Scratch keys for ThinkThenAct — exported so tests / sample can drive the FSM.
 const (
-	REACT_PHASE       = "react.phase"
-	REACT_LAST_CALL   = "react.last_call_id"
-	REACT_LAST_RESULT = "react.last_result_signature"
+	THINK_THEN_ACT_PHASE        = "think_then_act.phase"
+	THINK_THEN_ACT_PENDING_CALL = "think_then_act.pending_call"
+	THINK_THEN_ACT_LAST_RESULT  = "think_then_act.last_result"
 
-	// ReAct phase values:
-	REACT_PHASE_THINK    = "think"    // ask LLM to reason
-	REACT_PHASE_ACT      = "act"      // dispatch a tool call
-	REACT_PHASE_OBSERVE  = "observe"  // reason over tool result
+	// ThinkThenAct phase values:
+	THINK_THEN_ACT_REASON   = "reason"   // ask LLM to reason
+	THINK_THEN_ACT_DISPATCH = "dispatch" // dispatch a tool call
+	THINK_THEN_ACT_REFLECT  = "reflect"  // reason over tool result
 )
 
-// ReAct implements the classic Reason+Act loop.
+// ThinkThenAct implements the classic Reason+Act loop (Yao 2023).
 //
-// scratch[REACT_PHASE] drives the FSM:
-//   think    → emit CALL_MODEL
-//   act      → emit CALL_TOOL for scratch[REACT_LAST_CALL]
-//   observe  → emit CALL_MODEL to reason over the prior result
+// working memory[THINK_THEN_ACT_PHASE] drives the FSM:
+//   reason   → emit INSTRUCTION_CALL_MODEL
+//   dispatch → emit INSTRUCTION_CALL_TOOL for working memory[THINK_THEN_ACT_PENDING_CALL]
+//   reflect  → emit INSTRUCTION_CALL_MODEL to reason over the prior result
 //
-// In M1 ReAct does not parse the model output — scratch is the lingua
-// franca between the runtime and the pattern. Sample / fixtures set the
-// phase via scratch, runtime's normal loop sets it after each dispatch.
-type ReAct struct{}
+// In M1 ThinkThenAct does not parse the model output — working memory is
+// the lingua franca between the runtime and the rule. Sample / fixtures
+// set the phase via working memory, runtime's normal loop sets it after
+// each dispatch.
+type ThinkThenAct struct{}
 
-// NewReAct returns the ReAct pattern.
-func NewReAct() *ReAct { return &ReAct{} }
+// NewThinkThenAct returns the rule.
+func NewThinkThenAct() *ThinkThenAct { return &ThinkThenAct{} }
 
-// Kind returns THINK_REACT.
-func (p *ReAct) Kind() core.ThinkingKind { return core.THINK_REACT }
+// Kind returns REASON_REACT.
+func (p *ThinkThenAct) Kind() core.ReasoningStyle { return core.REASON_REACT }
 
-// Decide reads scratch and emits the next effect, advancing scratch in place.
+// NextStep reads working memory and emits the next instruction, advancing
+// working memory in place.
 //
-// Pure: no I/O. The runtime executes the returned effect, then folds the
-// result back into state on the next call.
-func (p *ReAct) Decide(state core.State) (core.State, []core.Effect) {
+// Pure: no I/O. The runtime executes the returned instruction, then folds
+// the result back into state on the next call.
+func (p *ThinkThenAct) NextStep(state core.State) (core.State, []core.Instruction) {
 	state.UpdatedAt = nowOrZero(state)
-	phase := scratchString(state, REACT_PHASE, REACT_PHASE_THINK)
+	phase := scratchString(state, THINK_THEN_ACT_PHASE, THINK_THEN_ACT_REASON)
 
 	switch phase {
-	case REACT_PHASE_THINK:
+	case THINK_THEN_ACT_REASON:
 		next := state.Clone()
-		scratchSet(&next, REACT_PHASE, REACT_PHASE_ACT)
-		return next, []core.Effect{callModelFromMessages(next)}
+		scratchSet(&next, THINK_THEN_ACT_PHASE, THINK_THEN_ACT_DISPATCH)
+		return next, []core.Instruction{callModelFromMessages(next)}
 
-	case REACT_PHASE_ACT:
-		call, ok := scratchCall(state, REACT_LAST_CALL)
+	case THINK_THEN_ACT_DISPATCH:
+		call, ok := scratchCall(state, THINK_THEN_ACT_PENDING_CALL)
 		if !ok {
-			return state, []core.Effect{doneEffect()}
+			return state, []core.Instruction{doneInstruction()}
 		}
 		next := state.Clone()
-		scratchSet(&next, REACT_PHASE, REACT_PHASE_OBSERVE)
-		return next, []core.Effect{callToolEffect(call)}
+		scratchSet(&next, THINK_THEN_ACT_PHASE, THINK_THEN_ACT_REFLECT)
+		return next, []core.Instruction{callToolInstruction(call)}
 
-	case REACT_PHASE_OBSERVE:
+	case THINK_THEN_ACT_REFLECT:
 		next := state.Clone()
-		scratchSet(&next, REACT_PHASE, REACT_PHASE_ACT)
-		return next, []core.Effect{callModelFromMessages(next)}
+		scratchSet(&next, THINK_THEN_ACT_PHASE, THINK_THEN_ACT_DISPATCH)
+		return next, []core.Instruction{callModelFromMessages(next)}
 
 	default:
-		return state, []core.Effect{doneEffect()}
+		return state, []core.Instruction{doneInstruction()}
 	}
 }
 
-// SeedAct lets a driver (test, fixture) install a pending tool call so
-// the next Decide emits CALL_TOOL.
-func SeedAct(s *core.State, call core.ToolCall) {
-	scratchSet(s, REACT_PHASE, REACT_PHASE_ACT)
-	scratchSet(s, REACT_LAST_CALL, call)
+// SeedDispatch lets a driver (test, fixture) install a pending tool call so
+// the next NextStep emits INSTRUCTION_CALL_TOOL.
+func SeedDispatch(s *core.State, call core.ToolCall) {
+	scratchSet(s, THINK_THEN_ACT_PHASE, THINK_THEN_ACT_DISPATCH)
+	scratchSet(s, THINK_THEN_ACT_PENDING_CALL, call)
 }

@@ -9,113 +9,113 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestReactFirstThinkEmitsCallModel(t *testing.T) {
-	p := planning.NewReAct()
-	s := core.State{ThinkingKind: core.THINK_REACT, Messages: []core.Message{
-		{Role: core.ROLE_USER, Chunks: []core.Chunk{{Kind: core.CHUNK_KIND_TEXT, Text: "watch log"}}},
+func TestThinkThenActFirstReasonEmitsCallModel(t *testing.T) {
+	p := planning.NewThinkThenAct()
+	s := core.State{ReasoningStyle: core.REASON_REACT, Messages: []core.Message{
+		{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "watch log"}}},
 	}}
-	out, effs := p.Decide(s)
-	require.Len(t, effs, 1)
-	assert.Equal(t, core.EFFECT_CALL_MODEL, effs[0].Kind)
-	assert.Equal(t, planning.REACT_PHASE_ACT, scratchGet(out, planning.REACT_PHASE))
+	out, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
+	assert.Equal(t, planning.THINK_THEN_ACT_DISPATCH, scratchGet(out, planning.THINK_THEN_ACT_PHASE))
 }
 
-func TestReactActEmitsCallTool(t *testing.T) {
-	p := planning.NewReAct()
-	s := core.State{ThinkingKind: core.THINK_REACT}
-	planning.SeedAct(&s, core.ToolCall{ID: "c1", Name: "read_log_tail", Args: map[string]any{"n": 5}})
+func TestThinkThenActDispatchEmitsCallTool(t *testing.T) {
+	p := planning.NewThinkThenAct()
+	s := core.State{ReasoningStyle: core.REASON_REACT}
+	planning.SeedDispatch(&s, core.ToolCall{ID: "c1", Name: "read_log_tail", Args: map[string]any{"n": 5}})
 
-	_, effs := p.Decide(s)
-	require.Len(t, effs, 1)
-	assert.Equal(t, core.EFFECT_CALL_TOOL, effs[0].Kind)
-	require.NotNil(t, effs[0].CallTool)
-	assert.Equal(t, "c1", effs[0].CallTool.Call.ID)
-	assert.Equal(t, "read_log_tail", effs[0].CallTool.Call.Name)
+	_, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_CALL_TOOL, instrs[0].Kind)
+	require.NotNil(t, instrs[0].CallTool)
+	assert.Equal(t, "c1", instrs[0].CallTool.Call.ID)
+	assert.Equal(t, "read_log_tail", instrs[0].CallTool.Call.Name)
 }
 
-func TestReactObserveEmitsCallModel(t *testing.T) {
-	p := planning.NewReAct()
-	s := core.State{ThinkingKind: core.THINK_REACT, Scratch: map[string]any{
-		planning.REACT_PHASE: planning.REACT_PHASE_OBSERVE,
+func TestThinkThenActReflectEmitsCallModel(t *testing.T) {
+	p := planning.NewThinkThenAct()
+	s := core.State{ReasoningStyle: core.REASON_REACT, WorkingMemory: map[string]any{
+		planning.THINK_THEN_ACT_PHASE: planning.THINK_THEN_ACT_REFLECT,
 	}}
-	_, effs := p.Decide(s)
-	require.Len(t, effs, 1)
-	assert.Equal(t, core.EFFECT_CALL_MODEL, effs[0].Kind)
+	_, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
 }
 
-func TestPlannerExecutorSkipsToExecuteWhenBlueprintSeeded(t *testing.T) {
-	p := planning.NewPlannerExecutor()
-	s := core.State{ThinkingKind: core.THINK_PLANNER_EXECUTOR}
+func TestPlanThenRunSkipsToExecuteWhenBlueprintSeeded(t *testing.T) {
+	p := planning.NewPlanThenRun()
+	s := core.State{ReasoningStyle: core.REASON_PLAN_THEN_RUN}
 	planning.SeedBlueprint(&s, []core.ToolCall{
 		{ID: "s1", Name: "add_todo", Args: map[string]any{"title": "investigate"}},
 		{ID: "s2", Name: "add_todo", Args: map[string]any{"title": "fix"}},
 	})
 
-	out, effs := p.Decide(s)
-	require.Len(t, effs, 1)
-	assert.Equal(t, core.EFFECT_CALL_TOOL, effs[0].Kind)
-	assert.Equal(t, "s1", effs[0].CallTool.Call.ID)
-	assert.Equal(t, 1, scratchGetInt(out, planning.PE_STEP_INDEX))
-	assert.Equal(t, planning.PE_PHASE_EXEC, scratchGet(out, planning.PE_PHASE))
+	out, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_CALL_TOOL, instrs[0].Kind)
+	assert.Equal(t, "s1", instrs[0].CallTool.Call.ID)
+	assert.Equal(t, 1, scratchGetInt(out, planning.PLAN_THEN_RUN_STEP_INDEX))
+	assert.Equal(t, planning.RUN_PHASE_PTR, scratchGet(out, planning.PLAN_THEN_RUN_PHASE))
 }
 
-func TestPlannerExecutorEmitsDONEWhenBlueprintExhausted(t *testing.T) {
-	p := planning.NewPlannerExecutor()
-	s := core.State{ThinkingKind: core.THINK_PLANNER_EXECUTOR, Scratch: map[string]any{
-		planning.PE_PHASE:       planning.PE_PHASE_EXEC,
-		planning.PE_STEP_INDEX:  2,
-		planning.PE_BLUEPRINT_STEPS: []core.ToolCall{
+func TestPlanThenRunEmitsDoneWhenBlueprintExhausted(t *testing.T) {
+	p := planning.NewPlanThenRun()
+	s := core.State{ReasoningStyle: core.REASON_PLAN_THEN_RUN, WorkingMemory: map[string]any{
+		planning.PLAN_THEN_RUN_PHASE:      planning.RUN_PHASE_PTR,
+		planning.PLAN_THEN_RUN_STEP_INDEX: 2,
+		planning.PLAN_THEN_RUN_BLUEPRINT: []core.ToolCall{
 			{ID: "s1", Name: "a"},
 			{ID: "s2", Name: "b"},
 		},
 	}}
-	_, effs := p.Decide(s)
-	require.Len(t, effs, 1)
-	assert.Equal(t, core.EFFECT_DONE, effs[0].Kind)
+	_, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_DONE, instrs[0].Kind)
 }
 
-func TestExecutorCriticOKCritiqueEmitsDONE(t *testing.T) {
-	p := planning.NewExecutorCritic()
-	s := core.State{ThinkingKind: core.THINK_EXECUTOR_CRITIC}
-	planning.SeedCritiqueOK(&s, "looks good")
+func TestRunThenReviewPassedEmitsDone(t *testing.T) {
+	p := planning.NewRunThenReview()
+	s := core.State{ReasoningStyle: core.REASON_DO_THEN_REVIEW}
+	planning.SeedReviewPassed(&s, "looks good")
 
-	_, effs := p.Decide(s)
-	require.Len(t, effs, 1)
-	assert.Equal(t, core.EFFECT_DONE, effs[0].Kind)
+	_, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_DONE, instrs[0].Kind)
 }
 
-func TestExecutorCriticRejectCritiqueEmitsCallModel(t *testing.T) {
-	p := planning.NewExecutorCritic()
-	s := core.State{ThinkingKind: core.THINK_EXECUTOR_CRITIC}
-	planning.SeedCritiqueReject(&s, "step missing precondition")
+func TestRunThenReviewFailedEmitsCallModel(t *testing.T) {
+	p := planning.NewRunThenReview()
+	s := core.State{ReasoningStyle: core.REASON_DO_THEN_REVIEW}
+	planning.SeedReviewFailed(&s, "step missing precondition")
 
-	out, effs := p.Decide(s)
-	require.Len(t, effs, 1)
-	assert.Equal(t, core.EFFECT_CALL_MODEL, effs[0].Kind)
-	assert.Equal(t, planning.EC_PHASE_EXEC, scratchGet(out, planning.EC_PHASE))
-	assert.Equal(t, 1, scratchGetInt(out, planning.EC_ITER))
+	out, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
+	assert.Equal(t, planning.RUN_PHASE, scratchGet(out, planning.RUN_THEN_REVIEW_PHASE))
+	assert.Equal(t, 1, scratchGetInt(out, planning.RUN_THEN_REVIEW_ITERATION))
 }
 
-func TestStubPatternsDoNotPanic(t *testing.T) {
+func TestStubRulesDoNotPanic(t *testing.T) {
 	tests := []struct {
-		name    string
-		pattern core.ThinkingPattern
-		kind    core.ThinkingKind
+		name string
+		rule core.DecisionRule
+		kind core.ReasoningStyle
 	}{
-		{"cot_singleshot", planning.NewCOTSingleshot(), core.THINK_COT_SINGLESHOT},
-		{"reflexion", planning.NewReflexion(), core.THINK_REFLEXION},
-		{"router", planning.NewRouter(), core.THINK_ROUTER},
+		{"one_shot", planning.NewOneShotReasoning(), core.REASON_ONE_SHOT},
+		{"learn_from_failure", planning.NewLearnFromFailure(), core.REASON_LEARN_FROM_FAILURE},
+		{"choose_agent", planning.NewChooseAgent(), core.REASON_PICK_AGENT},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.kind, tc.pattern.Kind())
-			s := core.State{ThinkingKind: tc.kind}
-			out, effs := tc.pattern.Decide(s)
-			assert.NotEmpty(t, effs, "stub must return at least one effect")
+			assert.Equal(t, tc.kind, tc.rule.Kind())
+			s := core.State{ReasoningStyle: tc.kind}
+			out, instrs := tc.rule.NextStep(s)
+			assert.NotEmpty(t, instrs, "stub must return at least one instruction")
 			// every stub must include a DONE so the run can terminate
 			hasDone := false
-			for _, e := range effs {
-				if e.Kind == core.EFFECT_DONE {
+			for _, ins := range instrs {
+				if ins.Kind == core.INSTRUCTION_DONE {
 					hasDone = true
 				}
 			}
@@ -126,10 +126,10 @@ func TestStubPatternsDoNotPanic(t *testing.T) {
 }
 
 func scratchGet(s core.State, key string) string {
-	if s.Scratch == nil {
+	if s.WorkingMemory == nil {
 		return ""
 	}
-	v, ok := s.Scratch[key]
+	v, ok := s.WorkingMemory[key]
 	if !ok {
 		return ""
 	}
@@ -140,10 +140,10 @@ func scratchGet(s core.State, key string) string {
 }
 
 func scratchGetInt(s core.State, key string) int {
-	if s.Scratch == nil {
+	if s.WorkingMemory == nil {
 		return 0
 	}
-	v, ok := s.Scratch[key]
+	v, ok := s.WorkingMemory[key]
 	if !ok {
 		return 0
 	}

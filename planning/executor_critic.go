@@ -3,62 +3,62 @@ package planning
 import "github.com/bizshuk/agentsdk/core"
 
 const (
-	EC_PHASE    = "ec.phase"           // "execute" | "critique" | "iterate" | "done"
-	EC_CRITIQUE = "ec.critique_text"   // string — last critique; empty means none
-	EC_ITER     = "ec.iteration"       // int
+	RUN_THEN_REVIEW_PHASE     = "do_then_review.phase"     // "execute" | "critique" | "done"
+	RUN_THEN_REVIEW_NOTE      = "do_then_review.note"      // string — last review; empty means none
+	RUN_THEN_REVIEW_ITERATION = "do_then_review.iteration" // int
 
-	EC_PHASE_EXEC = "execute"
-	EC_PHASE_CRIT = "critique"
-	EC_PHASE_DONE = "done"
+	RUN_PHASE   = "execute"
+	REVIEW_PHASE = "critique"
+	DONE_PHASE   = "done"
 )
 
-// ExecutorCritic: emit execute → emit critique → if critique flags issues,
-// iterate (up to a budget) → else DONE.
-type ExecutorCritic struct{}
+// RunThenReview: emit execute → emit review → if review flags issues,
+// iterate (up to a budget) → else INSTRUCTION_DONE.
+type RunThenReview struct{}
 
-// NewExecutorCritic returns the pattern.
-func NewExecutorCritic() *ExecutorCritic { return &ExecutorCritic{} }
+// NewRunThenReview returns the rule.
+func NewRunThenReview() *RunThenReview { return &RunThenReview{} }
 
-// Kind returns THINK_EXECUTOR_CRITIC.
-func (p *ExecutorCritic) Kind() core.ThinkingKind { return core.THINK_EXECUTOR_CRITIC }
+// Kind returns REASON_DO_THEN_REVIEW.
+func (p *RunThenReview) Kind() core.ReasoningStyle { return core.REASON_DO_THEN_REVIEW }
 
-func (p *ExecutorCritic) Decide(state core.State) (core.State, []core.Effect) {
+func (p *RunThenReview) NextStep(state core.State) (core.State, []core.Instruction) {
 	state.UpdatedAt = nowOrZero(state)
-	phase := scratchString(state, EC_PHASE, EC_PHASE_EXEC)
+	phase := scratchString(state, RUN_THEN_REVIEW_PHASE, RUN_PHASE)
 
 	switch phase {
-	case EC_PHASE_EXEC:
+	case RUN_PHASE:
 		next := state.Clone()
-		scratchSet(&next, EC_PHASE, EC_PHASE_CRIT)
-		return next, []core.Effect{callModelFromMessages(state.Clone())}
+		scratchSet(&next, RUN_THEN_REVIEW_PHASE, REVIEW_PHASE)
+		return next, []core.Instruction{callModelFromMessages(state.Clone())}
 
-	case EC_PHASE_CRIT:
-		crit := scratchString(state, EC_CRITIQUE, "")
-		if crit == "" || hasOKPrefix(crit) {
+	case REVIEW_PHASE:
+		note := scratchString(state, RUN_THEN_REVIEW_NOTE, "")
+		if note == "" || startsWithPassed(note) {
 			next := state.Clone()
-			scratchSet(&next, EC_PHASE, EC_PHASE_DONE)
-			return next, []core.Effect{doneEffect()}
+			scratchSet(&next, RUN_THEN_REVIEW_PHASE, DONE_PHASE)
+			return next, []core.Instruction{doneInstruction()}
 		}
 		// Otherwise iterate: bump iteration, return to execute.
-		iter := scratchInt(state, EC_ITER, 0)
+		iter := scratchInt(state, RUN_THEN_REVIEW_ITERATION, 0)
 		next := state.Clone()
-		scratchSet(&next, EC_PHASE, EC_PHASE_EXEC)
-		scratchSet(&next, EC_ITER, iter+1)
-		return next, []core.Effect{callModelFromMessages(state.Clone())}
+		scratchSet(&next, RUN_THEN_REVIEW_PHASE, RUN_PHASE)
+		scratchSet(&next, RUN_THEN_REVIEW_ITERATION, iter+1)
+		return next, []core.Instruction{callModelFromMessages(state.Clone())}
 
 	default:
-		return state, []core.Effect{doneEffect()}
+		return state, []core.Instruction{doneInstruction()}
 	}
 }
 
-// SeedCritiqueOK tells the pattern the previous critique was passing — next Decide emits DONE.
-func SeedCritiqueOK(s *core.State, text string) {
-	scratchSet(s, EC_PHASE, EC_PHASE_CRIT)
-	scratchSet(s, EC_CRITIQUE, "OK: "+text)
+// SeedReviewPassed tells the rule the previous review was passing — next NextStep emits DONE.
+func SeedReviewPassed(s *core.State, text string) {
+	scratchSet(s, RUN_THEN_REVIEW_PHASE, REVIEW_PHASE)
+	scratchSet(s, RUN_THEN_REVIEW_NOTE, "OK: "+text)
 }
 
-// SeedCritiqueReject tells the pattern to iterate.
-func SeedCritiqueReject(s *core.State, text string) {
-	scratchSet(s, EC_PHASE, EC_PHASE_CRIT)
-	scratchSet(s, EC_CRITIQUE, text)
+// SeedReviewFailed tells the rule to iterate.
+func SeedReviewFailed(s *core.State, text string) {
+	scratchSet(s, RUN_THEN_REVIEW_PHASE, REVIEW_PHASE)
+	scratchSet(s, RUN_THEN_REVIEW_NOTE, text)
 }

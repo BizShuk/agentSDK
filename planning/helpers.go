@@ -6,7 +6,7 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 )
 
-// nowOrZero returns state.UpdatedAt if zero, else time.Now. Patterns use
+// nowOrZero returns state.UpdatedAt if zero, else time.Now. Rules use
 // this to stamp UpdatedAt consistently without bringing in a clock injection
 // at every call site (Test providers inject a clock via Budget.NowFunc in M2).
 func nowOrZero(state core.State) time.Time {
@@ -17,10 +17,10 @@ func nowOrZero(state core.State) time.Time {
 }
 
 func scratchString(state core.State, key, def string) string {
-	if state.Scratch == nil {
+	if state.WorkingMemory == nil {
 		return def
 	}
-	v, ok := state.Scratch[key]
+	v, ok := state.WorkingMemory[key]
 	if !ok {
 		return def
 	}
@@ -31,10 +31,10 @@ func scratchString(state core.State, key, def string) string {
 }
 
 func scratchInt(state core.State, key string, def int) int {
-	if state.Scratch == nil {
+	if state.WorkingMemory == nil {
 		return def
 	}
-	v, ok := state.Scratch[key]
+	v, ok := state.WorkingMemory[key]
 	if !ok {
 		return def
 	}
@@ -50,10 +50,10 @@ func scratchInt(state core.State, key string, def int) int {
 }
 
 func scratchCall(state core.State, key string) (core.ToolCall, bool) {
-	if state.Scratch == nil {
+	if state.WorkingMemory == nil {
 		return core.ToolCall{}, false
 	}
-	v, ok := state.Scratch[key]
+	v, ok := state.WorkingMemory[key]
 	if !ok {
 		return core.ToolCall{}, false
 	}
@@ -62,10 +62,10 @@ func scratchCall(state core.State, key string) (core.ToolCall, bool) {
 }
 
 func scratchBlueprint(state core.State) ([]core.ToolCall, bool) {
-	if state.Scratch == nil {
+	if state.WorkingMemory == nil {
 		return nil, false
 	}
-	v, ok := state.Scratch[PE_BLUEPRINT_STEPS]
+	v, ok := state.WorkingMemory[PLAN_THEN_RUN_BLUEPRINT]
 	if !ok {
 		return nil, false
 	}
@@ -74,36 +74,36 @@ func scratchBlueprint(state core.State) ([]core.ToolCall, bool) {
 }
 
 func scratchSet(s *core.State, key string, val any) {
-	if s.Scratch == nil {
-		s.Scratch = make(map[string]any, 4)
+	if s.WorkingMemory == nil {
+		s.WorkingMemory = make(map[string]any, 4)
 	}
-	s.Scratch[key] = val
+	s.WorkingMemory[key] = val
 }
 
-func callModelFromMessages(state core.State) core.Effect {
-	return core.Effect{
-		Kind: core.EFFECT_CALL_MODEL,
-		CallModel: &core.CallModelEffect{
+func callModelFromMessages(state core.State) core.Instruction {
+	return core.Instruction{
+		Kind: core.INSTRUCTION_CALL_MODEL,
+		CallModel: &core.CallModelInstruction{
 			RequestID: newID(),
 			Messages:  state.Messages,
 		},
 	}
 }
 
-func callToolEffect(call core.ToolCall) core.Effect {
-	return core.Effect{
-		Kind: core.EFFECT_CALL_TOOL,
-		CallTool: &core.CallToolEffect{Call: call},
+func callToolInstruction(call core.ToolCall) core.Instruction {
+	return core.Instruction{
+		Kind:    core.INSTRUCTION_CALL_TOOL,
+		CallTool: &core.CallToolInstruction{Call: call},
 	}
 }
 
-func doneEffect() core.Effect {
-	return core.Effect{Kind: core.EFFECT_DONE}
+func doneInstruction() core.Instruction {
+	return core.Instruction{Kind: core.INSTRUCTION_DONE}
 }
 
-// hasOKPrefix is the cheap "did the critique approve?" predicate.
-// Override by populating scratch with a different prefix if needed.
-func hasOKPrefix(s string) bool {
+// startsWithPassed is the cheap "did the review approve?" predicate.
+// Override by populating working memory with a different prefix if needed.
+func startsWithPassed(s string) bool {
 	if len(s) < 3 {
 		return false
 	}
@@ -111,7 +111,7 @@ func hasOKPrefix(s string) bool {
 }
 
 // newID is a process-local id generator. Deterministic tests can replace
-// this by setting scratch explicitly; id only appears on emitted effects.
+// this by setting working memory explicitly; id only appears on emitted instructions.
 var idCounter uint64
 
 func newID() string {

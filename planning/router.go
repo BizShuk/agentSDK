@@ -2,26 +2,26 @@ package planning
 
 import "github.com/bizshuk/agentsdk/core"
 
-// Router: multi-agent router pattern.
+// ChooseAgent: multi-agent router rule.
 //
-// STUB: returns DONE with a notification. Implementation deferred.
-type Router struct{}
+// STUB: returns INSTRUCTION_DONE with a notification.
+type ChooseAgent struct{}
 
-// NewRouter returns the stub pattern.
-func NewRouter() *Router { return &Router{} }
+// NewChooseAgent returns the stub rule.
+func NewChooseAgent() *ChooseAgent { return &ChooseAgent{} }
 
-// Kind returns THINK_ROUTER.
-func (p *Router) Kind() core.ThinkingKind { return core.THINK_ROUTER }
+// Kind returns REASON_PICK_AGENT.
+func (p *ChooseAgent) Kind() core.ReasoningStyle { return core.REASON_PICK_AGENT }
 
-// Decide emits DONE with a NOTIFY explaining the stub state.
-func (p *Router) Decide(state core.State) (core.State, []core.Effect) {
+// NextStep emits INSTRUCTION_DONE with a NOTIFY explaining the stub state.
+func (p *ChooseAgent) NextStep(state core.State) (core.State, []core.Instruction) {
 	next := state.Clone()
 	next.UpdatedAt = nowOrZero(state)
-	return next, []core.Effect{
-		{Kind: core.EFFECT_NOTIFY, Notify: &core.NotifyEffect{
+	return next, []core.Instruction{
+		{Kind: core.INSTRUCTION_NOTIFY, Notify: &core.NotifyInstruction{
 			Level:   "warn",
-			Message: "router pattern is a STUB; emitting DONE",
+			Message: "choose_agent rule is a STUB; emitting DONE",
 		}},
-		doneEffect(),
+		doneInstruction(),
 	}
 }
