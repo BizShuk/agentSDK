@@ -37,7 +37,7 @@ var ErrBudgetExceeded = errors.New("budget exceeded")
 // so the middleware sees the current usage without re-counting.
 func Budget() middleware.Middleware {
 	return func(next middleware.Next) middleware.Next {
-		return func(ctx context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
+		return func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 			if exceeded, why := state.Budget.Exceeded(); exceeded {
 				return state, nil, false, &BudgetExceededError{Reason: why}
 			}

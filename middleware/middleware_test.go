@@ -17,11 +17,11 @@ import (
 // recorder captures all calls so tests can assert order and counts.
 type recorder struct {
 	calls int
-	effs  []core.Effect
-	reply func(eff core.Effect) (core.State, *core.Input, bool, error)
+	effs  []core.Instruction
+	reply func(eff core.Instruction) (core.State, *core.Event, bool, error)
 }
 
-func (r *recorder) run(_ context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
+func (r *recorder) run(_ context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 	r.calls++
 	r.effs = append(r.effs, eff)
 	if r.reply != nil {
@@ -31,9 +31,9 @@ func (r *recorder) run(_ context.Context, state core.State, eff core.Effect) (co
 }
 
 // dispatcherFunc adapts a plain func to middleware.Next.
-type dispatcherFunc func(eff core.Effect) (core.State, *core.Input, bool, error)
+type dispatcherFunc func(eff core.Instruction) (core.State, *core.Event, bool, error)
 
-func (d dispatcherFunc) run(_ context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
+func (d dispatcherFunc) run(_ context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 	return d(eff)
 }
 
@@ -48,7 +48,7 @@ func TestChainComposesOuterToInner(t *testing.T) {
 
 	mw := func(name string) middleware.Middleware {
 		return func(next middleware.Next) middleware.Next {
-			return func(ctx context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
+			return func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 				order = append(order, name+":before")
 				s, in, term, err := next(ctx, state, eff)
 				order = append(order, name+":after")
@@ -60,7 +60,7 @@ func TestChainComposesOuterToInner(t *testing.T) {
 	chain := middleware.Chain(mw("outer"), mw("inner"))
 	wrap := chain(middleware.Next(rec.run))
 
-	_, _, _, err := wrap(context.Background(), core.State{}, core.Effect{Kind: core.EFFECT_CALL_TOOL})
+	_, _, _, err := wrap(context.Background(), core.State{}, core.Instruction{Kind: core.INSTRUCTION_CALL_TOOL})
 	require.NoError(t, err)
 	assert.Equal(t, 1, rec.calls)
 	assert.Equal(t,
@@ -70,32 +70,32 @@ func TestChainComposesOuterToInner(t *testing.T) {
 
 func TestRetryRecoversTransientError(t *testing.T) {
 	attempts := 0
-	d := func(eff core.Effect) (core.State, *core.Input, bool, error) {
+	d := func(eff core.Instruction) (core.State, *core.Event, bool, error) {
 		attempts++
 		if attempts < 3 {
 			return core.State{}, nil, false, harness.SimpleRetryable{Reason: "5xx"}
 		}
-		return core.State{}, &core.Input{Kind: core.INPUT_KIND_MODEL_RESULT}, false, nil
+		return core.State{}, &core.Event{Kind: core.EVENT_MODEL_REPLY}, false, nil
 	}
 	mw := harness.Retry(harness.RetryConfig{
 		N: 5, BaseBackoff: time.Microsecond, MaxBackoff: time.Microsecond,
 		Sleeper: func(time.Duration) {},
 	})
 
-	_, _, _, err := mw(toNext(d))(context.Background(), core.State{}, core.Effect{Kind: core.EFFECT_CALL_MODEL})
+	_, _, _, err := mw(toNext(d))(context.Background(), core.State{}, core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL})
 	require.NoError(t, err)
 	assert.Equal(t, 3, attempts)
 }
 
 func TestRetrySurfacesNonRetryable(t *testing.T) {
 	attempts := 0
-	d := func(eff core.Effect) (core.State, *core.Input, bool, error) {
+	d := func(eff core.Instruction) (core.State, *core.Event, bool, error) {
 		attempts++
 		return core.State{}, nil, false, errors.New("invalid args")
 	}
 	mw := harness.Retry(harness.RetryConfig{N: 3, Sleeper: func(time.Duration) {}})
 
-	_, _, _, err := mw(toNext(d))(context.Background(), core.State{}, core.Effect{Kind: core.EFFECT_CALL_MODEL})
+	_, _, _, err := mw(toNext(d))(context.Background(), core.State{}, core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL})
 	require.Error(t, err)
 	assert.Equal(t, 1, attempts)
 }
@@ -107,7 +107,7 @@ func TestBudgetStopsDispatchWhenExceeded(t *testing.T) {
 	_, _, _, err := mw(middleware.Next(rec.run))(
 		context.Background(),
 		core.State{Budget: core.Budget{MaxTurns: 3, UsedTurns: 3}},
-		core.Effect{Kind: core.EFFECT_CALL_MODEL},
+		core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL},
 	)
 	require.Error(t, err)
 	var be *harness.BudgetExceededError
@@ -117,7 +117,7 @@ func TestBudgetStopsDispatchWhenExceeded(t *testing.T) {
 }
 
 func TestTimeoutCancelsSlowDispatch(t *testing.T) {
-	d := func(state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
+	d := func(state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 		// Slow inner — even if it doesn't honor ctx, the timeout layer
 		// surfaces a deadline error when the deadline fires.
 		time.Sleep(50 * time.Millisecond)
@@ -126,7 +126,7 @@ func TestTimeoutCancelsSlowDispatch(t *testing.T) {
 	mw := harness.Timeout(harness.TimeoutConfig{PerEffect: 5 * time.Millisecond})
 
 	_, _, _, err := mw(loopguardDispatcher(d))(context.Background(), core.State{},
-		core.Effect{Kind: core.EFFECT_CALL_MODEL})
+		core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL})
 	require.Error(t, err)
 	// Error is context.DeadlineExceeded (or wraps it) — the timeout
 	// layer always reports a deadline breach.
@@ -135,30 +135,30 @@ func TestTimeoutCancelsSlowDispatch(t *testing.T) {
 
 func TestLoopguardRewritesToApproval(t *testing.T) {
 	mw := loopguard.New(loopguard.Config{MaxRepeats: 5})
-	var lastSeen core.Effect
-	d := func(state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
+	var lastSeen core.Instruction
+	d := func(state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 		lastSeen = eff
-		return state, &core.Input{Kind: core.INPUT_KIND_TOOL_RESULT}, false, nil
+		return state, &core.Event{Kind: core.EVENT_TOOL_RESULT}, false, nil
 	}
 	toolCall := core.ToolCall{ID: "c1", Name: "read_log_tail", Args: map[string]any{"n": 5}}
 	state := core.State{}
 	for i := 0; i < 5; i++ {
 		var err error
 		state, _, _, err = mw(loopguardDispatcher(d))(context.Background(), state,
-			core.Effect{Kind: core.EFFECT_CALL_TOOL, CallTool: &core.CallToolEffect{Call: toolCall}})
+			core.Instruction{Kind: core.INSTRUCTION_CALL_TOOL, CallTool: &core.CallToolInstruction{Call: toolCall}})
 		require.NoError(t, err)
 	}
-	require.Equal(t, core.EFFECT_REQUEST_APPROVAL, lastSeen.Kind)
+	require.Equal(t, core.INSTRUCTION_REQUEST_APPROVAL, lastSeen.Kind)
 	require.NotNil(t, lastSeen.RequestApproval)
 	assert.Equal(t, "loop_detected", lastSeen.RequestApproval.Reason)
 }
 
 func TestLoopguardResetsAfterObservation(t *testing.T) {
 	mw := loopguard.New(loopguard.Config{MaxRepeats: 3})
-	var lastSeen core.Effect
-	d := func(state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
+	var lastSeen core.Instruction
+	d := func(state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 		lastSeen = eff
-		return state, &core.Input{Kind: core.INPUT_KIND_TOOL_RESULT}, false, nil
+		return state, &core.Event{Kind: core.EVENT_TOOL_RESULT}, false, nil
 	}
 	toolCall := core.ToolCall{ID: "c1", Name: "echo", Args: map[string]any{"msg": "hi"}}
 	state := core.State{}
@@ -166,32 +166,32 @@ func TestLoopguardResetsAfterObservation(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		var err error
 		state, _, _, err = mw(loopguardDispatcher(d))(context.Background(), state,
-			core.Effect{Kind: core.EFFECT_CALL_TOOL, CallTool: &core.CallToolEffect{Call: toolCall}})
+			core.Instruction{Kind: core.INSTRUCTION_CALL_TOOL, CallTool: &core.CallToolInstruction{Call: toolCall}})
 		require.NoError(t, err)
 	}
-	assert.NotEqual(t, core.EFFECT_REQUEST_APPROVAL, lastSeen.Kind)
+	assert.NotEqual(t, core.INSTRUCTION_REQUEST_APPROVAL, lastSeen.Kind)
 
 	var err error
 	state, _, _, err = mw(loopguardDispatcher(d))(context.Background(), state,
-		core.Effect{Kind: core.EFFECT_CALL_MODEL, CallModel: &core.CallModelEffect{RequestID: "r1"}})
+		core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL, CallModel: &core.CallModelInstruction{RequestID: "r1"}})
 	require.NoError(t, err)
 
 	for i := 0; i < 2; i++ {
 		state, _, _, err = mw(loopguardDispatcher(d))(context.Background(), state,
-			core.Effect{Kind: core.EFFECT_CALL_TOOL, CallTool: &core.CallToolEffect{Call: toolCall}})
+			core.Instruction{Kind: core.INSTRUCTION_CALL_TOOL, CallTool: &core.CallToolInstruction{Call: toolCall}})
 		require.NoError(t, err)
 	}
-	assert.NotEqual(t, core.EFFECT_REQUEST_APPROVAL, lastSeen.Kind)
+	assert.NotEqual(t, core.INSTRUCTION_REQUEST_APPROVAL, lastSeen.Kind)
 }
 
 func TestLoopguardStripsVolatileArgs(t *testing.T) {
 	mw := loopguard.New(loopguard.Config{MaxRepeats: 5})
 	sawApproval := false
-	d := func(state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
-		if eff.Kind == core.EFFECT_REQUEST_APPROVAL {
+	d := func(state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
+		if eff.Kind == core.INSTRUCTION_REQUEST_APPROVAL {
 			sawApproval = true
 		}
-		return state, &core.Input{Kind: core.INPUT_KIND_TOOL_RESULT}, false, nil
+		return state, &core.Event{Kind: core.EVENT_TOOL_RESULT}, false, nil
 	}
 	state := core.State{}
 	for i := 0; i < 10; i++ {
@@ -201,17 +201,17 @@ func TestLoopguardStripsVolatileArgs(t *testing.T) {
 		}
 		var err error
 		state, _, _, err = mw(loopguardDispatcher(d))(context.Background(), state,
-			core.Effect{Kind: core.EFFECT_CALL_TOOL, CallTool: &core.CallToolEffect{Call: toolCall}})
+			core.Instruction{Kind: core.INSTRUCTION_CALL_TOOL, CallTool: &core.CallToolInstruction{Call: toolCall}})
 		require.NoError(t, err)
 	}
 	assert.True(t, sawApproval, "loopguard must fire REQUEST_APPROVAL when only volatile args vary")
 }
 
 // loopguardDispatcher adapts a "preserve state" dispatcher into middleware.Next.
-type loopguardDispatch func(state core.State, eff core.Effect) (core.State, *core.Input, bool, error)
+type loopguardDispatch func(state core.State, eff core.Instruction) (core.State, *core.Event, bool, error)
 
 func loopguardDispatcher(d loopguardDispatch) middleware.Next {
-	return func(_ context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
+	return func(_ context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 		return d(state, eff)
 	}
 }

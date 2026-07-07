@@ -31,12 +31,12 @@ import (
 //
 //  1. non-nil (state, *input) ⇒ the input is foldable on the next iteration
 //  2. terminal=true ⇒ the runtime returns immediately with state.Status
-type Next func(ctx context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error)
+type Next func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error)
 
 // Dispatcher is the terminal Next — what the chain wraps when it has
 // nothing else to do. In runtime.Loop, this is the function that calls
 // ModelProvider / ToolRegistry / Notifier.
-type Dispatcher func(ctx context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error)
+type Dispatcher func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error)
 
 // Middleware transforms a Next into another Next.
 type Middleware func(Next) Next

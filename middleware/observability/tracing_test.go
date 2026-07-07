@@ -19,11 +19,11 @@ func TestTracingEmitsOneSpanPerEffect(t *testing.T) {
 
 	mw := observability.Tracing(observability.TracingConfig{TracerProvider: tp})
 
-	d := func(_ context.Context, _ core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
-		return core.State{}, &core.Input{Kind: core.INPUT_KIND_TOOL_RESULT}, false, nil
+	d := func(_ context.Context, _ core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
+		return core.State{}, &core.Event{Kind: core.EVENT_TOOL_RESULT}, false, nil
 	}
 
-	eff := core.Effect{Kind: core.EFFECT_CALL_TOOL, CallTool: &core.CallToolEffect{
+	eff := core.Instruction{Kind: core.INSTRUCTION_CALL_TOOL, CallTool: &core.CallToolInstruction{
 		Call: core.ToolCall{ID: "c1", Name: "read_log_tail", Args: map[string]any{"n": 5}, Risk: core.RISK_LEVEL_LOW},
 	}}
 	_, _, _, err := mw(middleware.Next(d))(context.Background(), core.State{}, eff)
@@ -39,10 +39,10 @@ func TestTracingAttributesCarried(t *testing.T) {
 	tp := newTracerProviderWithRecorder(rec)
 	mw := observability.Tracing(observability.TracingConfig{TracerProvider: tp})
 
-	d := func(_ context.Context, _ core.State, _ core.Effect) (core.State, *core.Input, bool, error) {
-		return core.State{}, &core.Input{Kind: core.INPUT_KIND_TOOL_RESULT}, false, nil
+	d := func(_ context.Context, _ core.State, _ core.Instruction) (core.State, *core.Event, bool, error) {
+		return core.State{}, &core.Event{Kind: core.EVENT_TOOL_RESULT}, false, nil
 	}
-	eff := core.Effect{Kind: core.EFFECT_CALL_TOOL, CallTool: &core.CallToolEffect{
+	eff := core.Instruction{Kind: core.INSTRUCTION_CALL_TOOL, CallTool: &core.CallToolInstruction{
 		Call: core.ToolCall{ID: "c1", Name: "add_todo", Args: map[string]any{"title": "x"}, Risk: core.RISK_LEVEL_HIGH},
 	}}
 	_, _, _, err := mw(middleware.Next(d))(context.Background(), core.State{}, eff)
@@ -69,11 +69,11 @@ func TestTracingMarksErrorOnDispatchFailure(t *testing.T) {
 	tp := newTracerProviderWithRecorder(rec)
 	mw := observability.Tracing(observability.TracingConfig{TracerProvider: tp})
 
-	d := func(_ context.Context, _ core.State, _ core.Effect) (core.State, *core.Input, bool, error) {
+	d := func(_ context.Context, _ core.State, _ core.Instruction) (core.State, *core.Event, bool, error) {
 		return core.State{}, nil, false, errors.New("dispatch failed")
 	}
 	_, _, _, _ = mw(middleware.Next(d))(context.Background(), core.State{},
-		core.Effect{Kind: core.EFFECT_CALL_MODEL, CallModel: &core.CallModelEffect{RequestID: "r1"}})
+		core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL, CallModel: &core.CallModelInstruction{RequestID: "r1"}})
 
 	spans := rec.Ended()
 	require.Len(t, spans, 1)

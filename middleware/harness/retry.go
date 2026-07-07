@@ -66,7 +66,7 @@ func Retry(cfg RetryConfig) middleware.Middleware {
 		sleep = time.Sleep
 	}
 	return func(next middleware.Next) middleware.Next {
-		return func(ctx context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
+		return func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 			backoff := cfg.BaseBackoff
 			var lastErr error
 			for attempt := 0; attempt < cfg.N; attempt++ {

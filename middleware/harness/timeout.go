@@ -15,7 +15,7 @@ type TimeoutConfig struct {
 	PerEffect time.Duration
 	// OnTimeout, if set, is called with the effect that exceeded the
 	// deadline. Useful for observability / metrics.
-	OnTimeout func(eff core.Effect)
+	OnTimeout func(eff core.Instruction)
 }
 
 // Timeout returns a Middleware that bounds the time the inner dispatcher
@@ -31,7 +31,7 @@ func Timeout(cfg TimeoutConfig) middleware.Middleware {
 		per = 60 * time.Second
 	}
 	return func(next middleware.Next) middleware.Next {
-		return func(ctx context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
+		return func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 			cctx, cancel := context.WithTimeout(ctx, per)
 			defer cancel()
 			s, in, term, err := next(cctx, state, eff)

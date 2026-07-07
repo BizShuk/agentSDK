@@ -30,8 +30,8 @@ const (
 // structured outputs are wrapped at the JSON layer.
 func Spotlight() middleware.Middleware {
 	return func(next middleware.Next) middleware.Next {
-		return func(ctx context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
-			if eff.Kind != core.EFFECT_CALL_TOOL {
+		return func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
+			if eff.Kind != core.INSTRUCTION_CALL_TOOL {
 				return next(ctx, state, eff)
 			}
 			s, in, term, err := next(ctx, state, eff)

@@ -56,7 +56,7 @@ type State struct {
 
 // New constructs the loopguard Middleware.
 //
-// State is held in scratch under LOOPGUARD_STATE_KEY so the runtime's
+// State is held in scratch under STATE_KEY so the runtime's
 // preStep scratch seeding can carry it across iterations without
 // middleware keeping its own map.
 func New(cfg Config) middleware.Middleware {
@@ -71,12 +71,12 @@ func New(cfg Config) middleware.Middleware {
 		volatile[k] = struct{}{}
 	}
 	return func(next middleware.Next) middleware.Next {
-		return func(ctx context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
-			gs := loadState(state.Scratch)
+		return func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
+			gs := loadState(state.WorkingMemory)
 
 			// Anything that is NOT a CALL_TOOL counts as a fresh
 			// observation — reset the repeat counter.
-			if eff.Kind != core.EFFECT_CALL_TOOL {
+			if eff.Kind != core.INSTRUCTION_CALL_TOOL {
 				gs.LastObs = obsSignature(eff)
 				gs.LastFP = ""
 				gs.Repeats = 0
@@ -101,9 +101,9 @@ func New(cfg Config) middleware.Middleware {
 				// Rewrite to REQUEST_APPROVAL so the run pauses for human review.
 				gs.Triggered = true
 				saveState(&state, gs)
-				newEff := core.Effect{
-					Kind: core.EFFECT_REQUEST_APPROVAL,
-					RequestApproval: &core.RequestApprovalEffect{
+				newEff := core.Instruction{
+					Kind: core.INSTRUCTION_REQUEST_APPROVAL,
+					RequestApproval: &core.RequestApprovalInstruction{
 						ApprovalID: "loop-detected-" + fp[:6],
 						Reason:     "loop_detected",
 						Risk:       eff.CallTool.Call.Risk,
@@ -119,14 +119,14 @@ func New(cfg Config) middleware.Middleware {
 	}
 }
 
-const LOOPGUARD_STATE_KEY = "loopguard.state"
+const STATE_KEY = "loopguard.state"
 
 // loadState retrieves the per-run tracking state from scratch.
 func loadState(scratch map[string]any) State {
 	if scratch == nil {
 		return State{}
 	}
-	v, ok := scratch[LOOPGUARD_STATE_KEY]
+	v, ok := scratch[STATE_KEY]
 	if !ok {
 		return State{}
 	}
@@ -137,10 +137,10 @@ func loadState(scratch map[string]any) State {
 }
 
 func saveState(state *core.State, gs State) {
-	if state.Scratch == nil {
-		state.Scratch = make(map[string]any, 4)
+	if state.WorkingMemory == nil {
+		state.WorkingMemory = make(map[string]any, 4)
 	}
-	state.Scratch[LOOPGUARD_STATE_KEY] = gs
+	state.WorkingMemory[STATE_KEY] = gs
 }
 
 // fingerprint produces a stable hash of (tool name, args-minus-volatile).
@@ -221,24 +221,24 @@ func toStable(v any) string {
 // obsSignature renders the "observation" form of an effect so the guard
 // can detect progress (a different observation means the prior tool call
 // has been answered).
-func obsSignature(eff core.Effect) string {
+func obsSignature(eff core.Instruction) string {
 	switch eff.Kind {
-	case core.EFFECT_CALL_MODEL:
+	case core.INSTRUCTION_CALL_MODEL:
 		if eff.CallModel != nil {
 			return "model:" + eff.CallModel.RequestID
 		}
-	case core.EFFECT_CALL_TOOL:
+	case core.INSTRUCTION_CALL_TOOL:
 		// Not normally reached (caller filters), but for safety.
 		if eff.CallTool != nil {
 			return "tool:" + eff.CallTool.Call.ID
 		}
-	case core.EFFECT_NOTIFY:
+	case core.INSTRUCTION_NOTIFY:
 		if eff.Notify != nil {
 			return "notify:" + eff.Notify.Message
 		}
-	case core.EFFECT_DONE:
+	case core.INSTRUCTION_DONE:
 		return "done"
-	case core.EFFECT_REQUEST_APPROVAL:
+	case core.INSTRUCTION_REQUEST_APPROVAL:
 		if eff.RequestApproval != nil {
 			return "approval:" + eff.RequestApproval.ApprovalID
 		}

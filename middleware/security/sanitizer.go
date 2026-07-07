@@ -87,13 +87,14 @@ func (s *Sanitizer) matchReason(i int, loc []int) string {
 }
 
 // Middleware returns a middleware that inspects CALL_TOOL return-path
+// Middleware returns a middleware that inspects CALL_TOOL return-path
 // text and replaces matched content with the sanitizer banner. The
 // replaced ToolResult.Output is also tagged via SanitizedTag so the
 // spotlight wrappers show up coherently.
 func (s *Sanitizer) Middleware() middleware.Middleware {
 	return func(next middleware.Next) middleware.Next {
-		return func(ctx context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
-			if eff.Kind != core.EFFECT_CALL_TOOL {
+		return func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
+			if eff.Kind != core.INSTRUCTION_CALL_TOOL {
 				return next(ctx, state, eff)
 			}
 			st, in, term, err := next(ctx, state, eff)
@@ -111,10 +112,10 @@ func (s *Sanitizer) Middleware() middleware.Middleware {
 			in.ToolResult.Output = FormatSanitized(reason) + " original_len=" + itoa(len(text))
 			_ = text
 			// Emit NOTIFY so operator sees the hit (separate effect via state).
-			if st.Scratch == nil {
-				st.Scratch = make(map[string]any, 4)
+			if st.WorkingMemory == nil {
+				st.WorkingMemory = make(map[string]any, 4)
 			}
-			st.Scratch["sanitizer.last_reason"] = reason
+			st.WorkingMemory["injection_filter.last_reason"] = reason
 			return st, in, term, nil
 		}
 	}

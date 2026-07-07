@@ -18,8 +18,8 @@ import (
 // stops cleanly rather than continuing with a phantom tool result.
 func Sandbox(policy action.Sandbox) middleware.Middleware {
 	return func(next middleware.Next) middleware.Next {
-		return func(ctx context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
-			if eff.Kind != core.EFFECT_CALL_TOOL || eff.CallTool == nil {
+		return func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
+			if eff.Kind != core.INSTRUCTION_CALL_TOOL || eff.CallTool == nil {
 				return next(ctx, state, eff)
 			}
 			v := policy.Check(eff.CallTool.Call.Name, eff.CallTool.Call.Args)
@@ -28,9 +28,9 @@ func Sandbox(policy action.Sandbox) middleware.Middleware {
 			}
 			// Denied — emit NOTIFY first so the operator sees the reason,
 			// then DONE so the run stops.
-			denyEff := core.Effect{
-				Kind: core.EFFECT_NOTIFY,
-				Notify: &core.NotifyEffect{
+			denyEff := core.Instruction{
+				Kind: core.INSTRUCTION_NOTIFY,
+				Notify: &core.NotifyInstruction{
 					Level:   "error",
 					Message: fmt.Sprintf("sandbox denied tool %q with args %v", eff.CallTool.Call.Name, eff.CallTool.Call.Args),
 				},
@@ -39,7 +39,7 @@ func Sandbox(policy action.Sandbox) middleware.Middleware {
 			if err != nil {
 				return s, nil, false, err
 			}
-			doneEff := core.Effect{Kind: core.EFFECT_DONE}
+			doneEff := core.Instruction{Kind: core.INSTRUCTION_DONE}
 			s2, _, term, err := next(ctx, s, doneEff)
 			if err != nil {
 				return s2, nil, false, err

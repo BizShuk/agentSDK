@@ -20,13 +20,13 @@ import (
 // APPROVAL_DECISION input.
 func ApprovalGate(autonomy core.AutonomyLevel, policy core.ApprovalPolicy) middleware.Middleware {
 	return func(next middleware.Next) middleware.Next {
-		return func(ctx context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
-			if eff.Kind != core.EFFECT_CALL_TOOL || eff.CallTool == nil {
+		return func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
+			if eff.Kind != core.INSTRUCTION_CALL_TOOL || eff.CallTool == nil {
 				return next(ctx, state, eff)
 			}
 			// Look up the tool's schema in the (small) registry the
 			// runtime hands us. ApprovalPolicy needs the Risk field.
-			schema := core.ToolSchema{
+			schema := core.ToolSpec{
 				Name: eff.CallTool.Call.Name,
 				Risk: eff.CallTool.Call.Risk,
 			}
@@ -40,9 +40,9 @@ func ApprovalGate(autonomy core.AutonomyLevel, policy core.ApprovalPolicy) middl
 				// CALL_TOOL → REQUEST_APPROVAL handler will set
 				// state.Status = PAUSED_APPROVAL automatically when it
 				// sees the rewritten effect.
-				approveEff := core.Effect{
-					Kind: core.EFFECT_REQUEST_APPROVAL,
-					RequestApproval: &core.RequestApprovalEffect{
+				approveEff := core.Instruction{
+					Kind: core.INSTRUCTION_REQUEST_APPROVAL,
+					RequestApproval: &core.RequestApprovalInstruction{
 						ApprovalID: "auto-" + eff.CallTool.Call.ID,
 						Reason:     "policy_" + fmt.Sprint(int(autonomy)) + "_" + string(eff.CallTool.Call.Risk),
 						Risk:       eff.CallTool.Call.Risk,
@@ -56,9 +56,9 @@ func ApprovalGate(autonomy core.AutonomyLevel, policy core.ApprovalPolicy) middl
 				// Notify the operator; let the run continue (no state
 				// change for now). Future versions may also append a
 				// synthetic tool_result with OK=false.
-				denyEff := core.Effect{
-					Kind: core.EFFECT_NOTIFY,
-					Notify: &core.NotifyEffect{
+				denyEff := core.Instruction{
+					Kind: core.INSTRUCTION_NOTIFY,
+					Notify: &core.NotifyInstruction{
 						Level:   "error",
 						Message: "approval denied: " + eff.CallTool.Call.Name,
 					},

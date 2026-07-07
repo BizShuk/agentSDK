@@ -47,7 +47,7 @@ func Tracing(cfg TracingConfig) middleware.Middleware {
 	}
 	tracer := tp.Tracer(tracerName)
 	return func(next middleware.Next) middleware.Next {
-		return func(ctx context.Context, state core.State, eff core.Effect) (core.State, *core.Input, bool, error) {
+		return func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 			spanCtx, span := tracer.Start(ctx, spanName(eff),
 				trace.WithAttributes(spanAttributes(eff)...),
 			)
@@ -67,32 +67,32 @@ func Tracing(cfg TracingConfig) middleware.Middleware {
 }
 
 // spanName returns the OTel span name for a given effect kind.
-func spanName(eff core.Effect) string {
+func spanName(eff core.Instruction) string {
 	switch eff.Kind {
-	case core.EFFECT_CALL_MODEL:
+	case core.INSTRUCTION_CALL_MODEL:
 		if eff.CallModel != nil {
 			return "model." + eff.CallModel.RequestID
 		}
-	case core.EFFECT_CALL_TOOL:
+	case core.INSTRUCTION_CALL_TOOL:
 		if eff.CallTool != nil {
 			return "tool." + eff.CallTool.Call.Name
 		}
-	case core.EFFECT_REQUEST_APPROVAL:
+	case core.INSTRUCTION_REQUEST_APPROVAL:
 		return "approval.request"
-	case core.EFFECT_NOTIFY:
+	case core.INSTRUCTION_NOTIFY:
 		return "notify"
-	case core.EFFECT_DONE:
+	case core.INSTRUCTION_DONE:
 		return "loop.done"
-	case core.EFFECT_CHECKPOINT:
+	case core.INSTRUCTION_CHECKPOINT:
 		return "checkpoint"
-	case core.EFFECT_EMIT:
+	case core.INSTRUCTION_EMIT:
 		return "emit"
 	}
 	return "effect." + string(eff.Kind)
 }
 
 // spanAttributes produces the OTel attribute list for an effect.
-func spanAttributes(eff core.Effect) []attribute.KeyValue {
+func spanAttributes(eff core.Instruction) []attribute.KeyValue {
 	out := []attribute.KeyValue{
 		attribute.String("agentsdk.effect.kind", string(eff.Kind)),
 	}
