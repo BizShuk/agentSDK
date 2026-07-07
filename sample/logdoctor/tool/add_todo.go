@@ -38,7 +38,7 @@ func NewAddTodo(s *domain.TodoStore) *AddTodo {
 
 func (a *AddTodo) Name() string              { return a.Inner.Name() }
 func (a *AddTodo) Description() string       { return a.Inner.Description() }
-func (a *AddTodo) Schema() sdkcore.ToolSchema { return a.Inner.Schema() }
+func (a *AddTodo) Schema() sdkcore.ToolSpec { return a.Inner.Schema() }
 func (a *AddTodo) Risk() sdkcore.RiskLevel    { return a.Inner.Risk() }
 func (a *AddTodo) Call(ctx context.Context, args []byte) (sdkcore.ToolResult, error) {
 	return a.Inner.Call(ctx, args)

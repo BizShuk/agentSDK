@@ -79,15 +79,15 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 	reg.Register(nt)
 
 	// Step: ReAct is the simplest pattern; matches the sample's flow.
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_REACT: planning.NewReAct(),
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
 
-	loop := runtime.NewLoop(step, provider, reg)
-	loop.Emitter = func(eff core.Effect) {
+	loop := runtime.NewEngine(step, provider, reg)
+	loop.Emitter = func(eff core.Instruction) {
 		writeEnvelope(cmd, eff)
 	}
-	loop.Approval = allowAllApproval{}
+	loop.Approval = AllowAllPolicy{}
 
 	// Optional persistence — if --data-dir or env, wire up store+WAL.
 	dataDir := f.dataDir
@@ -98,39 +98,39 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 		dataDir = "./data"
 	}
 	if err := os.MkdirAll(dataDir, 0o750); err == nil {
-		if store, err := filestore.NewFileStateStore(dataDir); err == nil {
+		if store, err := filestore.NewJSONFileStateStore(dataDir); err == nil {
 			loop.Store = store
 		}
-		if wal, err := filestore.NewFileWAL(dataDir); err == nil {
-			loop.WAL = wal
+		if wal, err := filestore.NewJSONLFileLog(dataDir); err == nil {
+			loop.Log = wal
 		}
 	}
 
 	// Initial state.
 	state := core.State{
 		RunID:        fmt.Sprintf("run-%d", time.Now().UnixNano()),
-		ThinkingKind: core.THINK_REACT,
+		ReasoningStyle: core.REASON_REACT,
 		Autonomy:     core.AUTONOMY_L2,
 		Budget:       core.Budget{MaxTurns: maxTurns},
 	}
 
 	// Seed the percept via RunWithInput so ReAct sees the user instruction.
-	perceptCh := listener.Percepts(context.Background())
-	var first core.Percept
+	perceptCh := listener.Observations(context.Background())
+	var first core.Observation
 	select {
 	case first = <-perceptCh:
 	case <-time.After(2 * time.Second):
 		return fmt.Errorf("listener produced no percept within 2s")
 	}
-	final, err := loop.RunWithInput(context.Background(), state, core.Input{
-		Kind:    core.INPUT_KIND_PERCEPT,
-		Percept: &first,
+	final, err := loop.RunWithEvent(context.Background(), state, core.Event{
+		Kind:    core.EVENT_OBSERVATION,
+		Observation: &first,
 	})
 	if err != nil {
 		return err
 	}
-	writeEnvelope(cmd, core.Effect{
-		Kind: core.EFFECT_DONE,
+	writeEnvelope(cmd, core.Instruction{
+		Kind: core.INSTRUCTION_DONE,
 	})
 	_ = final
 	return nil
@@ -138,7 +138,7 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 
 // writeEnvelope serializes one effect as a JSONL line on stdout.
 // Downstream tooling (tailers, dashboards) consume this stream.
-func writeEnvelope(cmd *cobra.Command, eff core.Effect) {
+func writeEnvelope(cmd *cobra.Command, eff core.Instruction) {
 	out, _ := json.Marshal(struct {
 		Type  string      `json:"type"`
 		Kind  string      `json:"kind,omitempty"`
@@ -152,23 +152,23 @@ func writeEnvelope(cmd *cobra.Command, eff core.Effect) {
 	fmt.Fprintln(cmd.OutOrStdout(), string(out))
 }
 
-func payloadFor(eff core.Effect) interface{} {
+func payloadFor(eff core.Instruction) interface{} {
 	switch eff.Kind {
-	case core.EFFECT_CALL_TOOL:
+	case core.INSTRUCTION_CALL_TOOL:
 		return eff.CallTool
-	case core.EFFECT_CALL_MODEL:
+	case core.INSTRUCTION_CALL_MODEL:
 		return eff.CallModel
-	case core.EFFECT_NOTIFY:
+	case core.INSTRUCTION_NOTIFY:
 		return eff.Notify
 	default:
 		return nil
 	}
 }
 
-// allowAllApproval is the M1 default — every tool call runs.
-type allowAllApproval struct{}
+// AllowAllPolicy is the M1 default — every tool call runs.
+type AllowAllPolicy struct{}
 
-func (allowAllApproval) Decide(_ struct{}, _ core.AutonomyLevel, _ core.CallToolEffect, _ core.ToolSchema) core.ApprovalAction {
+func (AllowAllPolicy) Decide(_ struct{}, _ core.AutonomyLevel, _ core.CallToolInstruction, _ core.ToolSpec) core.ApprovalAction {
 	return core.APPROVAL_ACTION_ALLOW
 }
 

@@ -33,14 +33,14 @@ func (l *LogFileListener) Name() string { return "logfile:" + l.path }
 
 // Percepts returns a channel that emits one Percept (the full file content)
 // and then closes. M2 will turn this into a long-lived tailer.
-func (l *LogFileListener) Percepts(_ context.Context) <-chan core.Percept {
-	ch := make(chan core.Percept, 1)
+func (l *LogFileListener) Observations(_ context.Context) <-chan core.Observation {
+	ch := make(chan core.Observation, 1)
 	go func() {
 		defer close(ch)
 		data, err := os.ReadFile(l.path)
 		if err != nil {
 			// Surface via a Percept with Error payload so the LLM can see it.
-			ch <- core.Percept{
+			ch <- core.Observation{
 				ID:         "err",
 				Source:     l.Name(),
 				ObservedAt: time.Now().UTC(),
@@ -48,7 +48,7 @@ func (l *LogFileListener) Percepts(_ context.Context) <-chan core.Percept {
 			}
 			return
 		}
-		ch <- core.Percept{
+		ch <- core.Observation{
 			ID:         "head",
 			Source:     l.Name(),
 			ObservedAt: time.Now().UTC(),

@@ -23,7 +23,7 @@ func TestLogFileListenerReadsFileOnce(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	ch := l.Percepts(ctx)
+	ch := l.Observations(ctx)
 	var got []string
 	for p := range ch {
 		s, _ := p.Payload.(string)

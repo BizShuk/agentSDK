@@ -60,11 +60,11 @@ func resumeExecute(cmd *cobra.Command, f *resumeFlags) error {
 		return fmt.Errorf("data dir not found: %s", dataDir)
 	}
 
-	store, err := filestore.NewFileStateStore(dataDir)
+	store, err := filestore.NewJSONFileStateStore(dataDir)
 	if err != nil {
 		return err
 	}
-	wal, err := filestore.NewFileWAL(dataDir)
+	wal, err := filestore.NewJSONLFileLog(dataDir)
 	if err != nil {
 		return err
 	}
@@ -98,17 +98,17 @@ func resumeExecute(cmd *cobra.Command, f *resumeFlags) error {
 	nt := tool.NewNotify(cmd.OutOrStdout())
 	reg.Register(nt)
 
-	step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-		core.THINK_REACT: planning.NewReAct(),
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
 
-	loop := runtime.NewLoop(step, provider, reg)
-	loop.Emitter = func(eff core.Effect) {
+	loop := runtime.NewEngine(step, provider, reg)
+	loop.Emitter = func(eff core.Instruction) {
 		writeEnvelope(cmd, eff)
 	}
-	loop.Approval = allowAllApproval{}
+	loop.Approval = AllowAllPolicy{}
 	loop.Store = store
-	loop.WAL = wal
+	loop.Log = wal
 
 	// Resume path: load state, replay WAL, return final state.
 	final, err := loop.Resume(context.Background(), f.runID)
@@ -118,7 +118,7 @@ func resumeExecute(cmd *cobra.Command, f *resumeFlags) error {
 	if final.Budget.MaxTurns == 0 {
 		final.Budget.MaxTurns = maxTurns
 	}
-	writeEnvelope(cmd, core.Effect{Kind: core.EFFECT_DONE})
+	writeEnvelope(cmd, core.Instruction{Kind: core.INSTRUCTION_DONE})
 	_ = final
 	return nil
 }

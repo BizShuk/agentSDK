@@ -57,7 +57,7 @@ func approveExecute(cmd *cobra.Command, f *approveFlags) error {
 	if dataDir == "" {
 		dataDir = dataDirOrDefault(cmd)
 	}
-	store, err := filestore.NewFileStateStore(dataDir)
+	store, err := filestore.NewJSONFileStateStore(dataDir)
 	if err != nil {
 		return err
 	}

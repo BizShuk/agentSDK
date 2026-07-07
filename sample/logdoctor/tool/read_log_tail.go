@@ -16,9 +16,9 @@ import (
 // pass a stub source.
 //
 // The Percept comes from agentsdk/core — Percept is part of the SDK's
-// public API; the listener (in sample/logdoctor/core) returns sdkcore.Percept.
+// public API; the listener (in sample/logdoctor/core) returns sdkcore.Observation.
 type Source interface {
-	Percepts(ctx context.Context) <-chan sdkcore.Percept
+	Observations(ctx context.Context) <-chan sdkcore.Observation
 }
 
 // ReadLogTailArgs — TypedTool argument shape. N is optional (defaults to 20).
@@ -49,7 +49,7 @@ func NewReadLogTail(src Source) *ReadLogTail {
 			}
 			var payload string
 			select {
-			case p, ok := <-src.Percepts(ctx):
+			case p, ok := <-src.Observations(ctx):
 				if !ok {
 					return ReadLogTailOutput{Lines: []string{}}, nil
 				}
@@ -71,7 +71,7 @@ func NewReadLogTail(src Source) *ReadLogTail {
 // Name delegates to the TypedTool.
 func (r *ReadLogTail) Name() string                { return r.Inner.Name() }
 func (r *ReadLogTail) Description() string         { return r.Inner.Description() }
-func (r *ReadLogTail) Schema() sdkcore.ToolSchema  { return r.Inner.Schema() }
+func (r *ReadLogTail) Schema() sdkcore.ToolSpec  { return r.Inner.Schema() }
 func (r *ReadLogTail) Risk() sdkcore.RiskLevel     { return r.Inner.Risk() }
 func (r *ReadLogTail) Call(ctx context.Context, args json.RawMessage) (sdkcore.ToolResult, error) {
 	return r.Inner.Call(ctx, args)

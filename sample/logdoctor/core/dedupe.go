@@ -10,7 +10,7 @@ import (
 	sdkcore "github.com/bizshuk/agentsdk/core"
 )
 
-// Dedupe is a perception.Source wrapper that drops percepts whose
+// BurstSuppressor is a perception.Source wrapper that drops percepts whose
 // fingerprint matches the most recent emission within the cooldown
 // window. Mirrors the TS version of log_doctor: a 12-char sha1 of
 // (rule-id + text), per-rule cooldown to absorb bursts.
@@ -18,8 +18,8 @@ import (
 // Fingerprint = sha1(ruleId + "|" + payload)[:12]. A different rule or
 // different text resets the cooldown — the same alarm shape from
 // different files still goes through.
-type Dedupe struct {
-	Inner    sdkcore.Source
+type BurstSuppressor struct {
+	Inner    sdkcore.ObservationSource
 	RuleID   string
 	Cooldown time.Duration
 
@@ -28,20 +28,20 @@ type Dedupe struct {
 	until time.Time
 }
 
-// NewDedupe wires a Source through Dedupe. RuleID distinguishes this
+// NewDedupe wires a Source through BurstSuppressor. RuleID distinguishes this
 // rule from other listeners in the same process.
-func NewDedupe(inner sdkcore.Source, ruleID string, cooldown time.Duration) *Dedupe {
-	return &Dedupe{Inner: inner, RuleID: ruleID, Cooldown: cooldown}
+func NewBurstSuppressor(inner sdkcore.ObservationSource, ruleID string, cooldown time.Duration) *BurstSuppressor {
+	return &BurstSuppressor{Inner: inner, RuleID: ruleID, Cooldown: cooldown}
 }
 
 // Name reports the wrapper's logical name.
-func (d *Dedupe) Name() string { return "dedupe:" + d.RuleID }
+func (d *BurstSuppressor) Name() string { return "dedupe:" + d.RuleID }
 
 // Percepts is a fan-in proxy: it forwards percepts from Inner, but
 // suppresses the (ruleId, text) pair when the cooldown is still active.
-func (d *Dedupe) Percepts(ctx context.Context) <-chan sdkcore.Percept {
-	src := d.Inner.Percepts(ctx)
-	out := make(chan sdkcore.Percept, 32)
+func (d *BurstSuppressor) Observations(ctx context.Context) <-chan sdkcore.Observation {
+	src := d.Inner.Observations(ctx)
+	out := make(chan sdkcore.Observation, 32)
 	go func() {
 		defer close(out)
 		for {
@@ -69,7 +69,7 @@ func (d *Dedupe) Percepts(ctx context.Context) <-chan sdkcore.Percept {
 // cooldown window has elapsed; otherwise false. Updates last / until on
 // every call — recent matches are NOT re-emitted just because they
 // didn't go through (avoids replay-storm on bursty sources).
-func (d *Dedupe) shouldEmit(p sdkcore.Percept) bool {
+func (d *BurstSuppressor) shouldEmit(p sdkcore.Observation) bool {
 	fp := fingerprint(d.RuleID, payloadToString(p.Payload))
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -105,14 +105,14 @@ func payloadToString(v any) string {
 
 // LastFingerprint returns the most recently observed fingerprint —
 // useful for tests and for diagnostics ("what did dedupe just skip?").
-func (d *Dedupe) LastFingerprint() string {
+func (d *BurstSuppressor) LastFingerprint() string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.last
 }
 
 // ShouldEmitForTest exposes shouldEmit for tests. Production callers
-// never use this — the gating is automatic inside Percepts().
-func (d *Dedupe) ShouldEmitForTest(p sdkcore.Percept) bool {
+// never use this — the gating is automatic inside Observations().
+func (d *BurstSuppressor) ShouldEmitForTest(p sdkcore.Observation) bool {
 	return d.shouldEmit(p)
 }

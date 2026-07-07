@@ -2,7 +2,7 @@
 // ModelProvider that returns a fixed sequence of ModelResults so the
 // e2e test can run with no network access.
 //
-// Mirrors the agentsdk/internal/testutil.FakeProvider, but lives in
+// Mirrors the agentsdk/internal/testutil.ScriptedProvider, but lives in
 // the sample so production callers cannot accidentally import test-only code.
 package fake
 
@@ -68,7 +68,7 @@ func (p *ScriptedProvider) Generate(_ context.Context, _ core.ModelRequest) (cor
 func (p *ScriptedProvider) Stream(_ context.Context, _ core.ModelRequest) (<-chan core.ModelChunk, error) {
 	ch := make(chan core.ModelChunk, 1)
 	defer close(ch)
-	ch <- core.ModelChunk{Kind: core.CHUNK_KIND_TEXT, Text: "diagnostic complete", Done: true}
+	ch <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: "diagnostic complete", Done: true}
 	return ch, nil
 }
 

@@ -28,7 +28,7 @@ func listExecute(cmd *cobra.Command) error {
 	if dataDir == "" {
 		dataDir = dataDirOrDefault(cmd)
 	}
-	store, err := filestore.NewFileStateStore(dataDir)
+	store, err := filestore.NewJSONFileStateStore(dataDir)
 	if err != nil {
 		return err
 	}

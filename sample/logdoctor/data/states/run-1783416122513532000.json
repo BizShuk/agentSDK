@@ -1,0 +1,122 @@
+{
+  "run_id": "run-1783416122513532000",
+  "turn": 5,
+  "autonomy": 2,
+  "thinking_kind": "think_then_act",
+  "messages": [
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "kind": "tool_use",
+          "tool_use": {
+            "id": "c1",
+            "name": "read_log_tail",
+            "args": {
+              "n": 5
+            }
+          }
+        }
+      ],
+      "ts": "2026-07-07T09:22:02.603748Z"
+    },
+    {
+      "role": "tool",
+      "parts": [
+        {
+          "kind": "tool_result",
+          "tool_result": {
+            "call_id": "c1",
+            "name": "read_log_tail",
+            "ok": true,
+            "output": {
+              "lines": [
+                "2026-07-03T10:00:00Z INFO startup complete",
+                "2026-07-03T10:00:01Z WARN config file missing; using defaults",
+                "2026-07-03T10:00:02Z ERROR database connection refused: 127.0.0.1:5432",
+                "2026-07-03T10:00:03Z ERROR database connection refused: 127.0.0.1:5432",
+                "2026-07-03T10:00:04Z INFO retrying in 5s"
+              ],
+              "truncated": true
+            }
+          }
+        }
+      ],
+      "ts": "2026-07-07T09:22:02.623907Z"
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "kind": "tool_use",
+          "tool_use": {
+            "id": "c2",
+            "name": "notify",
+            "args": {
+              "level": "warn",
+              "message": "log contains ERROR lines"
+            }
+          }
+        }
+      ],
+      "ts": "2026-07-07T09:22:02.626988Z"
+    },
+    {
+      "role": "tool",
+      "parts": [
+        {
+          "kind": "tool_result",
+          "tool_result": {
+            "call_id": "c2",
+            "name": "notify",
+            "ok": true,
+            "output": {
+              "delivered": true
+            }
+          }
+        }
+      ],
+      "ts": "2026-07-07T09:22:02.629317Z"
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "kind": "plain_text",
+          "text": "diagnostic complete"
+        }
+      ],
+      "ts": "2026-07-07T09:22:02.632559Z"
+    }
+  ],
+  "scratch": {
+    "loopguard.state": {
+      "LastFP": "",
+      "Repeats": 0,
+      "LastObs": "model:3",
+      "Triggered": false
+    },
+    "think_then_act.last_result": "c2",
+    "think_then_act.pending_call": {
+      "id": "c2",
+      "name": "notify",
+      "args": {
+        "level": "warn",
+        "message": "log contains ERROR lines"
+      },
+      "risk": "low"
+    },
+    "think_then_act.phase": "dispatch"
+  },
+  "budget": {
+    "max_turns": 10,
+    "used_turns": 5,
+    "max_tokens": 0,
+    "used_tokens": 0,
+    "max_wall_time": 0,
+    "started_at": "2026-07-07T09:22:02.603333Z"
+  },
+  "status": "completed",
+  "updated_at": "2026-07-07T09:22:02.632528Z",
+  "last_input_seq": 5
+}

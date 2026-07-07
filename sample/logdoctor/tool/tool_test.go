@@ -18,15 +18,15 @@ import (
 
 // stubSource is a controllable Source for tool tests.
 type stubSource struct {
-	out []sdkcore.Percept
-	ch  chan sdkcore.Percept
+	out []sdkcore.Observation
+	ch  chan sdkcore.Observation
 }
 
-func newStubSource(out ...sdkcore.Percept) *stubSource {
-	return &stubSource{out: out, ch: make(chan sdkcore.Percept, len(out))}
+func newStubSource(out ...sdkcore.Observation) *stubSource {
+	return &stubSource{out: out, ch: make(chan sdkcore.Observation, len(out))}
 }
 
-func (s *stubSource) Percepts(ctx context.Context) <-chan sdkcore.Percept {
+func (s *stubSource) Observations(ctx context.Context) <-chan sdkcore.Observation {
 	go func() {
 		defer close(s.ch)
 		for _, p := range s.out {
@@ -41,7 +41,7 @@ func (s *stubSource) Percepts(ctx context.Context) <-chan sdkcore.Percept {
 }
 
 func TestReadLogTailExtractsFirstN(t *testing.T) {
-	src := newStubSource(sdkcore.Percept{
+	src := newStubSource(sdkcore.Observation{
 		ObservedAt: time.Unix(0, 0),
 		Payload:    "a\nb\nc\nd\ne",
 	})
@@ -60,7 +60,7 @@ func TestReadLogTailExtractsFirstN(t *testing.T) {
 }
 
 func TestReadLogTailDefaultsTo20(t *testing.T) {
-	src := newStubSource(sdkcore.Percept{
+	src := newStubSource(sdkcore.Observation{
 		ObservedAt: time.Unix(0, 0),
 		Payload:    "a\nb",
 	})
@@ -71,7 +71,7 @@ func TestReadLogTailDefaultsTo20(t *testing.T) {
 }
 
 func TestReadLogTailBadArgs(t *testing.T) {
-	src := newStubSource(sdkcore.Percept{Payload: "x"})
+	src := newStubSource(sdkcore.Observation{Payload: "x"})
 	rdt := tool.NewReadLogTail(src)
 	res, err := rdt.Call(context.Background(), json.RawMessage(`not json`))
 	require.NoError(t, err)

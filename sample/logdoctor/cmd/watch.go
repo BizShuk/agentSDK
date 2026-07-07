@@ -56,14 +56,14 @@ func watchExecute(cmd *cobra.Command, f *watchFlags) error {
 }
 
 // buildRunContext is the M4 scaffolding for assembling a per-cycle
-// runtime.Loop with ApprovalGate + Spotlight + Sanitizer. It is kept
+// runtime.Engine with ApprovalGate + Spotlight + Sanitizer. It is kept
 // here so the watch command can grow incrementally without churning
 // the existing run.go wiring.
-var buildRunContext = func(_ context.Context, _ string) (*runtime.Loop, error) {
+var buildRunContext = func(_ context.Context, _ string) (*runtime.Engine, error) {
 	// Placeholder — wired in the next M4 sub-step once the runtime
 	// supports an explicit ApprovalGate middleware slot.
 	return nil, fmt.Errorf("buildRunContext not implemented yet")
 }
 
 // compile-time references keep imports stable across iterations.
-var _ = runtime.NewLoop
+var _ = runtime.NewEngine

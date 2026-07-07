@@ -42,7 +42,7 @@ func NewCompleteTodo(s *domain.TodoStore) *CompleteTodo {
 
 func (c *CompleteTodo) Name() string              { return c.Inner.Name() }
 func (c *CompleteTodo) Description() string       { return c.Inner.Description() }
-func (c *CompleteTodo) Schema() sdkcore.ToolSchema { return c.Inner.Schema() }
+func (c *CompleteTodo) Schema() sdkcore.ToolSpec { return c.Inner.Schema() }
 func (c *CompleteTodo) Risk() sdkcore.RiskLevel    { return c.Inner.Risk() }
 func (c *CompleteTodo) Call(ctx context.Context, args []byte) (sdkcore.ToolResult, error) {
 	return c.Inner.Call(ctx, args)
