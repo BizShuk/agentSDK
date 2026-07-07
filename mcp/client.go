@@ -4,7 +4,7 @@
 //
 // The adapter is intentionally thin: it owns a single MCP ClientSession
 // (caller-provided transport), converts MCP tool descriptors to
-// core.ToolSchema, and forwards CALL_TOOL calls via CallTool. Stdio,
+// core.ToolSpec, and forwards CALL_TOOL calls via CallTool. Stdio,
 // HTTP, and InMemoryTransports all work — production callers typically
 // wire stdio via mcp.NewCommandTransport / http via their own Server.
 package mcp
@@ -37,12 +37,12 @@ func NewClient(session *mcppkg.ClientSession) *Client {
 }
 
 // Discover implements action.ToolSource. It calls the MCP ListTools
-// RPC and converts the result into core.ToolSchema. The risk level is
+// RPC and converts the result into core.ToolSpec. The risk level is
 // heuristic — MCP does not carry risk metadata, so we default to LOW
 // for any tool whose name ends in "_read" or starts with "get_", and
 // HIGH for "delete" / "exec" / "shell" prefixes. Production-grade
 // detection belongs in an allowlist override (added in M4).
-func (c *Client) Discover(ctx context.Context) ([]core.ToolSchema, error) {
+func (c *Client) Discover(ctx context.Context) ([]core.ToolSpec, error) {
 	if c.session == nil {
 		return nil, fmt.Errorf("mcp: nil session")
 	}
@@ -50,7 +50,7 @@ func (c *Client) Discover(ctx context.Context) ([]core.ToolSchema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("mcp: list tools: %w", err)
 	}
-	out := make([]core.ToolSchema, 0, len(res.Tools))
+	out := make([]core.ToolSpec, 0, len(res.Tools))
 	for _, t := range res.Tools {
 		schema := mcpToolToSchema(t)
 		out = append(out, schema)
@@ -112,14 +112,14 @@ func (c *Client) Call(ctx context.Context, name string, args json.RawMessage) (c
 }
 
 // mcpToolToSchema converts an MCP Tool descriptor to our ToolSchema.
-func mcpToolToSchema(t *mcppkg.Tool) core.ToolSchema {
+func mcpToolToSchema(t *mcppkg.Tool) core.ToolSpec {
 	var params any
 	if t.InputSchema != nil {
 		params = t.InputSchema
 	} else {
 		params = map[string]any{"type": "object"}
 	}
-	return core.ToolSchema{
+	return core.ToolSpec{
 		Name:        t.Name,
 		Description: t.Description,
 		Risk:        inferRisk(t.Name),

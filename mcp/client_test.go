@@ -110,7 +110,7 @@ func TestInferRisk(t *testing.T) {
 	})
 	schemas, err := client.Discover(context.Background())
 	require.NoError(t, err)
-	byName := make(map[string]core.ToolSchema, len(schemas))
+	byName := make(map[string]core.ToolSpec, len(schemas))
 	for _, s := range schemas {
 		byName[s.Name] = s
 	}
