@@ -3,7 +3,7 @@ module github.com/bizshuk/agentsdk
 go 1.26.0
 
 require (
-	github.com/bizshuk/gosdk v0.0.0-00010101000000-000000000000
+	github.com/bizshuk/gosdk v1.1.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel v1.44.0
@@ -40,5 +40,3 @@ require (
 	golang.org/x/text v0.37.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/bizshuk/gosdk => /Users/bytedance/projects/tmp/gosdk

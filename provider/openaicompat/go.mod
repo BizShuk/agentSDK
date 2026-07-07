@@ -29,4 +29,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/bizshuk/agentsdk => /Users/bytedance/projects/agentSDK
+replace github.com/bizshuk/agentsdk => ../../

@@ -10,4 +10,4 @@ use (
 	./sample/logdoctor
 )
 
-replace github.com/bizshuk/gosdk => /Users/bytedance/projects/tmp/gosdk
+
