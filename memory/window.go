@@ -26,8 +26,8 @@ type CharHeuristicCounter struct{}
 func (CharHeuristicCounter) Count(msgs []core.Message) int {
 	n := 0
 	for _, m := range msgs {
-		for _, c := range m.Chunks {
-			if c.Kind == core.CHUNK_KIND_TEXT {
+		for _, c := range m.Parts {
+			if c.Kind == core.PART_KIND_PLAIN_TEXT {
 				// +1 so an empty message still registers 1 token.
 				n += len(c.Text)/4 + 1
 			}

@@ -26,8 +26,8 @@ func (HeadlineCompactor) Compact(msgs []core.Message) (core.Message, error) {
 	b.WriteString("[compacted summary] ")
 	wrote := 0
 	for _, m := range msgs {
-		for _, c := range m.Chunks {
-			if c.Kind != core.CHUNK_KIND_TEXT {
+		for _, c := range m.Parts {
+			if c.Kind != core.PART_KIND_PLAIN_TEXT {
 				continue
 			}
 			line := c.Text
@@ -50,8 +50,8 @@ func (HeadlineCompactor) Compact(msgs []core.Message) (core.Message, error) {
 	}
 	return core.Message{
 		Role: core.ROLE_ASSISTANT,
-		Chunks: []core.Chunk{
-			{Kind: core.CHUNK_KIND_TEXT, Text: b.String()},
+		Parts: []core.Part{
+			{Kind: core.PART_KIND_PLAIN_TEXT, Text: b.String()},
 		},
 	}, nil
 }
