@@ -1,5 +1,8 @@
 package perception
 
+// TODO(M3): same as source.go — root-level scaffolding, no consumer yet.
+// ToMessage.Apply is referenced only by its own test. Resolve at M3 boundary.
+
 import "github.com/bizshuk/agentsdk/core"
 
 // ToMessageFunc converts a raw payload (as emitted by an ObservationSource)

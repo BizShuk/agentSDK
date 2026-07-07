@@ -1,5 +1,11 @@
 // Package perception is the input side of the agent loop: external sources
 // emit Observations, which the runtime folds into Events and feeds to Decide.
+//
+// TODO(M3): this package is currently a root-level scaffolding with no
+// consumer (perception_test.go is the only importer; core/runtime keep
+// their own ObservationSource shim). Decide at M3 boundary whether to
+// (a) wire runtime/loop.go to consume FanIn, (b) inline into a sample
+// adapter, or (c) delete outright.
 package perception
 
 import (

@@ -45,3 +45,11 @@ func Budget() middleware.Middleware {
 		}
 	}
 }
+
+// IsBudgetExceeded is a small helper for callers that want to detect the
+// loop exiting for budget reasons. errors.As(err, &BudgetExceededError{})
+// is the canonical check.
+func IsBudgetExceeded(err error) bool {
+	var be *BudgetExceededError
+	return errors.As(err, &be)
+}

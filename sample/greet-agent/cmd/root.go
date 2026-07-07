@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/action"
+	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/memory/filestore"
 	"github.com/bizshuk/agentsdk/planning"
 	anthropicprovider "github.com/bizshuk/agentsdk/provider/anthropic"
 	"github.com/bizshuk/agentsdk/runtime"
@@ -39,12 +39,12 @@ func NewRoot() *cobra.Command {
 		Use:     "greet-agent",
 		Short:   "Greet someone by name — a minimal agentsdk demo",
 		Version: Version,
-		// RunE 開頭呼叫 runtime.MustOpenForCLI 完成所有 wiring:
+		// RunE 開頭呼叫 config.MustOpenForCLI 完成所有 wiring:
 		//   config init、mkdir states/wal、開 log 檔、slog JSON handler、
-		//   並 fail-fast 確認 appName 已綁定。
+		//   filestore StateStore + WAL、並 fail-fast 確認 appName 已綁定。
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dirs := runtime.MustOpenForCLI(appName, slog.LevelInfo)
-			slog.Info("greet-agent starting", "name", greetName, "runID", dirs.RunID)
+			cfg := config.MustOpenForCLI(appName, slog.LevelInfo)
+			slog.Info("greet-agent starting", "name", greetName, "runID", cfg.RunID)
 
 			// --- model provider ---
 			opts := []anthropicprovider.Option{anthropicprovider.WithModel(model)}
@@ -81,28 +81,19 @@ func NewRoot() *cobra.Command {
 			})
 
 			// --- runtime loop ---
-			loop := runtime.NewEngine(step, provider, reg)
-			loop.Emitter = func(eff core.Instruction) {
+					loop := runtime.NewEngine(step, provider, reg)
+				loop.Middleware = config.DefaultMiddleware()
+				loop.Emitter = func(eff core.Instruction) {
 				writeEnvelope(cmd, eff)
 			}
 
-			// --- persistence: under <APP_DATA_DIR>/{states,wal} ---
-			// MustOpenForCLI 已經 mkdir 過 states/ 與 wal/,這裡直接用。
-			store, err := filestore.NewJSONFileStateStore(dirs.DataDir)
-			if err != nil {
-				return fmt.Errorf("state store: %w", err)
-			}
-			loop.Store = store
-
-			wal, err := filestore.NewJSONLFileLog(dirs.DataDir)
-			if err != nil {
-				return fmt.Errorf("wal: %w", err)
-			}
-			loop.Log = wal
+			// --- persistence: wired by config.MustOpenForCLI ---
+			loop.Store = cfg.StateStore
+			loop.Log = cfg.WAL
 
 			// --- initial state ---
 			state := core.State{
-				RunID:          dirs.RunID,
+				RunID:          cfg.RunID,
 				ReasoningStyle: core.REASON_REACT,
 				Autonomy:       core.AUTONOMY_L2,
 				Messages: []core.Message{{
@@ -118,12 +109,12 @@ func NewRoot() *cobra.Command {
 			// --- run ---
 			final, err := loop.Run(context.Background(), state)
 			if err != nil {
-				slog.Error("loop run failed", "err", err, "runID", dirs.RunID)
+				slog.Error("loop run failed", "err", err, "runID", cfg.RunID)
 				return err
 			}
 
 			writeEnvelope(cmd, core.Instruction{Kind: core.INSTRUCTION_DONE})
-			slog.Info("greet-agent done", "runID", dirs.RunID, "turns", final.Turn, "status", final.Status)
+			slog.Info("greet-agent done", "runID", cfg.RunID, "turns", final.Turn, "status", final.Status)
 			_ = final
 			return nil
 		},

@@ -10,6 +10,7 @@ import (
 	"github.com/bizshuk/agentsdk/memory/filestore"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/harness"
+	"github.com/bizshuk/agentsdk/middleware/loopguard"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/stretchr/testify/assert"
@@ -34,6 +35,7 @@ func TestRuntimeLoopguardTripInRealtime(t *testing.T) {
 		core.REASON_REACT: &stuckPattern{},
 	})
 	loop := runtime.NewEngine(step, prov, reg)
+	loop.Middleware = loopguardChain()
 	loop.Approval = stubApproval{}
 	loop.Emitter = func(eff core.Instruction) {}
 
@@ -57,10 +59,10 @@ func (s *stuckPattern) Kind() core.ReasoningStyle { return core.REASON_REACT }
 func (s *stuckPattern) NextStep(state core.State) (core.State, []core.Instruction) {
 	return state, []core.Instruction{
 		{Kind: core.INSTRUCTION_CALL_TOOL,
-		CallTool: &core.CallToolInstruction{
-			Call: core.ToolCall{ID: "c", Name: "noop", Args: map[string]any{}},
-		},
-	}}
+			CallTool: &core.CallToolInstruction{
+				Call: core.ToolCall{ID: "c", Name: "noop", Args: map[string]any{}},
+			},
+		}}
 }
 
 // TestRuntimeBudgetExceededExitsRun verifies the budget middleware's
@@ -81,6 +83,7 @@ func TestRuntimeBudgetExceededExitsRun(t *testing.T) {
 		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, reg)
+	loop.Middleware = budgetChain()
 	loop.Approval = stubApproval{}
 	loop.Emitter = func(eff core.Instruction) {}
 
@@ -90,7 +93,7 @@ func TestRuntimeBudgetExceededExitsRun(t *testing.T) {
 	}
 	final, err := loop.Run(context.Background(), state)
 	require.Error(t, err)
-	assert.True(t, runtime.IsBudgetExceeded(err))
+	assert.True(t, harness.IsBudgetExceeded(err))
 	assert.Equal(t, core.RUN_STATUS_FAILED, final.Status)
 }
 
@@ -136,11 +139,24 @@ func TestRuntimeResumeFromWAL(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// identityChain is a no-op middleware chain — useful to disable the
-// DefaultMiddleware for tests that don't want loopguard / budget side effects.
+// identityChain is a no-op middleware chain — useful for tests that don't
+// want loopguard / budget side effects.
 func identityChain() middleware.Middleware {
 	return func(next middleware.Next) middleware.Next { return next }
 }
 
-// silence unused imports if changed
-var _ = harness.Budget
+// loopguardChain is a minimal chain with only loopguard — for tests that
+// need loop detection without retry/budget/timeout interference.
+func loopguardChain() middleware.Middleware {
+	return middleware.Chain(
+		loopguard.New(loopguard.Config{MaxRepeats: 5}),
+	)
+}
+
+// budgetChain is a minimal chain with only budget — for tests that need
+// budget guard without retry/loopguard/timeout interference.
+func budgetChain() middleware.Middleware {
+	return middleware.Chain(
+		harness.Budget(),
+	)
+}

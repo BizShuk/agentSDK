@@ -11,6 +11,8 @@ import (
 	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/internal/testutil"
+	"github.com/bizshuk/agentsdk/middleware"
+	"github.com/bizshuk/agentsdk/middleware/harness"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/stretchr/testify/assert"
@@ -168,6 +170,7 @@ func TestBudgetExceededStopsLoop(t *testing.T) {
 	})
 
 	loop := runtime.NewEngine(step, prov, reg)
+	loop.Middleware = middleware.Chain(harness.Budget())
 	loop.Approval = stubApproval{}
 	loop.Emitter = func(eff core.Instruction) {}
 	state := core.State{
@@ -277,3 +280,4 @@ func TestRunWithInputSeedsFirstTurn(t *testing.T) {
 // silence unused imports if json/never gets used
 var _ = json.Marshal
 var _ = errors.New
+var _ = harness.IsBudgetExceeded

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/action"
+	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory/filestore"
 	"github.com/bizshuk/agentsdk/planning"
@@ -84,6 +85,7 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 	})
 
 	loop := runtime.NewEngine(step, provider, reg)
+	loop.Middleware = config.DefaultMiddleware()
 	loop.Emitter = func(eff core.Instruction) {
 		writeEnvelope(cmd, eff)
 	}

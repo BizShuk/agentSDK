@@ -90,7 +90,16 @@ func (g *Glob) handle(_ context.Context, a GlobArgs) (GlobOutput, error) {
 	if err != nil {
 		return GlobOutput{}, err
 	}
-	return g.buildOutput(wd, matches), nil
+	// Make paths relative to wd.
+	relMatches := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if rel, relErr := filepath.Rel(wd, m); relErr == nil {
+			relMatches = append(relMatches, rel)
+		} else {
+			relMatches = append(relMatches, m)
+		}
+	}
+	return g.buildOutput(wd, relMatches), nil
 }
 
 // globRecursive handles ** patterns by walking the filesystem.

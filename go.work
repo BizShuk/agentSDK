@@ -1,4 +1,4 @@
-go 1.26
+go 1.26.0
 
 use (
 	.
@@ -6,5 +6,8 @@ use (
 	./provider/anthropic
 	./provider/google
 	./provider/openaicompat
+	./sample/greet-agent
 	./sample/logdoctor
 )
+
+replace github.com/bizshuk/gosdk => /Users/bytedance/projects/tmp/gosdk

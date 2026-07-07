@@ -2,22 +2,21 @@
 // instructions to the bound ports (model, tools, store, notifier) and
 // folds the results back as Events.
 //
-// M2 integrates the middleware chain: Retry / Timeout / Budget / Loopguard
-// wrap the dispatcher (retry → timeout → budget → loopguard → base).
+// Middleware chain is wired by the caller. For the M2 defaults use:
+//
+//	loop.Middleware = config.DefaultMiddleware()
+//
 // M3 / M4 slots in tracing, sandbox, approval, spotlight / sanitizer at
 // the appropriate positions without changing the public Engine API.
 package runtime
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware"
-	"github.com/bizshuk/agentsdk/middleware/harness"
-	"github.com/bizshuk/agentsdk/middleware/loopguard"
 )
 
 // Emitter is the callback for INSTRUCTION_EMIT — typically wired to cli.Codec
@@ -25,8 +24,11 @@ import (
 type Emitter func(core.Instruction)
 
 // Engine is the agent runtime. All fields are required except Middleware
-// (nil = uses DefaultMiddleware: retry → timeout → budget → loopguard),
-// Approval (nil = no approval gate), and Emit (nil = drops emit instructions).
+// (nil = middleware.Identity(), a no-op chain), Approval (nil = no approval
+// gate), and Emit (nil = drops emit instructions).
+// Callers that want the M2 defaults should wire:
+//
+//	loop.Middleware = config.DefaultMiddleware()
 type Engine struct {
 	Step       core.Decide
 	Model      core.ModelProvider
@@ -36,7 +38,7 @@ type Engine struct {
 	Approval   core.ApprovalPolicy
 	Notifier   core.Notifier
 	Emitter    Emitter
-	Middleware middleware.Middleware // overrides DefaultMiddleware when set
+	Middleware middleware.Middleware // nil = Identity(); wire config.DefaultMiddleware() for M2 chain
 
 	// chain is the resolved chain — built lazily on first dispatch.
 	chain     middleware.Dispatcher
@@ -48,24 +50,17 @@ func NewEngine(step core.Decide, model core.ModelProvider, tools core.ToolRegist
 	return &Engine{Step: step, Model: model, Tools: tools}
 }
 
-// DefaultMiddleware returns the M2 chain: retry → timeout → budget → loopguard.
-// Order matches plans/plan-only-and-plan-breezy-pike.md.
-func DefaultMiddleware() middleware.Middleware {
-	return middleware.Chain(
-		harness.Retry(harness.RetryConfig{N: 3, BaseBackoff: 100 * time.Millisecond, MaxBackoff: 5 * time.Second}),
-		harness.Timeout(harness.TimeoutConfig{PerEffect: 60 * time.Second}),
-		harness.Budget(),
-		loopguard.New(loopguard.Config{MaxRepeats: 5}),
-	)
-}
-
 // resolveChain returns the bound middleware chain, building it once on first
 // use. Callers may override Engine.Middleware to inject their own chain.
+// When Middleware is nil, the chain defaults to middleware.Identity (no-ops).
+// Callers that want retry/timeout/budget/loopguard should wire:
+//
+//	loop.Middleware = config.DefaultMiddleware()
 func (e *Engine) resolveChain() middleware.Middleware {
 	if e.Middleware != nil {
 		return e.Middleware
 	}
-	return DefaultMiddleware()
+	return middleware.Identity()
 }
 
 // runInstruction is the terminal Next — what the middleware chain wraps.
@@ -112,9 +107,9 @@ func (e *Engine) runInstruction(ctx context.Context, s core.State, inst core.Ins
 				})
 			}
 			s.Messages = append(s.Messages, core.Message{
-				Role:   core.ROLE_ASSISTANT,
-				Parts:  parts,
-				Ts:     time.Now().UTC(),
+				Role:  core.ROLE_ASSISTANT,
+				Parts: parts,
+				Ts:    time.Now().UTC(),
 			})
 		}
 		return s, &core.Event{
@@ -204,15 +199,6 @@ func (e *Engine) buildChain() middleware.Next {
 // onceFlag is a tiny once-guard type to avoid sync.Once overhead.
 type onceFlag struct{ value bool }
 
-// Run drives the run from `state` until a terminal status is reached or
-// the context is canceled. The first iteration has no Event — rules
-// are expected to read state.Messages / state.PendingApprovals instead.
-//
-// Returns the final State and any terminal error.
-func (e *Engine) Run(ctx context.Context, state core.State) (core.State, error) {
-	return e.runStep(ctx, state, core.Event{})
-}
-
 // Resume loads a paused run by ID and replays the WAL, then continues
 // from the last checkpoint. The runtime never re-issues model calls during
 // replay — the WAL already contains ModelResult entries.
@@ -272,6 +258,15 @@ func (e *Engine) SubmitHumanDecision(ctx context.Context, runID string, decision
 		ReceivedAt:    time.Now().UTC(),
 	}
 	return e.runStep(ctx, s, event)
+}
+
+// Run drives the run from `state` until a terminal status is reached or
+// the context is canceled. The first iteration has no Event — rules
+// are expected to read state.Messages / state.PendingApprovals instead.
+//
+// Returns the final State and any terminal error.
+func (e *Engine) Run(ctx context.Context, state core.State) (core.State, error) {
+	return e.runStep(ctx, state, core.Event{})
 }
 
 // RunWithEvent is exported so tests / sample can drive a one-shot
@@ -382,10 +377,3 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 	}
 }
 
-// IsBudgetExceeded is a small helper for callers that want to detect the
-// loop exiting for budget reasons. errors.As(err, &harness.BudgetExceededError{})
-// is the canonical check.
-func IsBudgetExceeded(err error) bool {
-	var be *harness.BudgetExceededError
-	return errors.As(err, &be)
-}

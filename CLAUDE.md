@@ -43,12 +43,13 @@ agentsdk/
 │   ├── harness/budget.go            # Budget guard (state.Budget.Exceeded → BudgetExceededError)
 │   ├── harness/timeout.go           # Timeout (per-effect WithTimeout)
 │   └── loopguard/loopguard.go       # 指紋 (sha1+volatile strip) + 連續 CALL_TOOL → REQUEST_APPROVAL
-├── runtime/                         # Shell
+├── config/                          # 一站式 CLI wiring (AppConfig)
+│   └── app.go                       # OpenForCLI: gosdk/config init + mkdir + slog + filestore Store/WAL
 ├── action/                          # 支柱 3 (M1 minimal)
 │   ├── tool.go                      # TypedTool[TArgs,TOut] 泛型 (json.RawMessage)
 │   └── registry.go                  # Registry (記憶體靜態註冊, M3 加 ToolSource 動態)
 ├── runtime/                         # Shell
-│   └── loop.go                      # Loop: dispatch + preStep scratch seed + short-circuit on end_turn
+│   └── loop.go                      # Engine: dispatch + preStep scratch seed + short-circuit on end_turn
 ├── internal/testutil/               # 測試 only (FakeProvider / MemStore / MemWAL / CapturingNotifier)
 └── sample/logdoctor/                # 驗證 sample (獨立 go.mod)
     ├── main.go                      # cobra entry
@@ -91,7 +92,8 @@ agentsdk/
 | 感知 | `agentsdk/perception` | `perception.Source`, `perception.Multi` |
 | 規劃 | `agentsdk/planning` | `planning.NewReAct` 等 6 個 constructor |
 | 行動 | `agentsdk/action` | `action.NewRegistry`, `action.NewTypedTool` |
-| Shell | `agentsdk/runtime` | `runtime.NewLoop`, `Loop.Run` / `Loop.Resume` |
+| 配置 | `agentsdk/config` | `config.OpenForCLI`, `config.MustOpenForCLI` → `AppConfig` |
+| Shell | `agentsdk/runtime` | `runtime.NewEngine`, `Engine.Run` / `Engine.Resume` |
 | Sample | `agentsdk/sample/logdoctor` | `cmd.RegisterRun` → `cobra.Command.Execute` |
 | Test fixtures | `agentsdk/internal/testutil` | (production code MUST NOT import) |
 
@@ -143,10 +145,10 @@ go run . --fake --max-turns=10 run --once --fixture testdata/error.log
 |----|------|------|------|
 | M1 | 核心範式 + sample 骨架 | ✅ 完成 | `go test ./...` 全綠 + E2E JSONL 符合預期 |
 | M2 | 系統韌性 + 循環防禦 | ✅ 完成 | Budget 到頂即停 / Retry N 次後 surface / FileStateStore round-trip / Checkpointer.Recover JSON 與原 State 等價,Recover 期間 FakeProvider.CallCount 不變 (不重呼叫 LLM) / loopguard 第 5 次連續 CALL_TOOL 觸發 REQUEST_APPROVAL{Reason:"loop_detected"} / sample logdoctor run + resume CLI 驗證 |
-| M3 | 工具生態 + 執行期安全 | ⏳ | invopop/jsonschema 反射 / sandbox allow-deny / spotlight + sanitizer / MCP discover |
+| M3 | 工具生態 + 執行期安全 | ⏳ | invopop/jsonschema 反射 / sandbox allow-deny / spotlight + sanitizer / MCP discover / **perception/ 去留決策 (見 plans/2026-07-07-m3-tooling-security.md carry-over)** |
 | M4 | 架構解耦 + HITL + 三 provider | ⏳ | 含 mid-run approval State round-trip / 三 provider 實測 / 完整 watch→fix story |
 
-詳細規格見 `plans/plan-only-and-plan-breezy-pike.md`。
+詳細規格見 `plans/plan-only-and-plan-breezy-pike.md`;可執行 todo 見 `README.todo`(索引) → `plans/2026-07-07-m3-tooling-security.md` 與 `plans/2026-07-07-m4-hitl-providers.md`。
 
 ## 慣例 (Conventions)
 
