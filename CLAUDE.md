@@ -25,12 +25,12 @@ agentsdk/
 │   ├── source.go                    # Source 介面 + Multi fan-in (sync.WaitGroup close)
 │   └── normalize.go                 # Normalizer (Percept → Message)
 ├── planning/                        # 6 ThinkingPattern 實作
-│   ├── react.go                     # ✅ ReAct (think → act → observe FSM via scratch)
-│   ├── planner_executor.go          # ✅ PlannerExecutor (blueprint + step dispatch)
-│   ├── executor_critic.go           # ✅ ExecutorCritic (execute + critique iterate)
-│   ├── cot_singleshot.go            # 🟡 STUB (interface compliance, emit CALL_MODEL+DONE)
-│   ├── reflexion.go                 # 🟡 STUB
-│   ├── router.go                    # 🟡 STUB
+│   ├── think_then_act.go            # ✅ ThinkThenAct (think → act → observe FSM via scratch)
+│   ├── plan_then_run.go             # ✅ PlanThenRun (blueprint + step dispatch)
+│   ├── do_then_review.go            # ✅ RunThenReview (execute + critique iterate)
+│   ├── one_shot.go                  # 🟡 STUB OneShotReasoning (emit CALL_MODEL+DONE)
+│   ├── learn_from_failure.go        # 🟡 STUB LearnFromFailure
+│   ├── choose_agent.go              # 🟡 STUB ChooseAgent
 │   └── helpers.go                   # scratch helpers + newID
 ├── memory/                          # 支柱 2 (M2 完整實作)
 │   ├── window.go                    # Window (MaxMessages / MaxTokens) + CharHeuristicCounter
