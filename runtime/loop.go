@@ -199,6 +199,63 @@ func (e *Engine) buildChain() middleware.Next {
 // onceFlag is a tiny once-guard type to avoid sync.Once overhead.
 type onceFlag struct{ value bool }
 
+// hasDecidedApproval reports whether state carries any PendingApproval
+// that has already received a human decision (Decision != ""). Such a
+// run was paused and is now ready to resume: the decision must be
+// consumed by consumeApprovedPendingCall and the approved tool call
+// re-issued.
+func hasDecidedApproval(s core.State) bool {
+	for _, pa := range s.PendingApprovals {
+		if pa.Decision != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// consumeApprovedPendingCall inspects state.PendingApprovals for any entry
+// that has been decided out-of-band (Decision != ""). For an approved
+// call it re-seeds the tool call into working memory so the active rule
+// (e.g. ReAct's dispatch phase) re-issues it; for a rejected call it
+// marks the run DONE. The decided approval is removed from the slice so
+// the resume fires exactly once.
+//
+// This is the seam between out-of-band approval (SubmitHumanDecision /
+// the `approve` CLI writing into persisted State) and the pure Decide:
+// the rule never sees the approval, only the re-seeded working memory.
+func (e *Engine) consumeApprovedPendingCall(s core.State) core.State {
+	if len(s.PendingApprovals) == 0 {
+		return s
+	}
+	kept := s.PendingApprovals[:0]
+	approved := false
+	for _, pa := range s.PendingApprovals {
+		if pa.Decision == "" {
+			// Still open — leave for a future decision.
+			kept = append(kept, pa)
+			continue
+		}
+		// Decided. Consume it.
+		if pa.Decision == core.APPROVAL_DECISION_APPROVE && pa.ToolCall != nil {
+			if s.WorkingMemory == nil {
+				s.WorkingMemory = make(map[string]any, 4)
+			}
+			s.WorkingMemory["think_then_act.pending_call"] = *pa.ToolCall
+			s.WorkingMemory["think_then_act.phase"] = "dispatch"
+			// Mark the call as already-approved so the ApprovalGate does
+			// not re-intercept it on re-dispatch (which would loop).
+			s.WorkingMemory["think_then_act.approved_call_id"] = pa.ToolCall.ID
+			s.Status = core.RUN_STATUS_RUNNING
+			approved = true
+		} else if pa.Decision == core.APPROVAL_DECISION_REJECT {
+			s.Status = core.RUN_STATUS_COMPLETED
+		}
+	}
+	s.PendingApprovals = kept
+	_ = approved
+	return s
+}
+
 // Resume loads a paused run by ID and replays the WAL, then continues
 // from the last checkpoint. The runtime never re-issues model calls during
 // replay — the WAL already contains ModelResult entries.
@@ -209,6 +266,14 @@ func (e *Engine) Resume(ctx context.Context, runID string) (core.State, error) {
 	s, err := e.Store.Load(ctx, runID)
 	if err != nil {
 		return core.State{}, err
+	}
+	// If the run was paused for approval and a decision has since been
+	// recorded out-of-band (e.g. by the `approve` CLI), skip WAL replay
+	// and drive a fresh step so consumeApprovedPendingCall re-seeds the
+	// approved tool call. WAL replay is only for crash recovery, where
+	// the persisted State already reflects the last executed step.
+	if hasDecidedApproval(s) {
+		return e.Run(ctx, s)
 	}
 	// For M2, replay is delegated to checkpoint.Recoverer if a Log is bound.
 	// The simple case is "Load + Run with empty input"; with a Log we
@@ -287,6 +352,16 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 	chain := e.buildChain()
 	current := state
 
+	// If the run already reached a terminal status before this step
+	// (e.g. a rejected approval set COMPLETED in consumeApprovedPendingCall),
+	// honor it immediately rather than running another Decide.
+	if current.Status == core.RUN_STATUS_COMPLETED || current.Status == core.RUN_STATUS_FAILED {
+		if e.Store != nil {
+			_ = e.Store.Save(ctx, current)
+		}
+		return current, nil
+	}
+
 	for {
 		// Pre-populate working memory from the incoming event BEFORE Decide runs,
 		// so rules can read it via NextStep. Rules are pure and cannot
@@ -312,6 +387,22 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 		if event.ToolResult != nil {
 			preStep.WorkingMemory["think_then_act.last_result"] = event.ToolResult.CallID
 		}
+		// HITL resume: if the run was paused for approval and a decision
+		// has since been recorded (out-of-band via SubmitHumanDecision or
+		// by the `approve` CLI writing into persisted State), re-seed the
+		// approved tool call into working memory so ReAct's dispatch phase
+		// re-issues it. Rejected approvals short-circuit to DONE. We
+		// consume (remove) the decided approval so it fires once.
+		preStep = e.consumeApprovedPendingCall(preStep)
+
+		// consumeApprovedPendingCall may have short-circuited the run
+		// (rejected approval → COMPLETED). Honor it before running Decide.
+		if preStep.Status == core.RUN_STATUS_COMPLETED || preStep.Status == core.RUN_STATUS_FAILED {
+			if e.Store != nil {
+				_ = e.Store.Save(ctx, preStep)
+			}
+			return preStep, nil
+		}
 
 		next, instructions := e.Step(preStep, event)
 		next.Turn = current.Turn + 1
@@ -321,6 +412,15 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 		var nextEvent *core.Event
 		terminal := false
 		for _, inst := range instructions {
+			// Backfill the tool's declared risk onto CALL_TOOL
+			// instructions before they hit the chain. The model's ToolCall
+			// carries no risk; the ApprovalGate needs the tool-defined
+			// risk to decide ALLOW vs ASK.
+			if inst.Kind == core.INSTRUCTION_CALL_TOOL && inst.CallTool != nil && e.Tools != nil {
+				if tool, ok := e.Tools.Get(inst.CallTool.Call.Name); ok {
+					inst.CallTool.Call.Risk = tool.Risk()
+				}
+			}
 			if e.Emitter != nil {
 				e.Emitter(inst)
 			}

@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"encoding/json"
 	"regexp"
 	"strings"
 
@@ -111,6 +112,10 @@ func (s *Sanitizer) Middleware() middleware.Middleware {
 			}
 			in.ToolResult.Output = FormatSanitized(reason) + " original_len=" + itoa(len(text))
 			_ = text
+			// Propagate the sanitized form into the transcript too (the
+			// base dispatcher already appended the raw output into
+			// state.Messages). See spotlight.syncTranscriptOutput.
+			syncTranscriptOutput(&st, in.ToolResult.CallID, in.ToolResult.Output)
 			// Emit NOTIFY so operator sees the hit (separate effect via state).
 			if st.WorkingMemory == nil {
 				st.WorkingMemory = make(map[string]any, 4)
@@ -122,6 +127,11 @@ func (s *Sanitizer) Middleware() middleware.Middleware {
 }
 
 // outputToString best-effort string conversion of ToolResult.Output.
+//
+// json.RawMessage is a named []byte type — a type switch case []byte does
+// NOT match it (Go does not cross named types in assertions), so it needs
+// its own case. TypedTool.Call returns Output as json.RawMessage, so this
+// case is the one real tools actually hit.
 func outputToString(v any) string {
 	if v == nil {
 		return ""
@@ -130,6 +140,8 @@ func outputToString(v any) string {
 	case string:
 		return x
 	case []byte:
+		return string(x)
+	case json.RawMessage:
 		return string(x)
 	}
 	return ""

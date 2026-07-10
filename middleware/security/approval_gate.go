@@ -2,7 +2,6 @@ package security
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware"
@@ -13,24 +12,33 @@ import (
 // REQUEST_APPROVAL (ASK — pauses the run), or rewrites as NOTIFY
 // error (DENY).
 //
-// Place this in the chain BEFORE the base dispatcher so it can short-
-// circuit. The policy-driven decision happens on the *outbound* side;
-// once a CALL_TOOL becomes REQUEST_APPROVAL, runtime loops naturally
-// pause on PAUSED_APPROVAL until SubmitApproval reissues with a fresh
-// APPROVAL_DECISION input.
-func ApprovalGate(autonomy core.AutonomyLevel, policy core.ApprovalPolicy) middleware.Middleware {
+// Autonomy is read from state on every dispatch (it is per-run, not
+// per-chain), so the policy verdict tracks the run's current trust
+// level even if it changes mid-run. Place this in the chain BEFORE the
+// base dispatcher so it can short-circuit. The policy-driven decision
+// happens on the *outbound* side; once a CALL_TOOL becomes
+// REQUEST_APPROVAL, runtime loops naturally pause on PAUSED_APPROVAL
+// until SubmitApproval reissues with a fresh APPROVAL_DECISION input.
+func ApprovalGate(policy core.ApprovalPolicy) middleware.Middleware {
 	return func(next middleware.Next) middleware.Next {
 		return func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 			if eff.Kind != core.INSTRUCTION_CALL_TOOL || eff.CallTool == nil {
 				return next(ctx, state, eff)
 			}
-			// Look up the tool's schema in the (small) registry the
-			// runtime hands us. ApprovalPolicy needs the Risk field.
+			// If this call was already approved out-of-band (via
+			// SubmitHumanDecision / the `approve` CLI), runtime seeded its
+			// id into working memory — let it through without re-asking,
+			// otherwise an approved high-risk call would loop forever.
+			if approved, ok := state.WorkingMemory["think_then_act.approved_call_id"].(string); ok && approved == eff.CallTool.Call.ID {
+				return next(ctx, state, eff)
+			}
+			// The tool's risk comes from the tool definition; the
+			// autonomy comes from the run's state (per-run, mutable).
 			schema := core.ToolSpec{
 				Name: eff.CallTool.Call.Name,
 				Risk: eff.CallTool.Call.Risk,
 			}
-			verdict := policy.Decide(struct{}{}, autonomy, *eff.CallTool, schema)
+			verdict := policy.Decide(struct{}{}, state.Autonomy, *eff.CallTool, schema)
 			switch verdict {
 			case core.APPROVAL_ACTION_ALLOW:
 				return next(ctx, state, eff)
@@ -44,7 +52,7 @@ func ApprovalGate(autonomy core.AutonomyLevel, policy core.ApprovalPolicy) middl
 					Kind: core.INSTRUCTION_REQUEST_APPROVAL,
 					RequestApproval: &core.RequestApprovalInstruction{
 						ApprovalID: "auto-" + eff.CallTool.Call.ID,
-						Reason:     "policy_" + fmt.Sprint(int(autonomy)) + "_" + string(eff.CallTool.Call.Risk),
+						Reason:     "policy_L" + itoa(int(state.Autonomy)) + "_" + string(eff.CallTool.Call.Risk),
 						Risk:       eff.CallTool.Call.Risk,
 						Summary:    "approval gate: " + eff.CallTool.Call.Name,
 						ToolCall:   &eff.CallTool.Call,

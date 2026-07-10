@@ -161,8 +161,15 @@ func fromGenaiResponse(resp *genai.GenerateContentResponse) core.ModelResult {
 				if args == nil {
 					args = map[string]any{}
 				}
+				// Prefer the function-call id when the SDK provides one
+				// (Gemini returns it for tool-call correlation). Fall back
+				// to the name so single-call transcripts still pair up.
+				callID := p.FunctionCall.ID
+				if callID == "" {
+					callID = p.FunctionCall.Name
+				}
 				out.ToolCalls = append(out.ToolCalls, core.ToolCall{
-					ID:   p.FunctionCall.Name,
+					ID:   callID,
 					Name: p.FunctionCall.Name,
 					Args: args,
 				})

@@ -46,10 +46,13 @@ func resumeExecute(cmd *cobra.Command, f *resumeFlags) error {
 		return fmt.Errorf("--run-id is required")
 	}
 	// Capture options from root flags.
-	fakeMode, _ := cmd.Root().PersistentFlags().GetBool("fake")
+	provider, isFake, err := resolveProvider(cmd)
+	if err != nil {
+		return err
+	}
 	maxTurns, _ := cmd.Root().PersistentFlags().GetInt("max-turns")
-	if !fakeMode {
-		return fmt.Errorf("M2 only supports --fake; real providers are M4")
+	if isFake {
+		provider = fake.NewScriptedProvider()
 	}
 
 	// Resolve data dir via shared helper (--data-dir / $LOGDOCTOR_DATA / ./data).
@@ -92,7 +95,6 @@ func resumeExecute(cmd *cobra.Command, f *resumeFlags) error {
 	if err != nil {
 		return err
 	}
-	provider := fake.NewScriptedProvider()
 	reg := action.NewRegistry()
 	rdt := tool.NewReadLogTail(listener)
 	reg.Register(rdt)
@@ -104,11 +106,11 @@ func resumeExecute(cmd *cobra.Command, f *resumeFlags) error {
 	})
 
 	loop := runtime.NewEngine(step, provider, reg)
-	loop.Middleware = config.DefaultMiddleware()
+	loop.Middleware = config.SecureMiddleware(nil, action.DefaultApprovalPolicy{})
 	loop.Emitter = func(eff core.Instruction) {
 		writeEnvelope(cmd, eff)
 	}
-	loop.Approval = AllowAllPolicy{}
+	loop.Approval = action.DefaultApprovalPolicy{}
 	loop.Store = store
 	loop.Log = wal
 

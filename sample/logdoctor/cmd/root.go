@@ -27,7 +27,11 @@ func NewRoot() *cobra.Command {
 	root.SetVersionTemplate("logdoctor {{.Version}}\n")
 	root.PersistentFlags().Bool("fake", false,
 		"Use the deterministic FakeProvider for offline E2E testing. "+
-			"No network or API key required.")
+			"No network or API key required. Mutually exclusive with --provider.")
+	root.PersistentFlags().String("provider", "",
+		"LLM provider: anthropic | openaicompat | google. "+
+			"Mutually exclusive with --fake. Credentials are read from the "+
+			"provider's env var (ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY).")
 	root.PersistentFlags().Int("max-turns", 5,
 		"Maximum steps the agent can take before being killed.")
 	return root

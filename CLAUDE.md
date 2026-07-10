@@ -145,10 +145,15 @@ go run . --fake --max-turns=10 run --once --fixture testdata/error.log
 |----|------|------|------|
 | M1 | 核心範式 + sample 骨架 | ✅ 完成 | `go test ./...` 全綠 + E2E JSONL 符合預期 |
 | M2 | 系統韌性 + 循環防禦 | ✅ 完成 | Budget 到頂即停 / Retry N 次後 surface / FileStateStore round-trip / Checkpointer.Recover JSON 與原 State 等價,Recover 期間 FakeProvider.CallCount 不變 (不重呼叫 LLM) / loopguard 第 5 次連續 CALL_TOOL 觸發 REQUEST_APPROVAL{Reason:"loop_detected"} / sample logdoctor run + resume CLI 驗證 |
-| M3 | 工具生態 + 執行期安全 | ⏳ | invopop/jsonschema 反射 / sandbox allow-deny / spotlight + sanitizer / MCP discover / **perception/ 去留決策 (見 plans/2026-07-07-m3-tooling-security.md carry-over)** |
-| M4 | 架構解耦 + HITL + 三 provider | ⏳ | 含 mid-run approval State round-trip / 三 provider 實測 / 完整 watch→fix story |
+| M3 | 工具生態 + 執行期安全 | ✅ 完成 | `invopop/jsonschema` 反射 / sandbox allow-deny / spotlight + sanitizer / MCP discover / `runtime/m3_e2e_test.go` runtime 層 e2e 驗證 sanitizer 命中 + spotlight 包覆 + transcript 同步 / `perception/` 去留決策見下方「perception 去留」段 |
+| M4 | 架構解耦 + HITL + 三 provider | ✅ 完成 | mid-run approval State round-trip / `config.SecureMiddleware` 含 approval + spotlight + sanitizer 完整鏈 / `consumeApprovedPendingCall` 讓 `SubmitHumanDecision` 與 `Resume` 真正消費 out-of-band decision / `runtime/m4_hitl_e2e_test.go` 跑通 approve + reject 故事 / 三 provider mock 測試齊(anthropic httptest / google 內部 fixture)/ `--provider=anthropic\|openaicompat\|google` flag 接通 sample |
+| M5 | 內建工具 + sample wiring helper | ✅ 完成 | `tool/` 套件 6 工具(Read/Write/Edit/Bash/Glob/Grep)+ `RegisterDefaults` 一次註冊 / `action.Policy` sandbox re-check / Risk 對應 HITL(Write/Edit/Bash HIGH 觸發 ApprovalGate)/ `config.MustOpenForCLI` 樣板削減 / `sample/greet-agent` 接入 6 內建工具 + SecureMiddleware |
 
-詳細規格見 `plans/plan-only-and-plan-breezy-pike.md`;可執行 todo 見 `README.todo`(索引) → `plans/2026-07-07-m3-tooling-security.md` 與 `plans/2026-07-07-m4-hitl-providers.md`。
+詳細規格見 `docs/specs/`(M3 `2026-07-04-tool-ecosystem-and-runtime-security.md`、M4 `2026-07-04-architecture-decoupling-hitl-and-providers.md`、M5 `2026-07-07-m5-built-in-tools.md`、wiring helper `2026-07-07-appname-wiring-helper.md`)。歷史計畫剩 `plans/plan-only-and-plan-breezy-pike.md` 主綱與已被取代的 `docs/specs/` 對應;`plans/` 內 2026-07-07-m3 / 2026-07-07-m4 plan 已併入對應 spec 並刪除。
+
+### perception 去留(來自 M3 carry-over)
+
+**結論: 保留套件,延後決策**。`perception/` 套件(perception/source.go、normalize.go)目前無 consumer,屬無用 scaffolding。理想路徑是**選項 C: 刪除** 整個套件(`core.Observation` / `core.ObservationSource` shim 仍保留供 `testutil` 與 runtime 使用),但 M3 收尾階段未實際刪除,本檔據實記錄為「保留待後續評估」。若 sample 出現多 source fan-in 需求,優先在 sample 端 inline(`sample/logdoctor/core/listener.go` 的 `LogFileListener` 即典型用法),而非重新啟用 `perception/`。刪除 TODO 見 `README.todo`。
 
 ## 慣例 (Conventions)
 

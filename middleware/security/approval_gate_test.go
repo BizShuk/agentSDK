@@ -23,7 +23,7 @@ func (r *recordingPolicy) Decide(_ struct{}, _ core.AutonomyLevel, _ core.CallTo
 
 func TestApprovalGateAllowPassesThrough(t *testing.T) {
 	pol := &recordingPolicy{verdict: core.APPROVAL_ACTION_ALLOW}
-	mw := security.ApprovalGate(core.AUTONOMY_L2, pol)
+	mw := security.ApprovalGate(pol)
 
 	var seen core.Instruction
 	d := func(_ context.Context, _ core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
@@ -31,7 +31,7 @@ func TestApprovalGateAllowPassesThrough(t *testing.T) {
 		return core.State{}, nil, false, nil
 	}
 
-	_, _, _, err := mw(middleware.Next(d))(context.Background(), core.State{},
+	_, _, _, err := mw(middleware.Next(d))(context.Background(), core.State{Autonomy: core.AUTONOMY_L2},
 		core.Instruction{Kind: core.INSTRUCTION_CALL_TOOL, CallTool: &core.CallToolInstruction{
 			Call: core.ToolCall{ID: "c1", Name: "read", Risk: core.RISK_LEVEL_LOW},
 		}})
@@ -42,7 +42,7 @@ func TestApprovalGateAllowPassesThrough(t *testing.T) {
 
 func TestApprovalGateAskRewritesToRequestApproval(t *testing.T) {
 	pol := &recordingPolicy{verdict: core.APPROVAL_ACTION_ASK}
-	mw := security.ApprovalGate(core.AUTONOMY_L1, pol)
+	mw := security.ApprovalGate(pol)
 
 	var seen core.Instruction
 	d := func(_ context.Context, _ core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
@@ -52,7 +52,7 @@ func TestApprovalGateAskRewritesToRequestApproval(t *testing.T) {
 		return s, nil, true, nil
 	}
 
-	state, _, term, err := mw(middleware.Next(d))(context.Background(), core.State{},
+	state, _, term, err := mw(middleware.Next(d))(context.Background(), core.State{Autonomy: core.AUTONOMY_L1},
 		core.Instruction{Kind: core.INSTRUCTION_CALL_TOOL, CallTool: &core.CallToolInstruction{
 			Call: core.ToolCall{ID: "c1", Name: "delete_prod", Risk: core.RISK_LEVEL_HIGH},
 		}})
@@ -66,7 +66,7 @@ func TestApprovalGateAskRewritesToRequestApproval(t *testing.T) {
 
 func TestApprovalGateDenyEmitsNotify(t *testing.T) {
 	pol := &recordingPolicy{verdict: core.APPROVAL_ACTION_DENY}
-	mw := security.ApprovalGate(core.AUTONOMY_L4, pol)
+	mw := security.ApprovalGate(pol)
 
 	var seen core.Instruction
 	d := func(_ context.Context, _ core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
@@ -74,7 +74,7 @@ func TestApprovalGateDenyEmitsNotify(t *testing.T) {
 		return core.State{}, nil, false, nil
 	}
 
-	_, _, _, err := mw(middleware.Next(d))(context.Background(), core.State{},
+	_, _, _, err := mw(middleware.Next(d))(context.Background(), core.State{Autonomy: core.AUTONOMY_L4},
 		core.Instruction{Kind: core.INSTRUCTION_CALL_TOOL, CallTool: &core.CallToolInstruction{
 			Call: core.ToolCall{ID: "c1", Name: "delete_prod", Risk: core.RISK_LEVEL_HIGH},
 		}})
@@ -85,14 +85,14 @@ func TestApprovalGateDenyEmitsNotify(t *testing.T) {
 
 func TestApprovalGateIgnoresNonCallEffects(t *testing.T) {
 	pol := &recordingPolicy{verdict: core.APPROVAL_ACTION_ALLOW}
-	mw := security.ApprovalGate(core.AUTONOMY_L2, pol)
+	mw := security.ApprovalGate(pol)
 
 	called := false
 	d := func(_ context.Context, _ core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 		called = true
 		return core.State{}, nil, false, nil
 	}
-	_, _, _, _ = mw(middleware.Next(d))(context.Background(), core.State{},
+	_, _, _, _ = mw(middleware.Next(d))(context.Background(), core.State{Autonomy: core.AUTONOMY_L2},
 		core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL, CallModel: &core.CallModelInstruction{RequestID: "r1"}})
 	assert.True(t, called)
 	assert.False(t, pol.called, "policy must not be consulted for non-CALL_TOOL")

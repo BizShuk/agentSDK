@@ -15,6 +15,7 @@ import (
 	"github.com/bizshuk/agentsdk/planning"
 	anthropicprovider "github.com/bizshuk/agentsdk/provider/anthropic"
 	"github.com/bizshuk/agentsdk/runtime"
+	builtin "github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/sample/greet-agent/tool"
 	"github.com/spf13/cobra"
 )
@@ -72,7 +73,17 @@ func NewRoot() *cobra.Command {
 			}
 
 			// --- tool registry ---
+			// Built-in tools (Read/Write/Edit/Bash/Glob/Grep) + the demo
+			// greet tool. Sandbox policy is the default denylist + /tmp
+			// allowlist; high-risk tools (Write/Edit/Bash) gate on HITL
+			// at L2 via the SecureMiddleware approval gate.
 			reg := action.NewRegistry()
+			if _, err := builtin.RegisterDefaults(reg, builtin.Options{
+				Policy:     action.DefaultPolicy(),
+				WorkingDir: ".",
+			}); err != nil {
+				return fmt.Errorf("register built-in tools: %w", err)
+			}
 			reg.Register(tool.NewGreet())
 
 			// --- thinking pattern ---
@@ -82,7 +93,8 @@ func NewRoot() *cobra.Command {
 
 			// --- runtime loop ---
 					loop := runtime.NewEngine(step, provider, reg)
-				loop.Middleware = config.DefaultMiddleware()
+				loop.Middleware = config.SecureMiddleware(action.DefaultPolicy(), action.DefaultApprovalPolicy{})
+				loop.Approval = action.DefaultApprovalPolicy{}
 				loop.Emitter = func(eff core.Instruction) {
 				writeEnvelope(cmd, eff)
 			}

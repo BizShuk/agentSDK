@@ -56,21 +56,21 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 		return fmt.Errorf("fixture not found: %s", f.fixture)
 	}
 
-	// Capture options from the root persistent flags.
-	fakeMode, _ := cmd.Root().PersistentFlags().GetBool("fake")
-	maxTurns, _ := cmd.Root().PersistentFlags().GetInt("max-turns")
-	if !fakeMode {
-		return fmt.Errorf("M1 only supports --fake; real providers are M4")
-	}
-
 	// Listener — emits a single Percept when the log file is tailed.
 	listener, err := domain.NewLogFileListener(f.fixture)
 	if err != nil {
 		return err
 	}
 
-	// Provider: scripted responses for the e2e demo.
-	provider := fake.NewScriptedProvider()
+	// Provider: --fake (offline scripted) or --provider (real).
+	provider, isFake, err := resolveProvider(cmd)
+	if err != nil {
+		return err
+	}
+	if isFake {
+		provider = fake.NewScriptedProvider()
+	}
+	maxTurns, _ := cmd.Root().PersistentFlags().GetInt("max-turns")
 
 	// Tool registry.
 	reg := action.NewRegistry()
@@ -85,11 +85,16 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 	})
 
 	loop := runtime.NewEngine(step, provider, reg)
-	loop.Middleware = config.DefaultMiddleware()
+	// M4: wire the full security chain (sandbox + approval + spotlight +
+	// sanitizer). approval uses the L0-L4 enterprise grid so propose_fix
+	// (HIGH risk) triggers a REQUEST_APPROVAL at L2. sandbox is disabled
+	// here (nil) because the sample's tools do not take a "path" arg —
+	// the fixture path is resolved at the listener layer, not via args.
+	loop.Middleware = config.SecureMiddleware(nil, action.DefaultApprovalPolicy{})
 	loop.Emitter = func(eff core.Instruction) {
 		writeEnvelope(cmd, eff)
 	}
-	loop.Approval = AllowAllPolicy{}
+	loop.Approval = action.DefaultApprovalPolicy{}
 
 	// Optional persistence — if --data-dir or env, wire up store+WAL.
 	dataDir := f.dataDir
