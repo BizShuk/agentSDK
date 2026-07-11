@@ -6,8 +6,7 @@ use (
 	./provider/anthropic
 	./provider/google
 	./provider/openaicompat
+	./sample/file-agent
 	./sample/greet-agent
 	./sample/logdoctor
 )
-
-

@@ -1,40 +1,35 @@
 # TODO
 
-## M3 — 工具生態 + 執行期安全 (完成)
-
-- [x] `action/schema.go` — `invopop/jsonschema` struct 反射 + required-field 驗證
-- [x] `action/sandbox.go` + `middleware/security/sandbox_mw.go` — 路徑/指令 allow-deny + DENY 改寫 NOTIFY+DONE
-- [x] `middleware/security/spotlight.go` — 工具輸出 untrusted 標記(支援 `json.RawMessage` 結構化包覆)
-- [x] `middleware/security/sanitizer.go` — 命中 prompt injection 替換為 `[SANITIZED_BY_AGENTSDK]` banner
-- [x] `middleware/security/approval_gate.go` — `DefaultApprovalPolicy` (L0-L4 × RiskLevel grid) + ASK 改寫 REQUEST_APPROVAL
-- [x] `middleware/observability/tracing.go` — OTel span
-- [x] `mcp/client.go` — `modelcontextprotocol/go-sdk`,實作 `action.ToolSource`
-- [x] `sample/logdoctor`:`tool/{add_todo,list_todos,complete_todo}.go` + `core/todo.go` + `cmd/list.go`
-- [x] `runtime/m3_e2e_test.go` — runtime 層 e2e 驗證 sanitizer + spotlight + transcript 同步
-
-## M4 — 架構解耦 + HITL + 三 Provider (完成)
-
-- [x] `action/approval_policy.go` — `DefaultApprovalPolicy` L0-L4 grid
-- [x] `cli/envelope.go` + `cli/codec.go` — JSONL 9 種 MessageType
-- [x] `provider/{anthropic,openaicompat,google}` 三獨立 module
-- [x] `config.SecureMiddleware` — 含 sandbox + approval + spotlight + sanitizer 完整鏈
-- [x] `runtime.consumeApprovedPendingCall` — out-of-band decision 消費
-- [x] `runtime/m4_hitl_e2e_test.go` — approve + reject 完整故事
-- [x] 三 provider mock-driven 測試(anthropic httptest / google 內部 fixture)
-- [x] `--provider=anthropic|openaicompat|google` flag 接通 sample
-
-## M5 — 內建工具 + sample wiring helper (完成)
-
-- [x] `tool/{read,write,edit,bash,glob,grep}.go` — 6 個內建工具
-- [x] `tool/tool.go` `RegisterDefaults(reg, opts)` 一次註冊
-- [x] `action.Policy` sandbox re-check inside tool(defense-in-depth)
-- [x] `config.MustOpenForCLI` / `OpenForCLI` / `AppConfig` wiring helper
-- [x] `sample/greet-agent` 接入 6 內建工具 + `SecureMiddleware`
-
 ## Pending
 
-- [ ] `perception/` 去留(刪除套件;M3 carry-over,見 `CLAUDE.md`「perception 去留」段)
-- [ ] `sample/logdoctor` 接入 `tool.RegisterDefaults`(目前只接 M4 provider flag)
-- [ ] `sample/file-agent` 建立(M5 plan 驗收第 5 點;greet-agent 已先一步接入內建工具)
-
 ## Archive
+
+- [x] `sample/greet-agent` 接入 6 內建工具 + `SecureMiddleware` @2026-07-11_17:34:51 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
+- [x] `config.MustOpenForCLI` / `OpenForCLI` / `AppConfig` wiring helper @2026-07-11_17:34:49 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
+- [x] `action.Policy` sandbox re-check inside tool(defense-in-depth) @2026-07-11_17:34:46 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
+- [x] `tool/tool.go` `RegisterDefaults(reg, opts)` 一次註冊 @2026-07-11_17:34:44 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
+- [x] `tool/{read,write,edit,bash,glob,grep}.go` — 6 個內建工具 @2026-07-11_17:34:42 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
+- [x] `--provider=anthropic|openaicompat|google` flag 接通 sample @2026-07-11_17:34:39 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
+- [x] 三 provider mock-driven 測試(anthropic httptest / google 內部 fixture) @2026-07-11_17:34:37 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
+- [x] `runtime/m4_hitl_e2e_test.go` — approve + reject 完整故事 @2026-07-11_17:34:34 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
+- [x] `runtime.consumeApprovedPendingCall` — out-of-band decision 消費 @2026-07-11_17:34:31 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
+- [x] `config.SecureMiddleware` — 含 sandbox + approval + spotlight + sanitizer 完整鏈 @2026-07-11_17:34:29 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
+- [x] `provider/{anthropic,openaicompat,google}` 三獨立 module @2026-07-11_17:34:27 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
+- [x] `cli/envelope.go` + `cli/codec.go` — JSONL 9 種 MessageType @2026-07-11_17:34:25 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
+- [x] `action/approval_policy.go` — `DefaultApprovalPolicy` L0-L4 grid @2026-07-11_17:34:22 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
+- [x] `runtime/m3_e2e_test.go` — runtime 層 e2e 驗證 sanitizer + spotlight + transcript 同步 @2026-07-11_17:34:19 @Completed @M3_—_工具生態_+_執行期安全_(完成)
+- [x] `sample/logdoctor`:`tool/{add_todo,list_todos,complete_todo}.go` + `core/todo.go` + `cmd/list.go` @2026-07-11_17:34:17 @Completed @M3_—_工具生態_+_執行期安全_(完成)
+- [x] `mcp/client.go` — `modelcontextprotocol/go-sdk`,實作 `action.ToolSource` @2026-07-11_17:34:15 @Completed @M3_—_工具生態_+_執行期安全_(完成)
+- [x] `middleware/observability/tracing.go` — OTel span @2026-07-11_17:34:13 @Completed @M3_—_工具生態_+_執行期安全_(完成)
+- [x] `middleware/security/spotlight.go` — 工具輸出 untrusted 標記(支援 `json.RawMessage` 結構化包覆) @2026-07-11_17:34:11 @Completed @M3_—_工具生態_+_執行期安全_(完成)
+- [x] `middleware/security/approval_gate.go` — `DefaultApprovalPolicy` (L0-L4 × RiskLevel grid) + ASK 改寫 REQUEST_APPROVAL @2026-07-11_17:34:08 @Completed @M3_—_工具生態_+_執行期安全_(完成)
+- [x] `middleware/security/sanitizer.go` — 命中 prompt injection 替換為 `[SANITIZED_BY_AGENTSDK]` banner @2026-07-11_17:34:06 @Completed @M3_—_工具生態_+_執行期安全_(完成)
+- [x] `action/sandbox.go` + `middleware/security/sandbox_mw.go` — 路徑/指令 allow-deny + DENY 改寫 NOTIFY+DONE @2026-07-11_17:34:04 @Completed @M3_—_工具生態_+_執行期安全_(完成)
+- [x] `action/schema.go` — `invopop/jsonschema` struct 反射 + required-field 驗證 @2026-07-11_17:34:02 @Completed @M3_—_工具生態_+_執行期安全_(完成)
+- [x] `sample/file-agent` 建立(M5 plan 驗收第 5 點;greet-agent 已先一步接入內建工具) @2026-07-11_17:32:31 @Completed @Pending
+
+### M3 — 工具生態 + 執行期安全 (完成)
+
+### M4 — 架構解耦 + HITL + 三 Provider (完成)
+
+### M5 — 內建工具 + sample wiring helper (完成)
