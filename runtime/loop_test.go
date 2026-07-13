@@ -227,7 +227,9 @@ func TestNotifyIsCalled(t *testing.T) {
 	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("done")
 
-	// Use the Router stub which emits NOTIFY + DONE in one Decide call.
+	// ChooseAgent emits a NOTIFY in its select phase when an agent list is
+	// seeded, then a CALL_MODEL in delegate; the scripted end_turn short-
+	// circuits the run to COMPLETED.
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_PICK_AGENT: planning.NewChooseAgent(),
 	})
@@ -238,14 +240,16 @@ func TestNotifyIsCalled(t *testing.T) {
 	loop.Emitter = func(eff core.Instruction) {}
 
 	state := core.State{
-		RunID:        "r1",
+		RunID:          "r1",
 		ReasoningStyle: core.REASON_PICK_AGENT,
-		Budget:       core.Budget{MaxTurns: 3},
+		Budget:         core.Budget{MaxTurns: 3},
 	}
+	// Seed an agent list so the select phase emits NOTIFY ("router chose agent: x").
+	planning.SeedAgents(&state, []string{"x"})
 	_, err := loop.Run(context.Background(), state)
 	require.NoError(t, err)
 	assert.NotEmpty(t, notifier.Messages())
-	assert.Contains(t, notifier.Messages()[0], "STUB")
+	assert.Contains(t, notifier.Messages()[0], "router chose agent")
 }
 
 // TestRunWithInputSeedsFirstTurn lets a test inject an input directly.

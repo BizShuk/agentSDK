@@ -61,6 +61,57 @@ func scratchCall(state core.State, key string) (core.ToolCall, bool) {
 	return tc, ok
 }
 
+// scratchStringSlice reads a []string from working memory. Missing key or
+// wrong type returns nil. Used by LearnFromFailure for the append-only
+// reflections slice.
+func scratchStringSlice(state core.State, key string) []string {
+	if state.WorkingMemory == nil {
+		return nil
+	}
+	v, ok := state.WorkingMemory[key]
+	if !ok {
+		return nil
+	}
+	s, ok := v.([]string)
+	return s
+}
+
+// scratchAppendString reads the existing []string at key, appends val, and
+// writes the new slice back. Allocates a fresh slice so the original state's
+// slice is not aliased — required because NextStep returns state.Clone()
+// which shallow-copies the scratch map.
+func scratchAppendString(s *core.State, key, val string) {
+	if s.WorkingMemory == nil {
+		s.WorkingMemory = make(map[string]any, 4)
+	}
+	existing, _ := s.WorkingMemory[key].([]string)
+	out := make([]string, 0, len(existing)+1)
+	out = append(out, existing...)
+	out = append(out, val)
+	s.WorkingMemory[key] = out
+}
+
+// latestAssistantText scans state.Messages from the end backwards and returns
+// the plain text of the most recent assistant message, or "" if none.
+//
+// Rules are pure and cannot inspect Event, but they CAN read state.Messages
+// (it is part of the state). LearnFromFailure uses this to fold the model's
+// reflection / critique text into its reflections slice during the retry phase.
+func latestAssistantText(state core.State) string {
+	for i := len(state.Messages) - 1; i >= 0; i-- {
+		m := state.Messages[i]
+		if m.Role != core.ROLE_ASSISTANT {
+			continue
+		}
+		for _, p := range m.Parts {
+			if p.Kind == core.PART_KIND_PLAIN_TEXT && p.Text != "" {
+				return p.Text
+			}
+		}
+	}
+	return ""
+}
+
 func scratchBlueprint(state core.State) ([]core.ToolCall, bool) {
 	if state.WorkingMemory == nil {
 		return nil, false

@@ -25,9 +25,9 @@ flowchart LR
 | `react.go` | `ReAct` | ✅ 完整 | 經典 Reason → Act → Observe 三相 FSM |
 | `planner_executor.go` | `PlannerExecutor` | ✅ 完整 | 先請 LLM 開 blueprint,再逐步執行 |
 | `executor_critic.go` | `ExecutorCritic` | ✅ 完整 | Execute → Critique;不通過就 iterate |
-| `cot_singleshot.go` | `COTSingleshot` | 🟡 STUB | 一次 `CALL_MODEL` + `DONE` |
-| `reflexion.go` | `Reflexion` | 🟡 STUB | 一次 `CALL_MODEL` + `DONE` |
-| `router.go` | `Router` | 🟡 STUB | `NOTIFY(warn)` + `DONE` |
+| `cot_singleshot.go` | `COTSingleshot` | ✅ 補完 | `think → done` 雙相 FSM |
+| `reflexion.go` | `Reflexion` | ✅ 補完 | `act → reflect → retry → done`,critique `OK:` prefix + reflection 累積 |
+| `router.go` | `Router` | ✅ 補完 | `select → delegate → done`,inline system-msg delegate |
 | `helpers.go` | — | ✅ | scratch 讀寫 / Effect 建構 / id / time helper |
 | `planning_test.go` | — | ✅ | table-driven + testify |
 
@@ -126,13 +126,15 @@ stateDiagram-v2
 - `hasOKPrefix` 認字首三字 `"OK:"` (cheap predicate);`SeedCritiqueOK(s, text)` 會自動加 prefix。
 - **無 hard cap**: iteration 數由 caller 透過 `state.Budget` 控管 (M2 Budget middleware),pattern 自己不擋。
 
-## STUB 實作 (3)
+## 補完實作 (3, 原 STUB)
 
-`COTSingleshot` / `Reflexion` / `Router` 都是「介面合規 + 不 panic」的佔位,等後續里程碑補:
+`COTSingleshot` / `Reflexion` / `Router` 原為「介面合規 + 不 panic」的佔位,現已補完為完整 phase FSM(對齊 ReAct / PlannerExecutor / ExecutorCritic 的深度)。設計見 `plans/magical-watching-panda.md`。
 
-- `COTSingleshot` / `Reflexion`:固定吐 `CALL_MODEL` 後接 `DONE`。
-- `Router`:多吐一個 `NOTIFY{level: "warn", message: "router pattern is a STUB; emitting DONE"}`,方便從 log 識別。
-- STUB 必須有 `DONE` 才有合法 termination — `planning_test.go::TestStubPatternsDoNotPanic` 驗證此契約。
+- `OneShotReasoning`(`cot_singleshot`):`think → done` 雙相 FSM。修掉舊 STUB「每次 NextStep 都吐 [CALL_MODEL, DONE]」的純函式違規(WAL replay 會重發 model call);`think` 只走一次即推到 `done`。
+- `LearnFromFailure`(`reflexion`):`act → reflect → retry → done` 四相 FSM。失敗判定走 LLM critique 的 `OK:` prefix(複用 `startsWithPassed`,與 ExecutorCritic 一致),不靠 `ToolResult.OK`;reflection 跨迭代累積進 `LEARN_FROM_FAILURE_REFLECTIONS` slice(verbal reinforcement,完全在 working memory,不打 `memory/` 套件)。iteration hard cap 由 `state.Budget` 控管。
+- `ChooseAgent`(`router`):`select → delegate → done` 三相 FSM。`select` 階段若 `CHOOSE_AGENT_AGENT_LIST` 非空取 `[0]` + emit `NOTIFY`(info);空 list 走 `CALL_MODEL` hook 保留 LLM-routing。`delegate` 階段 inline 建構帶 system message prefix 的 `CALL_MODEL`(範圍內最佳近似,無 sub-agent registry)。
+- 三者皆能抵達 `DONE` 終態 — `planning_test.go::TestRulesReachDone` 驗證(取代舊 `TestStubPatternsDoNotPanic`)。
+- runtime preStep seed **維持 ReAct-only** 不動(LFF 走 critique 不靠 `ToolResult` 折疊)。
 
 ## `helpers.go` 共用工廠
 
@@ -178,9 +180,9 @@ stateDiagram-v2
 
 ## 開放問題 (Follow-ups, 留待 M3/M4)
 
-- `COTSingleshot` 何時補? — 需先確認 CoT prompt 模板該放在 SDK 還是 sample。
-- `Reflexion` 需要記憶體基礎設施 (`memory/` 已有) — 實作時要決定 reflection 寫入哪個 window / scratch。
-- `Router` 需要子 agent registry 機制 — 屬 `action/` 的 `ToolSource` 動態註冊那一波。
+- ~~`COTSingleshot` 何時補?~~ — 已補完為 `think → done` 雙相 FSM;CoT prompt 模板未引入(維持 `callModelFromMessages` 用 `state.Messages`),sample 端若需 CoT 提示可在 user message 自帶。
+- ~~`Reflexion` 需要記憶體基礎設施~~ — 已補完;**不動 `memory/` 套件**,reflection 累積在 working memory 的 `LEARN_FROM_FAILURE_REFLECTIONS` slice(跨迭代 append)。失敗判定走 LLM critique `OK:` prefix(非 `ToolResult.OK`)。
+- ~~`Router` 需要子 agent registry 機制~~ — 已補完為範圍內最佳近似;**無 sub-agent registry**,`delegate` 階段 inline 建構帶 system message prefix 的 `CALL_MODEL`。真正的 sub-agent delegate 仍屬 `action/` 的 `ToolSource` 動態註冊那一波。
 - 是否要把 scratch 鍵集中成 typed struct (`type reactScratch struct{ Phase string; LastCall ToolCall }`) — 現況用字串 key 簡單但容易打錯,等 pattern 數量再翻倍時再考慮。
 
 ## 驗收 (Acceptance)

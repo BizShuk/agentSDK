@@ -28,9 +28,9 @@ agentsdk/
 │   ├── think_then_act.go            # ✅ ThinkThenAct (think → act → observe FSM via scratch)
 │   ├── plan_then_run.go             # ✅ PlanThenRun (blueprint + step dispatch)
 │   ├── do_then_review.go            # ✅ RunThenReview (execute + critique iterate)
-│   ├── one_shot.go                  # 🟡 STUB OneShotReasoning (emit CALL_MODEL+DONE)
-│   ├── learn_from_failure.go        # 🟡 STUB LearnFromFailure
-│   ├── choose_agent.go              # 🟡 STUB ChooseAgent
+│   ├── one_shot.go                  # ✅ OneShotReasoning (think→done 雙相 FSM)
+│   ├── learn_from_failure.go        # ✅ LearnFromFailure (act→reflect→retry→done,critique OK: prefix + reflection 累積)
+│   ├── choose_agent.go              # ✅ ChooseAgent (select→delegate→done,inline system-msg delegate)
 │   └── helpers.go                   # scratch helpers + newID
 ├── memory/                          # 支柱 2 (M2 完整實作)
 │   ├── window.go                    # Window (MaxMessages / MaxTokens) + CharHeuristicCounter

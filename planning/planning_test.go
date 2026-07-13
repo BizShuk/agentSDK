@@ -96,31 +96,61 @@ func TestRunThenReviewFailedEmitsCallModel(t *testing.T) {
 	assert.Equal(t, 1, scratchGetInt(out, planning.RUN_THEN_REVIEW_ITERATION))
 }
 
-func TestStubRulesDoNotPanic(t *testing.T) {
+// TestRulesReachDone verifies the three formerly-STUB rules (OneShot,
+// LearnFromFailure, ChooseAgent) can each reach a terminal DONE state when
+// driven by their Seed* helpers. Replaces the old TestStubRulesDoNotPanic,
+// which asserted "stub must emit DONE on the first NextStep" — no longer
+// valid now that these are real phase FSMs whose first step emits CALL_MODEL.
+//
+// Each rule is driven with a small loop bounded by maxSteps so a broken FSM
+// fails loudly instead of hanging the suite.
+func TestRulesReachDone(t *testing.T) {
 	tests := []struct {
 		name string
+		seed func(s *core.State)
 		rule core.DecisionRule
-		kind core.ReasoningStyle
 	}{
-		{"one_shot", planning.NewOneShotReasoning(), core.REASON_ONE_SHOT},
-		{"learn_from_failure", planning.NewLearnFromFailure(), core.REASON_LEARN_FROM_FAILURE},
-		{"choose_agent", planning.NewChooseAgent(), core.REASON_PICK_AGENT},
+		{
+			name: "one_shot",
+			seed: func(s *core.State) { /* default phase = think */ },
+			rule: planning.NewOneShotReasoning(),
+		},
+		{
+			name: "learn_from_failure",
+			seed: func(s *core.State) {
+				// Drive act → reflect → retry, then a passing critique ends it.
+				planning.SeedLFFCritiquePassed(s, "looks good")
+			},
+			rule: planning.NewLearnFromFailure(),
+		},
+		{
+			name: "choose_agent",
+			seed: func(s *core.State) {
+				planning.SeedAgents(s, []string{"router-agent"})
+			},
+			rule: planning.NewChooseAgent(),
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.kind, tc.rule.Kind())
-			s := core.State{ReasoningStyle: tc.kind}
-			out, instrs := tc.rule.NextStep(s)
-			assert.NotEmpty(t, instrs, "stub must return at least one instruction")
-			// every stub must include a DONE so the run can terminate
-			hasDone := false
-			for _, ins := range instrs {
-				if ins.Kind == core.INSTRUCTION_DONE {
-					hasDone = true
+			s := core.State{ReasoningStyle: tc.rule.Kind()}
+			tc.seed(&s)
+
+			const MAX_STEPS = 10
+			reachedDone := false
+			for i := 0; i < MAX_STEPS; i++ {
+				out, instrs := tc.rule.NextStep(s)
+				for _, ins := range instrs {
+					if ins.Kind == core.INSTRUCTION_DONE {
+						reachedDone = true
+					}
 				}
+				if reachedDone {
+					break
+				}
+				s = out
 			}
-			assert.True(t, hasDone, "stub must emit DONE")
-			_ = out
+			assert.Truef(t, reachedDone, "rule %s never reached DONE within %d steps", tc.name, MAX_STEPS)
 		})
 	}
 }
@@ -151,4 +181,209 @@ func scratchGetInt(s core.State, key string) int {
 		return x
 	}
 	return 0
+}
+
+// scratchGetStringSlice reads a []string from working memory for assertions.
+func scratchGetStringSlice(s core.State, key string) []string {
+	if s.WorkingMemory == nil {
+		return nil
+	}
+	v, ok := s.WorkingMemory[key]
+	if !ok {
+		return nil
+	}
+	x, ok := v.([]string)
+	if !ok {
+		return nil
+	}
+	return x
+}
+
+// --- OneShotReasoning ---
+
+func TestOneShotThinkEmitsCallModel(t *testing.T) {
+	p := planning.NewOneShotReasoning()
+	s := core.State{ReasoningStyle: core.REASON_ONE_SHOT}
+	out, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
+	assert.Equal(t, planning.ONE_SHOT_DONE, scratchGet(out, planning.ONE_SHOT_PHASE))
+}
+
+func TestOneShotDoneEmitsDone(t *testing.T) {
+	p := planning.NewOneShotReasoning()
+	s := core.State{ReasoningStyle: core.REASON_ONE_SHOT}
+	planning.SeedOneShotDone(&s)
+	_, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_DONE, instrs[0].Kind)
+}
+
+func TestOneShotUnknownPhaseEmitsDone(t *testing.T) {
+	p := planning.NewOneShotReasoning()
+	s := core.State{
+		ReasoningStyle: core.REASON_ONE_SHOT,
+		WorkingMemory:  map[string]any{planning.ONE_SHOT_PHASE: "garbage"},
+	}
+	_, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_DONE, instrs[0].Kind)
+}
+
+// --- LearnFromFailure ---
+
+func TestLFFActEmitsCallModel(t *testing.T) {
+	p := planning.NewLearnFromFailure()
+	s := core.State{ReasoningStyle: core.REASON_LEARN_FROM_FAILURE}
+	out, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
+	assert.Equal(t, planning.LFF_REFLECT, scratchGet(out, planning.LEARN_FROM_FAILURE_PHASE))
+}
+
+func TestLFFReflectEmitsCallModel(t *testing.T) {
+	p := planning.NewLearnFromFailure()
+	s := core.State{
+		ReasoningStyle: core.REASON_LEARN_FROM_FAILURE,
+		WorkingMemory:  map[string]any{planning.LEARN_FROM_FAILURE_PHASE: planning.LFF_REFLECT},
+	}
+	out, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
+	assert.Equal(t, planning.LFF_RETRY, scratchGet(out, planning.LEARN_FROM_FAILURE_PHASE))
+}
+
+func TestLFFRetryPassedEmitsDone(t *testing.T) {
+	p := planning.NewLearnFromFailure()
+	s := core.State{ReasoningStyle: core.REASON_LEARN_FROM_FAILURE}
+	planning.SeedLFFCritiquePassed(&s, "looks good")
+	out, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_DONE, instrs[0].Kind)
+	assert.Equal(t, planning.LFF_DONE, scratchGet(out, planning.LEARN_FROM_FAILURE_PHASE))
+}
+
+func TestLFFRetryFailedEmitsCallModel(t *testing.T) {
+	p := planning.NewLearnFromFailure()
+	s := core.State{ReasoningStyle: core.REASON_LEARN_FROM_FAILURE}
+	planning.SeedLFFCritiqueFailed(&s, "step missing precondition")
+	out, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
+	assert.Equal(t, 1, scratchGetInt(out, planning.LEARN_FROM_FAILURE_ITERATION))
+	// Reflection appended from the critique text.
+	reflections := scratchGetStringSlice(out, planning.LEARN_FROM_FAILURE_REFLECTIONS)
+	assert.Contains(t, reflections, "step missing precondition")
+}
+
+func TestLFFReflectionAccumulates(t *testing.T) {
+	s := core.State{
+		ReasoningStyle: core.REASON_LEARN_FROM_FAILURE,
+		WorkingMemory: map[string]any{
+			planning.LEARN_FROM_FAILURE_REFLECTIONS: []string{"old"},
+		},
+	}
+	planning.SeedLFFReflection(&s, "new")
+	got := scratchGetStringSlice(s, planning.LEARN_FROM_FAILURE_REFLECTIONS)
+	assert.Equal(t, []string{"old", "new"}, got)
+}
+
+// --- ChooseAgent ---
+
+func TestChooseAgentSelectWithListEmitsNotify(t *testing.T) {
+	p := planning.NewChooseAgent()
+	s := core.State{ReasoningStyle: core.REASON_PICK_AGENT}
+	planning.SeedAgents(&s, []string{"a", "b"})
+	out, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_NOTIFY, instrs[0].Kind)
+	require.NotNil(t, instrs[0].Notify)
+	assert.Equal(t, "info", instrs[0].Notify.Level)
+	assert.Contains(t, instrs[0].Notify.Message, "a")
+	assert.Equal(t, "a", scratchGet(out, planning.CHOOSE_AGENT_CHOSEN))
+	assert.Equal(t, planning.CA_DELEGATE, scratchGet(out, planning.CHOOSE_AGENT_PHASE))
+}
+
+func TestChooseAgentSelectEmptyEmitsCallModel(t *testing.T) {
+	p := planning.NewChooseAgent()
+	s := core.State{ReasoningStyle: core.REASON_PICK_AGENT}
+	out, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
+	assert.Equal(t, planning.CA_DELEGATE, scratchGet(out, planning.CHOOSE_AGENT_PHASE))
+}
+
+func TestChooseAgentDelegateEmitsCallModelWithSystemMsg(t *testing.T) {
+	p := planning.NewChooseAgent()
+	s := core.State{
+		ReasoningStyle: core.REASON_PICK_AGENT,
+		WorkingMemory: map[string]any{
+			planning.CHOOSE_AGENT_PHASE:  planning.CA_DELEGATE,
+			planning.CHOOSE_AGENT_CHOSEN: "a",
+		},
+		Messages: []core.Message{{
+			Role: core.ROLE_USER,
+			Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "do the thing"}},
+		}},
+	}
+	_, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
+	require.NotNil(t, instrs[0].CallModel)
+	msgs := instrs[0].CallModel.Messages
+	require.NotEmpty(t, msgs)
+	assert.Equal(t, core.ROLE_SYSTEM, msgs[0].Role)
+	require.NotEmpty(t, msgs[0].Parts)
+	assert.Contains(t, msgs[0].Parts[0].Text, "agent a")
+}
+
+func TestChooseAgentDoneEmitsDone(t *testing.T) {
+	p := planning.NewChooseAgent()
+	s := core.State{
+		ReasoningStyle: core.REASON_PICK_AGENT,
+		WorkingMemory:  map[string]any{planning.CHOOSE_AGENT_PHASE: planning.CA_DONE},
+	}
+	_, instrs := p.NextStep(s)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_DONE, instrs[0].Kind)
+}
+
+// --- helpers ---
+
+func TestLatestAssistantTextFindsLast(t *testing.T) {
+	s := core.State{Messages: []core.Message{
+		{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "u"}}},
+		{Role: core.ROLE_ASSISTANT, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "a1"}}},
+		{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "u2"}}},
+		{Role: core.ROLE_ASSISTANT, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "a2"}}},
+	}}
+	// latestAssistantText is unexported; assert indirectly by driving LFF retry,
+	// which reads it. Seed a critique and confirm the rule sees "a2".
+	p := planning.NewLearnFromFailure()
+	// Build state in retry phase with the messages above.
+	st := core.State{
+		ReasoningStyle: core.REASON_LEARN_FROM_FAILURE,
+		WorkingMemory:  map[string]any{planning.LEARN_FROM_FAILURE_PHASE: planning.LFF_RETRY},
+		Messages:       s.Messages,
+	}
+	// "a2" does not start with "OK:" → retry branch: emits CALL_MODEL, appends reflection.
+	out, instrs := p.NextStep(st)
+	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
+	assert.Contains(t, scratchGetStringSlice(out, planning.LEARN_FROM_FAILURE_REFLECTIONS), "a2")
+}
+
+func TestLatestAssistantTextEmpty(t *testing.T) {
+	p := planning.NewLearnFromFailure()
+	// retry phase with no assistant message → conservative DONE.
+	st := core.State{
+		ReasoningStyle: core.REASON_LEARN_FROM_FAILURE,
+		WorkingMemory:  map[string]any{planning.LEARN_FROM_FAILURE_PHASE: planning.LFF_RETRY},
+		Messages: []core.Message{{
+			Role: core.ROLE_USER,
+			Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "u"}},
+		}},
+	}
+	_, instrs := p.NextStep(st)
+	require.Len(t, instrs, 1)
+	assert.Equal(t, core.INSTRUCTION_DONE, instrs[0].Kind)
 }
