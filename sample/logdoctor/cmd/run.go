@@ -16,6 +16,7 @@ import (
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor/core"
 	"github.com/bizshuk/agentsdk/sample/logdoctor/internal/fake"
 	"github.com/bizshuk/agentsdk/sample/logdoctor/tool"
+	builtin "github.com/bizshuk/agentsdk/tool"
 	"github.com/spf13/cobra"
 )
 
@@ -73,7 +74,15 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 	maxTurns, _ := cmd.Root().PersistentFlags().GetInt("max-turns")
 
 	// Tool registry.
+	// 內建工具 (Read/Write/Edit/Bash/Glob/Grep) 透過 RegisterDefaults 一次註冊,
+	// 與既有 read_log_tail / notify 並存。Write/Edit/Bash 需要 non-nil Policy。
 	reg := action.NewRegistry()
+	if _, err := builtin.RegisterDefaults(reg, builtin.Options{
+		Policy:     action.DefaultPolicy(),
+		WorkingDir: ".",
+	}); err != nil {
+		return fmt.Errorf("register built-in tools: %w", err)
+	}
 	rdt := tool.NewReadLogTail(listener)
 	reg.Register(rdt)
 	nt := tool.NewNotify(cmd.OutOrStdout())
@@ -87,10 +96,10 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 	loop := runtime.NewEngine(step, provider, reg)
 	// M4: wire the full security chain (sandbox + approval + spotlight +
 	// sanitizer). approval uses the L0-L4 enterprise grid so propose_fix
-	// (HIGH risk) triggers a REQUEST_APPROVAL at L2. sandbox is disabled
-	// here (nil) because the sample's tools do not take a "path" arg —
-	// the fixture path is resolved at the listener layer, not via args.
-	loop.Middleware = config.SecureMiddleware(nil, action.DefaultApprovalPolicy{})
+	// (HIGH risk) triggers a REQUEST_APPROVAL at L2. sandbox policy must
+	// be non-nil so the built-in Write/Edit/Bash tools can path-check
+	// their args — matches the Policy passed to RegisterDefaults above.
+	loop.Middleware = config.SecureMiddleware(action.DefaultPolicy(), action.DefaultApprovalPolicy{})
 	loop.Emitter = func(eff core.Instruction) {
 		writeEnvelope(cmd, eff)
 	}

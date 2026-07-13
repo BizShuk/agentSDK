@@ -2,6 +2,13 @@
 
 ## Pending
 
+- [ ] `perception/` 去留(刪除套件;M3 carry-over,見 `CLAUDE.md`「perception 去留」段)
+
+## M5 — sample wiring 收尾 (完成)
+
+- [x] `sample/logdoctor` 接入 `tool.RegisterDefaults`(8 工具:6 內建 + read_log_tail + notify;SecureMiddleware policy 由 nil 改為 `action.DefaultPolicy()`)
+- [x] `sample/file-agent` 建立(純 6 內建工具,以 greet-agent 範本;`go.work` 加 `./sample/file-agent`)
+
 ## Archive
 
 - [x] `sample/greet-agent` 接入 6 內建工具 + `SecureMiddleware` @2026-07-11_17:34:51 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)

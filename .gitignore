@@ -395,6 +395,13 @@ temp/
 scratch/
 samples/
 sample/
+# 專案的 sample/ 是正式 sample 程式碼(logdoctor / greet-agent / file-agent),
+# 非「範例雜物」,故 negate 回來讓 git 追蹤。
+!sample/
+!sample/**
+# 但 sample 各 app 下的 data/ 是執行期 runtime data(states/wal 快照),
+# 不進版控 — 對齊 CLAUDE.md「runtime data → data/」慣例。
+sample/**/data/
 example/
 docs/_build/
 docs/build/
