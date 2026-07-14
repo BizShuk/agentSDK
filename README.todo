@@ -4,6 +4,23 @@
 
 - [ ] `perception/` 去留(刪除套件;M3 carry-over,見 `CLAUDE.md`「perception 去留」段)
 
+## M6 — Provider 認證 (`auth/`)
+
+- [x] `auth/` 機制層:`Credential` / `Authenticator` / `VerifyResult` / `Options`(純 stdlib,不認識任何 provider)
+- [x] `auth/oauth.go`:PKCE S256 + 可選 client_secret + state CSRF + single-flight refresh + 429 Retry-After 退避
+- [x] `auth/device.go`:Device Authorization Grant(RFC 8628)+ OIDC discovery(https-only 驗證)
+- [x] `auth/apikey.go`:`APIKeySpec` + 泛用 `APIKeyAuth`(env chain + models 端點驗證)
+- [x] `auth/store.go`:FileStore(0700 目錄 / 0600 檔 / atomic temp+rename)
+- [x] `auth/provider/{anthropic,openai,google,xai,antigravity,vertex}`:6 個 provider 包,只 import `auth`
+- [x] `auth/provider/provider.go`:`ROUTES` registry + `New` / `Login` / `For` / `IDs`(9 個 provider id)
+- [x] `auth/authtest/`:共用測試假 provider(給 `auth` 與各 provider 包)
+- [x] `cmd/auth/`:單一 `login --provider <id>` + list / verify / refresh / logout
+- [x] e2e:假 provider(models 端點 + 驗簽的 Google STS)跑通 login → list → verify → refresh → logout
+- [x] e2e:xAI device flow 對真實 `auth.x.ai` 跑通 OIDC discovery + device code 發放
+- [ ] 讓 `runtime` / `provider/*` 直接吃 `auth.Credential`(目前 provider 仍各自從 env 讀 API key,
+      OAuth token 尚未接進 `ModelProvider`;Anthropic OAuth 需 `Authorization: Bearer` + `anthropic-beta` 標頭)
+- [ ] 到期自動 refresh:`ModelProvider` 呼叫前檢查 `Credential.Expired()` 並自動換發
+
 ## M5 — sample wiring 收尾 (完成)
 
 - [x] `sample/logdoctor` 接入 `tool.RegisterDefaults`(8 工具:6 內建 + read_log_tail + notify;SecureMiddleware policy 由 nil 改為 `action.DefaultPolicy()`)

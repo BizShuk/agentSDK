@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/bizshuk/agentsdk/auth"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory/filestore"
 	gosdkconfig "github.com/bizshuk/gosdk/config"
@@ -21,10 +22,12 @@ import (
 type AppConfig struct {
 	DataDir    string             // ~/.config/<appName>/data
 	LogDir     string             // ~/.config/<appName>/log
+	AuthDir    string             // ~/.config/<appName>/data/auth
 	RunID      string             // UnixNano, used as states/wal/log filename
 	LogFile    string             // <LogDir>/<RunID>.log
 	StateStore core.StateStore    // file-backed StateStore, ready to use
 	WAL        core.WriteAheadLog // file-backed WriteAheadLog, ready to use
+	AuthStore  *auth.FileStore    // provider credentials (0600 JSON files)
 }
 
 // OpenForCLI does everything a CLI sample needs in one call:
@@ -82,14 +85,44 @@ func OpenForCLI(appName string, level slog.Level) (*AppConfig, error) {
 		return nil, fmt.Errorf("config: wal: %w", err)
 	}
 
+	// 5. Provider 憑證 store (0700 目錄 / 0600 檔案)。
+	authStore, err := auth.NewFileStore(authDir(dataDir))
+	if err != nil {
+		return nil, fmt.Errorf("config: auth store: %w", err)
+	}
+
 	return &AppConfig{
 		DataDir:    dataDir,
 		LogDir:     logDir,
+		AuthDir:    authStore.Dir(),
 		RunID:      runID,
 		LogFile:    logFile,
 		StateStore: store,
 		WAL:        wal,
+		AuthStore:  authStore,
 	}, nil
+}
+
+// OpenAuthStore 只做憑證 store 的 wiring — 給不需要 StateStore / WAL / run log
+// 的 CLI (例如 auth-cli) 用,避免為了拿一個目錄而建出一整套 run 基礎設施。
+//
+// dirOverride 非空時直接用它,否則落在 ~/.config/<appName>/data/auth。
+func OpenAuthStore(appName, dirOverride string) (*auth.FileStore, error) {
+	if dirOverride != "" {
+		return auth.NewFileStore(dirOverride)
+	}
+	if appName == "" {
+		return nil, fmt.Errorf("config: appName must not be empty")
+	}
+	gosdkconfig.Default(gosdkconfig.WithAppName(appName))
+	if gosdkconfig.GetAppName() == "" {
+		return nil, fmt.Errorf("config: gosdk/config not initialised (call config.Default(config.WithAppName(%q)))", appName)
+	}
+	return auth.NewFileStore(authDir(gosdkconfig.GetAppDataDir()))
+}
+
+func authDir(dataDir string) string {
+	return filepath.Join(dataDir, "auth")
 }
 
 // MustOpenForCLI is like OpenForCLI but panics on error — for CLI entry

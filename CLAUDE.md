@@ -10,6 +10,32 @@ agentsdk/
 ├── CLAUDE.md                        # 技術脈絡 (本檔)
 ├── go.work                          # 多模組: root + sample/logdoctor
 ├── go.mod                           # module github.com/bizshuk/agentsdk
+├── main.go                          # auth-cli binary entry (package main)
+├── cmd/auth/                        # auth-cli cobra 指令樹
+│   ├── root.go                      # NewRoot() + --auth-dir / --no-browser + saveAndReport
+│   ├── login.go                     # login --provider <id> — 唯一登入入口 (id 即認證路徑)
+│   ├── list.go                      # list — 表格輸出,不印 secret
+│   ├── verify.go                    # verify [name|--all] — 對真實 provider 驗證 + 輪替後存回
+│   └── refresh.go                   # refresh <name> + logout <name>
+├── auth/                            # 機制層 (mechanism,純 stdlib,不認識任何一家 provider)
+│   ├── auth.go                      # Credential / Kind / Authenticator / VerifyResult
+│   ├── options.go                   # Options (導出,provider 套件要讀) + Option
+│   ├── oauth.go                     # OAuthClient: AuthCodeURL / Exchange / Refresh / PostToken
+│   │                                #   (可選 PKCE + 可選 client_secret + single-flight + 429 退避)
+│   ├── device.go                    # Device Authorization Grant (RFC 8628) + OIDC discovery
+│   ├── login.go                     # RunBrowserLogin / RunDeviceLogin / VerifyByRefresh / MergeOAuthToken
+│   ├── apikey.go                    # APIKeySpec + 泛用 APIKeyAuth (env chain + models 端點驗證)
+│   ├── pkce.go callback.go          # RFC 7636 S256;本機 callback server
+│   ├── browser.go jwt.go store.go   # 開瀏覽器;JWT claims (不驗簽);FileStore (0700/0600 + atomic)
+│   ├── authtest/                    # 測試用假 provider 與 helper (給 auth 與各 provider 套件共用)
+│   └── provider/                    # registry (package provider) — import 下列子包,無循環
+│       ├── provider.go              #   ROUTES / New(id) / Login(ctx,id) / For(cred) / IDs()
+│       ├── anthropic/               #   api key (x-api-key) + oauth2 PKCE (claude.ai)
+│       ├── openai/                  #   api key (bearer) + oauth2 PKCE (auth.openai.com, id_token claims)
+│       ├── google/                  #   api key (x-goog-api-key, Gemini)
+│       ├── xai/                     #   api key (bearer) + device code RFC 8628 (OIDC discovery)
+│       ├── antigravity/             #   oauth2 (accounts.google.com, client_secret 無 PKCE, userinfo)
+│       └── vertex/                  #   service account: RS256 JWT assertion → Google STS
 ├── core/                            # 純狀態機 (stdlib only, 連 gosdk 都不 import)
 │   ├── state.go                     # State, RunStatus, Budget, AutonomyLevel L0-L4
 │   ├── input.go                     # Input, InputKind, Percept, ModelResult, ToolResult
@@ -83,6 +109,14 @@ agentsdk/
 - **Middleware 鏈組合 (M2)**:retry → timeout → budget → loopguard → base dispatch。state 在每一層都會被 mutate,但因為 Go map 是 reference type,scratch 變更會自動傳遞給下一層與下個 iteration。loopguard state 透過 scratch[loopguard.state] 持久化。
 - **scratch 是 pattern 與 middleware 的通訊介面**:runtime 在 Step 前 preStep 寫入 (例如 `react.last_call_id`),pattern 透過 Decide 讀 scratch 決定 effect,middleware 把 bookkeeping 寫回 scratch 跨迭代累積。
 - **WAL Replay 語意**:`Replay(runID, sinceSeq)` 回傳所有 `input.Seq > sinceSeq` 的 Inputs(State.LastInputSeq 是「已被跑過的最大 Seq」)。Caller 不重發模型呼叫,因為 WAL 已經包含原來的 ModelResult / ToolResult。
+- **`auth/` 分兩層**:`auth/` 只有機制 (Credential / OAuthClient / device flow / PKCE / callback / FileStore),不認識任何一家 provider;`auth/provider/<name>/` 一家一包,只 import `auth`;`auth/provider` 本身是 registry,import 所有子包。依賴單向,無循環。代價是 `auth.Options` 必須導出 (provider 套件住在別的套件,要讀得到它)。
+- **`provider.ROUTES` 是唯一真相來源**:provider id → (provider, kind, 建構子)。`New` / `Login` / `For` / CLI 的旗標說明全部從它推導,新增一家 provider 只要加一列。測試 `TestEveryRouteHasAnAuthenticator` 確保表格不會與實作脫節。
+- **provider id 即認證路徑**:`--provider anthropic` 是 API key,`--provider anthropic_oauth` 是瀏覽器流程 — 認證方式編碼在 id 裡,不另設 `--kind`。OAuth 的 id 帶 `_oauth` 後綴,與憑證檔名的後綴一致 (`anthropic-<email>_oauth.json`)。同一個 email 可以同時有 API key 與 OAuth 憑證,後綴讓兩者不互相覆蓋。
+- **三種 OAuth 變體共用一個 `OAuthClient`**:差異用設定表達 — `UsePKCE` (public client 開,Google installed-app 關)、`ClientSecret` (只有 antigravity 有)、`Encoding` (Anthropic 收 JSON,其餘 form)、`SendState` (只有 Anthropic 開)。device flow (xAI) 另走 `RunDeviceLogin`,不開本機埠。
+- **`SendState` 預設關**:token exchange 的 body 不帶 `state`。CSRF 比對在 callback 收回來的當下就做完了 (`RunBrowserLogin` 比對後才換 token),token 端點不需要它;OpenAI 更會對多出來的 state 直接回 `400 unknown_parameter`。只有 Anthropic 要求 exchange 帶 state。這條是真實 provider 打回來的教訓,別「順手統一」把它加回所有 provider。
+- **Verify 是真的打網路,而且誠實回報做了什麼**:`models_endpoint` (api_key,無副作用) / `userinfo_endpoint` (antigravity,無副作用) / `token_refresh` (其餘 oauth,provider 可能輪替 token) / `sts_exchange` (vertex)。會輪替 token 的那幾條,`VerifyResult.Credential` 會帶回新憑證,**呼叫端必須存回磁碟** (OpenAI 會讓舊 refresh token 立刻失效)。
+- **Login 內建驗證**:所有流程都在存檔前先對 provider 驗一次,不讓一把打不通的憑證安靜落地、把失敗延後到第一次推論才爆。
+- **`Credential.BaseURL`**:對 gateway/proxy 發的 API key 會把 base URL 一起存進憑證,後續 `verify` 必須打回同一個端點,而不是 provider 官方端點。
 
 ## 模組對應 (Module Mapping)
 
@@ -92,7 +126,10 @@ agentsdk/
 | 感知 | `agentsdk/perception` | `perception.Source`, `perception.Multi` |
 | 規劃 | `agentsdk/planning` | `planning.NewReAct` 等 6 個 constructor |
 | 行動 | `agentsdk/action` | `action.NewRegistry`, `action.NewTypedTool` |
-| 配置 | `agentsdk/config` | `config.OpenForCLI`, `config.MustOpenForCLI` → `AppConfig` |
+| 認證機制 | `agentsdk/auth` | `auth.OAuthClient`, `auth.RunBrowserLogin` / `RunDeviceLogin`, `auth.NewAPIKey(spec)`, `auth.NewFileStore` |
+| 認證 provider | `agentsdk/auth/provider` | `provider.Login(ctx, id)`, `provider.New(id)`, `provider.For(cred)`, `provider.IDs()` |
+| 認證 CLI | `agentsdk/cmd/auth` | `auth.NewRoot` → `main.go` (binary `auth-cli`) |
+| 配置 | `agentsdk/config` | `config.OpenForCLI`, `config.MustOpenForCLI` → `AppConfig`;`config.OpenAuthStore` |
 | Shell | `agentsdk/runtime` | `runtime.NewEngine`, `Engine.Run` / `Engine.Resume` |
 | Sample | `agentsdk/sample/logdoctor` | `cmd.RegisterRun` → `cobra.Command.Execute` |
 | Test fixtures | `agentsdk/internal/testutil` | (production code MUST NOT import) |
@@ -130,6 +167,33 @@ cd sample/logdoctor
 go test ./... -count=1 -timeout=30s
 ```
 
+### auth-cli (M6)
+
+```bash
+# 單一 login 入口: --provider 的 id 就是整條認證路徑 (不需要 --kind)
+go run . login --provider anthropic                  # api key,讀 ANTHROPIC_API_KEY
+go run . login --provider anthropic_oauth            # oauth2 + pkce,本機 :54545 收 callback
+go run . login --provider openai_oauth --no-browser  # 無頭機器: 印 URL,貼回 code
+go run . login --provider xai_oauth                  # device code (RFC 8628),顯示 user code + 輪詢
+go run . login --provider antigravity_oauth          # google oauth (client secret,無 PKCE)
+go run . login --provider google --key AIza...       # api key
+go run . login --provider openai --api-base http://localhost:8317   # 對 gateway 發的金鑰
+go run . login --provider vertex --sa-file sa.json --location us-central1
+
+go run . list                                       # 表格輸出,不印 secret
+go run . verify --all                               # 對真實 provider 驗證 (輪替後的憑證會存回)
+go run . refresh <name>                             # api_key 會回 ErrRefreshUnsupported
+go run . logout <name>
+```
+
+`ROUTES` (`auth/provider/provider.go`) 是 provider id 的唯一真相來源,目前 9 個 id:
+`anthropic` / `anthropic_oauth` / `openai` / `openai_oauth` / `google` / `xai` / `xai_oauth` /
+`antigravity_oauth` / `vertex`。
+
+憑證預設落在 `~/.config/agentsdk/data/auth/<provider>-<account>.json`(0700 目錄 / 0600 檔),
+可用 `--auth-dir` 覆寫。離線 e2e 的做法: 起一個假 provider,SA JSON 的 `token_uri` 指向它,
+`--api-base` 指向它的 models 端點。
+
 ### E2E (M1)
 
 ```bash
@@ -148,6 +212,7 @@ go run . --fake --max-turns=10 run --once --fixture testdata/error.log
 | M3 | 工具生態 + 執行期安全 | ✅ 完成 | `invopop/jsonschema` 反射 / sandbox allow-deny / spotlight + sanitizer / MCP discover / `runtime/m3_e2e_test.go` runtime 層 e2e 驗證 sanitizer 命中 + spotlight 包覆 + transcript 同步 / `perception/` 去留決策見下方「perception 去留」段 |
 | M4 | 架構解耦 + HITL + 三 provider | ✅ 完成 | mid-run approval State round-trip / `config.SecureMiddleware` 含 approval + spotlight + sanitizer 完整鏈 / `consumeApprovedPendingCall` 讓 `SubmitHumanDecision` 與 `Resume` 真正消費 out-of-band decision / `runtime/m4_hitl_e2e_test.go` 跑通 approve + reject 故事 / 三 provider mock 測試齊(anthropic httptest / google 內部 fixture)/ `--provider=anthropic\|openaicompat\|google` flag 接通 sample |
 | M5 | 內建工具 + sample wiring helper | ✅ 完成 | `tool/` 套件 6 工具(Read/Write/Edit/Bash/Glob/Grep)+ `RegisterDefaults` 一次註冊 / `action.Policy` sandbox re-check / Risk 對應 HITL(Write/Edit/Bash HIGH 觸發 ApprovalGate)/ `config.MustOpenForCLI` 樣板削減 / `sample/greet-agent` 接入 6 內建工具 + SecureMiddleware |
+| M6 | Provider 認證 (`auth/`) | ✅ 完成 | 機制層 (`auth/`) + 6 個 provider 包 + registry,9 個 provider id / 4 種認證機制:api key、OAuth2 authorization-code (PKCE 或 client_secret)、device code (RFC 8628 + OIDC discovery)、service account (RS256 JWT → STS) / PKCE S256 + state CSRF 檢查 + 本機 callback server / FileStore 0700 目錄 + 0600 檔 + atomic write / refresh single-flight + 429 Retry-After 退避 / `verify` 對真實 provider 驗證並存回輪替後的憑證 / e2e: 假 provider(models 端點 + 驗簽的 Google STS)跑通 login → list → verify → refresh → logout;xAI device flow 對真實 `auth.x.ai` 跑通 discovery + device code |
 
 詳細規格見 `docs/specs/`(M3 `2026-07-04-tool-ecosystem-and-runtime-security.md`、M4 `2026-07-04-architecture-decoupling-hitl-and-providers.md`、M5 `2026-07-07-m5-built-in-tools.md`、wiring helper `2026-07-07-appname-wiring-helper.md`)。歷史計畫剩 `plans/plan-only-and-plan-breezy-pike.md` 主綱與已被取代的 `docs/specs/` 對應;`plans/` 內 2026-07-07-m3 / 2026-07-07-m4 plan 已併入對應 spec 並刪除。
 
