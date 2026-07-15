@@ -42,8 +42,10 @@ flowchart TD
 
 1. **FileStore 優先**:
    - 轉接器初始化 `auth.NewFileStore(cfg.AuthDir)`。
-   - 遍歷並讀取所有憑證，篩選出 `cred.Provider` 與目標提供者相符的憑證（例如 `openai`、`anthropic`、`xai`）。
-   - 若有多個憑證，選用第一個可用的憑證。
+   - **Active 選擇器**: 讀取 `active.json`。該檔案以 JSON 格式記錄每個提供者當前選用的主動憑證名稱（例如 `{"anthropic": "anthropic-user1@example.com_oauth"}`）。
+   - 當有多個憑證時：
+     - 若 `active.json` 中有對應的憑證名稱且該憑證檔案存在，則優先選用該憑證。
+     - 若 `active.json` 未指定或指定的憑證不存在，則預設選用該提供者在 FileStore 中列出的第一個憑證。
    - 在發送請求前，呼叫 `cred.Expired(DEFAULT_EXPIRY_SKEW)`。若過期或即將過期，使用 `provider.For(cred)` 建立對應的 Authenticator，呼叫其 `Refresh(ctx, cred)` 換發新憑證並利用 `store.Save(newCred)` 存回磁碟。
 2. **環境變數 Fallback**:
    - 若 FileStore 中無對應憑證，則嘗試從環境變數取得 API Key 與預設端點：
@@ -51,6 +53,21 @@ flowchart TD
      - **OpenAI**: `OPENAI_API_KEY` (端點 `https://api.openai.com/v1`)
      - **xAI**: `XAI_API_KEY` (端點 `https://api.x.ai/v1`)
      - **MiniMax**: `MINIMAX_API_KEY` (端點 `https://api.minimax.io/anthropic` 或 `https://api.minimax.io/v1`)
+
+---
+
+## 3.5 憑證切換指令 (The `use` Command)
+
+為了支援多憑證切換，新增 `use` 子指令：
+- **用法**: `agentsdk use <credential-name>`
+- **行為**:
+  1. 檢查輸入的 `<credential-name>` 是否存在於 `FileStore` 中。
+  2. 若不存在，印出錯誤訊息。
+  3. 若存在，解析其對應的 `provider` (如 `anthropic`, `openai`)。
+  4. 讀取現有的 `active.json`，更新該 `provider` 的映射為新的 `<credential-name>`。
+  5. 寫回 `active.json`。
+  6. 印出成功訊息：`Active credential for provider 'anthropic' set to 'anthropic-user1@example.com_oauth'`。
+
 
 ---
 

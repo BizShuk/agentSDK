@@ -63,6 +63,7 @@ so a stored credential is one that was proven to work.`),
 		newVerifyCmd(flags),
 		newRefreshCmd(flags),
 		newLogoutCmd(flags),
+		newUseCmd(flags),
 		proxyCmd,
 		videoCmd,
 	)

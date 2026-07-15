@@ -1,0 +1,33 @@
+{
+  "server": {
+    "host": "",
+    "port": 8317
+  },
+  "auth-dir": "~/.proxy",
+  "api-keys": [
+    "your-api-key-here"
+  ],
+  "body-limit-mb": 200,
+  "timeouts": {
+    "messages-ms": 120000,
+    "stream-messages-ms": 600000,
+    "count-tokens-ms": 30000
+  },
+  "stats": {
+    "enabled": true
+  },
+  "debug": "off",
+  "cloaking": {
+    "cli-version": "2.1.88",
+    "entrypoint": "cli",
+    "codex": {
+      "originator": "codex_cli_rs",
+      "cli-version": "0.125.0"
+    },
+    "cursor": {
+      "client-version": "2.3.41",
+      "client-type": "ide",
+      "api-base-url": "https://api2.cursor.sh"
+    }
+  }
+}
