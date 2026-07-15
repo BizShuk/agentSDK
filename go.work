@@ -9,4 +9,7 @@ use (
 	./sample/file-agent
 	./sample/greet-agent
 	./sample/logdoctor
+	./sample/memory-demo
+	./sample/middleware-demo
+	./sample/strategy-demo
 )
