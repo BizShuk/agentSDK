@@ -52,11 +52,11 @@ stored credential is one that was proven to work.
   xai_oauth           device code      user code + polling (no local port)
   antigravity_oauth   oauth2           browser (accounts.google.com)
   vertex              service account  --sa-file (RS256 JWT -> Google STS)`),
-		Example: `  auth-cli login --provider anthropic
-  auth-cli login --provider anthropic_oauth
-  auth-cli login --provider xai_oauth
-  auth-cli login --provider google --key AIza...
-  auth-cli login --provider vertex --sa-file sa.json --location us-central1`,
+		Example: `  agentsdk login --provider anthropic
+  agentsdk login --provider anthropic_oauth
+  agentsdk login --provider xai_oauth
+  agentsdk login --provider google --key AIza...
+  agentsdk login --provider vertex --sa-file sa.json --location us-central1`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			opts, err := loginOptions(root, id, saFile, key, apiBase, location)
