@@ -41,12 +41,12 @@ func Main(a Agent, opts ...Option) {
 // The sequence is fixed, and the order is the point — each step establishes
 // what the next one may assume:
 //
-//	1. config   — open ~/.config/<name>, install the run logger
-//	2. preflight— validate credentials and dependencies (optional)
-//	3. deadline — bound total wall-clock time
-//	4. bootstrap— the agent assembles its Engine and opening State
-//	5. run      — drive the loop under panic recovery
-//	6. complete — hand the final State back to the agent (optional)
+//  1. config   — open ~/.config/<name>, install the run logger
+//  2. preflight— validate credentials and dependencies (optional)
+//  3. deadline — bound total wall-clock time
+//  4. bootstrap— the agent assembles its Engine and opening State
+//  5. run      — drive the loop under panic recovery
+//  6. complete — hand the final State back to the agent (optional)
 func Run(ctx context.Context, a Agent, opts ...Option) int {
 	o := defaultOptions()
 	for _, opt := range opts {
@@ -55,8 +55,7 @@ func Run(ctx context.Context, a Agent, opts ...Option) int {
 
 	name := a.Name()
 	if name == "" {
-		slog.Error("app: Agent.Name must not be empty")
-		return EXIT_ERROR
+		name = "agentSDK"
 	}
 
 	// 1. Config. Opens the app dirs, generates the run ID, wires the

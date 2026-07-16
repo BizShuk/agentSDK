@@ -67,7 +67,7 @@ func LoadProxyConfig() (*ProxyConfig, error) {
 func setProxyDefaults() {
 	viper.SetDefault("server.host", "")
 	viper.SetDefault("server.port", 8317)
-	viper.SetDefault("auth-dir", "~/.proxy")
+	viper.SetDefault("auth-dir", "")
 	viper.SetDefault("body-limit-mb", 200)
 	viper.SetDefault("timeouts.messages-ms", 120000)
 	viper.SetDefault("timeouts.stream-messages-ms", 600000)
@@ -93,7 +93,7 @@ func (c *ProxyConfig) ensureAPIKey() error {
 
 func resolveAuthDir(dir string) string {
 	if dir == "" {
-		dir = "~/.proxy"
+		return filepath.Join(gosdkconfig.GetAppDataDir(), "auth")
 	}
 	if strings.HasPrefix(dir, "~") {
 		home, _ := os.UserHomeDir()

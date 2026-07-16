@@ -1,0 +1,3 @@
+[submodule "tmp/auth2api"]
+	path = tmp/auth2api
+	url = https://github.com/AmazingAng/auth2api
