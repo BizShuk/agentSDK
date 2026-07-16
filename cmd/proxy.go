@@ -28,5 +28,9 @@ func runProxy() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	return proxy.New(cfg).Run(ctx)
+	server, err := proxy.New(cfg)
+	if err != nil {
+		return fmt.Errorf("create proxy server: %w", err)
+	}
+	return server.Run(ctx)
 }
