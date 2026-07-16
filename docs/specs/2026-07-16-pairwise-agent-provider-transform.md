@@ -129,7 +129,15 @@ type ProviderProfile struct {
 | `openai-codex-oauth` | Responses | Responses | `/codex/responses` |
 | `xai` | Responses、Chat | Responses | `/v1/responses`、`/v1/chat/completions` |
 
-Provider normalizer 只處理 provider-specific 要求，例如 Codex 的 `store=false`、endpoint、必要 headers，或 xAI format-specific tools。它不負責 Anthropic ↔ OpenAI 的內容語意轉換。
+Provider normalizer 只處理 provider-specific 要求，例如 Codex 的 `store=false`、endpoint、必要 headers，或 xAI format-specific tools。它不負責 Anthropic ↔ OpenAI 的內容語意轉換。Codex `/codex/responses` upstream 固定要求 `stream=true`；若 client 要 non-stream，normalizer 必須標記 `BridgeToNonStream`，handler 將完整 upstream SSE 經 pair stream transform 後收斂成 source-format JSON，不得把 SSE 直接回給 non-stream client。
+
+```go
+type NormalizedRequest struct {
+	Body              []byte
+	UpstreamStream    bool
+	BridgeToNonStream bool
+}
+```
 
 ### 5.3 Model routing
 
@@ -177,6 +185,9 @@ type Pair struct {
 	Response  ResponseTransform
 	NewStream StreamTransformFactory
 }
+
+type RequestTransform func(context.Context, protocol.RequestEnvelope) (protocol.TransformResult, error)
+type ResponseTransform func(context.Context, protocol.ResponseEnvelope) (protocol.TransformResult, error)
 ```
 
 Registry 由 composition root 明確建立，不使用 package `init()` 隱式註冊：
@@ -246,7 +257,7 @@ Transform 不得 silent drop 欄位：
 | 可安全降級 | 轉換並記錄 warning/loss |
 | 無法安全表達 | 回 `400 unsupported_feature` |
 
-`Warnings` 與 `Losses` 保存在本次 exchange context，輸出不含 prompt 內容的結構化 log 與 metrics；不額外改寫公開 API response schema。
+`Warnings` 與 `Losses` 在本次 exchange 執行期間由 handler 交給 observer，輸出不含 prompt 內容的結構化 log 與 metrics；不額外改寫公開 API response schema。
 
 必要規則：
 
@@ -264,7 +275,10 @@ Transform 不得 silent drop 欄位：
 ```text
 Upstream response
 ├── 2xx
-│   └── pair response transform target → source
+│   ├── normal JSON → pair response transform target → source
+│   └── forced upstream SSE for non-stream client
+│       → pair stream transform target → source SSE
+│       → source stream collector → source JSON
 └── non-2xx
     └── provider error decode → ProxyError → source error encode
 ```
@@ -275,7 +289,8 @@ Upstream response
 type Exchange struct {
 	OriginalRequest   RequestEnvelope
 	TranslatedRequest RequestEnvelope
-	Route             Route
+	ProviderID        string
+	NewID             func() string
 }
 
 type ResponseEnvelope struct {
@@ -285,6 +300,8 @@ type ResponseEnvelope struct {
 	Exchange Exchange
 }
 ```
+
+`Exchange` 只保存 reverse transform 與 per-request stream state 所需資料；不直接保存 `route.Route`，避免 `protocol ↔ route` 循環依賴。Production 由 handler 注入 ID generator，測試則注入 deterministic generator。
 
 Response transform 必須保留：
 
@@ -327,9 +344,11 @@ type ProxyError struct {
 
 ```go
 type SSEFrame struct {
-	Event string
-	ID    string
-	Data  []byte
+	Event       string
+	ID          string
+	RetryMillis *int
+	Comments    []string
+	Data        []byte
 }
 ```
 
