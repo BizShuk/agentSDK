@@ -1,6 +1,6 @@
 # agentsdk
 
-Go Agentic Loop SDK + Log Doctor sample,目標導向控制迴圈 (Goal-directed Control Loop) 的多模組 SDK。
+Go Agentic Loop SDK、LLM protocol proxy 與 Log Doctor sample，提供目標導向控制迴圈 (Goal-directed Control Loop) 及跨提供者協定橋接。
 
 ## 範疇 (Scope)
 
@@ -21,6 +21,7 @@ Go Agentic Loop SDK + Log Doctor sample,目標導向控制迴圈 (Goal-directed 
 agentsdk/
 ├── go.work                    # 多模組: root + sample/logdoctor
 ├── go.mod                     # module github.com/bizshuk/agentsdk
+├── cmd/proxy.go               # proxy server CLI composition root
 ├── core/                      # 純狀態機 (stdlib only)
 ├── perception/                # 支柱 1
 ├── memory/                    # 支柱 2 (M2)
@@ -28,10 +29,32 @@ agentsdk/
 ├── action/                    # TypedTool + Registry
 ├── middleware/                # (M2 鏈)
 ├── runtime/                   # Loop: dispatch + checkpoint + WAL
+├── proxy/                     # LLM protocol bridge + provider routing/upstream
+│   ├── protocol/              # Anthropic Messages / OpenAI Chat / Responses DTO + SSE
+│   ├── transform/             # 明確的 3×3 pairwise request/response/stream transforms
+│   ├── route/                 # qualified model → provider family
+│   ├── upstream/              # concrete profiles、credentials、safe HTTP client
+│   ├── handler.go             # bounded generic request pipeline
+│   └── server.go              # Gin route composition
 ├── cli/                       # (M2 JSONL codec)
 ├── internal/testutil/         # FakeProvider / MemStore / CapturingNotifier
 └── sample/logdoctor/          # 驗證 sample (cobra CLI + 兩個 tool)
 ```
+
+## Proxy protocol bridge
+
+Proxy 將 agent 使用的 wire protocol 與 LLM provider 的 concrete API profile 分開處理：
+
+```text
+client route → directed pair transform → provider normalization → upstream
+                                                       ↓
+client response ← reverse directed pair transform ← provider response
+```
+
+- 支援 `Anthropic Messages`、`OpenAI Chat Completions`、`OpenAI Responses` 的完整 `3×3` request、non-stream response 與 SSE stream matrix。
+- concrete profiles 包含 `anthropic`、`minimax`、`openai-api`、`openai-codex-oauth`、`xai`。
+- xAI 預設走 `OpenAI Responses`；qualified model `xai-chat/<model>` 可明確選擇 `OpenAI Chat Completions`。
+- provider selection 由 qualified model、credential kind 與 profile capability 決定，不以 client protocol 綁定 provider。
 
 ## 設計原則
 

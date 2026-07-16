@@ -11,6 +11,7 @@ agentsdk/
 ├── go.work                          # 多模組: root + sample/logdoctor
 ├── go.mod                           # module github.com/bizshuk/agentsdk
 ├── main.go                          # auth-cli binary entry (package main)
+├── cmd/proxy.go                     # proxy server CLI composition root
 ├── cmd/auth/                        # auth-cli cobra 指令樹
 │   ├── root.go                      # NewRoot() + --auth-dir / --no-browser + saveAndReport
 │   ├── login.go                     # login --provider <id> — 唯一登入入口 (id 即認證路徑)
@@ -36,6 +37,18 @@ agentsdk/
 │       ├── xai/                     #   api key (bearer) + device code RFC 8628 (OIDC discovery)
 │       ├── antigravity/             #   oauth2 (accounts.google.com, client_secret 無 PKCE, userinfo)
 │       └── vertex/                  #   service account: RS256 JWT assertion → Google STS
+├── proxy/                           # LLM protocol proxy
+│   ├── handler.go                   # bounded generic request/response/stream pipeline
+│   ├── observability.go             # redacted transform warnings/loss metrics
+│   ├── middleware.go                # API key、rate limit、CORS middleware
+│   ├── server.go                    # Gin routes + runtime lifecycle
+│   ├── protocol/                    # envelopes、native errors、SSE framing
+│   │   ├── anthropic/               # Anthropic Messages typed DTO
+│   │   ├── chat/                    # OpenAI Chat Completions typed DTO
+│   │   └── responses/               # OpenAI Responses typed DTO
+│   ├── transform/                   # explicit 3×3 pairwise transforms + collectors
+│   ├── route/                       # qualified model → provider family/forced format
+│   └── upstream/                    # profiles、credential resolver、safe HTTP client
 ├── core/                            # 純狀態機 (stdlib only, 連 gosdk 都不 import)
 │   ├── state.go                     # State, RunStatus, Budget, AutonomyLevel L0-L4
 │   ├── input.go                     # Input, InputKind, Percept, ModelResult, ToolResult
@@ -117,6 +130,10 @@ agentsdk/
 - **Verify 是真的打網路,而且誠實回報做了什麼**:`models_endpoint` (api_key,無副作用) / `userinfo_endpoint` (antigravity,無副作用) / `token_refresh` (其餘 oauth,provider 可能輪替 token) / `sts_exchange` (vertex)。會輪替 token 的那幾條,`VerifyResult.Credential` 會帶回新憑證,**呼叫端必須存回磁碟** (OpenAI 會讓舊 refresh token 立刻失效)。
 - **Login 內建驗證**:所有流程都在存檔前先對 provider 驗一次,不讓一把打不通的憑證安靜落地、把失敗延後到第一次推論才爆。
 - **`Credential.BaseURL`**:對 gateway/proxy 發的 API key 會把 base URL 一起存進憑證,後續 `verify` 必須打回同一個端點,而不是 provider 官方端點。
+- `Proxy registry 明確完整`: `Anthropic Messages`、`OpenAI Chat Completions`、`OpenAI Responses` 以九個 directed pair 明確註冊；每一組都有 request、non-stream response、stream factory，不建立單一 canonical IR。
+- `Provider 與 protocol format 分離`: client format 只決定輸入/輸出 shape；qualified model、credential kind 與 concrete profile capability 才決定 provider endpoint 和 upstream format。unknown model 回 `unknown_model`，不得 fallback 到 Anthropic。
+- `SSE 以完整 frame 轉換`: decoder 保留 event、id、retry 與多行 data；每個 request 建立獨立 stateful transformer，EOF 前未出現 terminal event 一律視為 `unexpected EOF` protocol failure。
+- `xAI Responses 優先`: `xai/<model>` 預設 `/v1/responses`，只有 `xai-chat/<model>` 明確強制 `/v1/chat/completions`。
 
 ## 模組對應 (Module Mapping)
 
@@ -129,6 +146,7 @@ agentsdk/
 | 認證機制 | `agentsdk/auth` | `auth.OAuthClient`, `auth.RunBrowserLogin` / `RunDeviceLogin`, `auth.NewAPIKey(spec)`, `auth.NewFileStore` |
 | 認證 provider | `agentsdk/auth/provider` | `provider.Login(ctx, id)`, `provider.New(id)`, `provider.For(cred)`, `provider.IDs()` |
 | 認證 CLI | `agentsdk/cmd/auth` | `auth.NewRoot` → `main.go` (binary `auth-cli`) |
+| Protocol proxy | `agentsdk/proxy` | `proxy.New` → `cmd/proxy.go`; `route → transform → upstream → reverse transform` |
 | 配置 | `agentsdk/config` | `config.OpenForCLI`, `config.MustOpenForCLI` → `AppConfig`;`config.OpenAuthStore` |
 | Shell | `agentsdk/runtime` | `runtime.NewEngine`, `Engine.Run` / `Engine.Resume` |
 | Sample | `agentsdk/sample/logdoctor` | `cmd.RegisterRun` → `cobra.Command.Execute` |

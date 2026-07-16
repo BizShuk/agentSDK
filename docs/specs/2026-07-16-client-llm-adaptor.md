@@ -1,5 +1,7 @@
 # client-llm-adaptor 設計規格 (Design Specification)
 
+> 狀態：已由 [pairwise agent-provider transform](2026-07-16-pairwise-agent-provider-transform.md) 取代。本文件只保留為 legacy one-to-one adaptor 的歷史設計，不代表現行 production architecture。
+
 本文件描述 `agentSDK` Proxy 伺服器與 LLM 提供者 (LLM Provider) 之間的轉接器 (Adaptor) 設計。該轉接器負責將來自客戶端 CLI (Claude Code/Codex) 的請求路由、轉譯並轉發至後端支援的 LLM 提供者，並將其回應/串流轉譯回客戶端格式。
 
 ---
