@@ -47,18 +47,18 @@ Provider vendor 與 wire format 分離。同一家 provider 可以支援多個 f
 
 需一併修正的問題：
 
-| 問題 | 現況風險 | 設計處理 |
-|---|---|---|
-| unknown model 預設 Anthropic | request 可能送錯 provider | 無法唯一解析時回 `400` |
-| xAI 被視為 Chat-only | Responses request 可能被錯送 `/v1/messages` | xAI profile 宣告 Responses + Chat |
-| token count 固定回 `100` | 對 client 回傳假資料 | native count、可信 local counter 或明確 unsupported |
-| Responses non-stream 存在 helper stub | response 不完整 | 完成正式 pair transform |
-| `context.Background()` refresh | client cancel 無法中止 I/O | 全程傳遞 request context |
-| refresh/save/marshal/write error 被忽略 | 失效 token 或 truncated response 被當成功 | 立即 wrap 並回傳 error |
-| 使用 `http.DefaultClient` | 缺少明確 timeout policy | 注入共用 upstream client |
-| stream read error 直接 `break` | 中途斷線被當正常完成 | 區分 terminal EOF 與 unexpected EOF |
-| info log 記錄完整 body | prompt、tool output 可能外洩 | 只記 metadata，body 僅允許明確 debug-redacted flow |
-| SSE 逐行解析 | multiline data 與 frame boundary 可能遺失 | 使用完整 SSE frame parser |
+| 問題                                    | 現況風險                                    | 設計處理                                            |
+| --------------------------------------- | ------------------------------------------- | --------------------------------------------------- |
+| unknown model 預設 Anthropic            | request 可能送錯 provider                   | 無法唯一解析時回 `400`                              |
+| xAI 被視為 Chat-only                    | Responses request 可能被錯送 `/v1/messages` | xAI profile 宣告 Responses + Chat                   |
+| token count 固定回 `100`                | 對 client 回傳假資料                        | native count、可信 local counter 或明確 unsupported |
+| Responses non-stream 存在 helper stub   | response 不完整                             | 完成正式 pair transform                             |
+| `context.Background()` refresh          | client cancel 無法中止 I/O                  | 全程傳遞 request context                            |
+| refresh/save/marshal/write error 被忽略 | 失效 token 或 truncated response 被當成功   | 立即 wrap 並回傳 error                              |
+| 使用 `http.DefaultClient`               | 缺少明確 timeout policy                     | 注入共用 upstream client                            |
+| stream read error 直接 `break`          | 中途斷線被當正常完成                        | 區分 terminal EOF 與 unexpected EOF                 |
+| info log 記錄完整 body                  | prompt、tool output 可能外洩                | 只記 metadata，body 僅允許明確 debug-redacted flow  |
+| SSE 逐行解析                            | multiline data 與 frame boundary 可能遺失   | 使用完整 SSE frame parser                           |
 
 ## 4. 架構 (Architecture)
 
@@ -99,9 +99,9 @@ protocol   → stdlib only
 type Format string
 
 const (
-	FORMAT_ANTHROPIC_MESSAGES Format = "anthropic-messages"
-	FORMAT_OPENAI_CHAT       Format = "openai-chat"
-	FORMAT_OPENAI_RESPONSES  Format = "openai-responses"
+ FORMAT_ANTHROPIC_MESSAGES Format = "anthropic-messages"
+ FORMAT_OPENAI_CHAT       Format = "openai-chat"
+ FORMAT_OPENAI_RESPONSES  Format = "openai-responses"
 )
 ```
 
@@ -109,33 +109,33 @@ const (
 
 ```go
 type ProviderProfile struct {
-	ID        string
-	Supported []protocol.Format
-	Preferred protocol.Format
+ ID        string
+ Supported []protocol.Format
+ Preferred protocol.Format
 
-	ResolveEndpoint func(protocol.Format) (string, error)
-	ApplyAuth       func(*http.Request, *auth.Credential) error
-	Normalize       RequestNormalizer
+ ResolveEndpoint func(protocol.Format) (string, error)
+ ApplyAuth       func(*http.Request, *auth.Credential) error
+ Normalize       RequestNormalizer
 }
 ```
 
 預設 profiles：
 
-| Profile | Supported format | Preferred | Endpoint |
-|---|---|---|---|
-| `anthropic` | Anthropic Messages | Anthropic Messages | `/v1/messages` |
-| `minimax` | Anthropic Messages | Anthropic Messages | `/v1/messages` |
-| `openai-api` | Responses、Chat | Responses | `/v1/responses`、`/v1/chat/completions` |
-| `openai-codex-oauth` | Responses | Responses | `/codex/responses` |
-| `xai` | Responses、Chat | Responses | `/v1/responses`、`/v1/chat/completions` |
+| Profile              | Supported format   | Preferred          | Endpoint                                |
+| -------------------- | ------------------ | ------------------ | --------------------------------------- |
+| `anthropic`          | Anthropic Messages | Anthropic Messages | `/v1/messages`                          |
+| `minimax`            | Anthropic Messages | Anthropic Messages | `/v1/messages`                          |
+| `openai-api`         | Responses、Chat    | Responses          | `/v1/responses`、`/v1/chat/completions` |
+| `openai-codex-oauth` | Responses          | Responses          | `/codex/responses`                      |
+| `xai`                | Responses、Chat    | Responses          | `/v1/responses`、`/v1/chat/completions` |
 
 Provider normalizer 只處理 provider-specific 要求，例如 Codex 的 `store=false`、endpoint、必要 headers，或 xAI format-specific tools。它不負責 Anthropic ↔ OpenAI 的內容語意轉換。Codex `/codex/responses` upstream 固定要求 `stream=true`；若 client 要 non-stream，normalizer 必須標記 `BridgeToNonStream`，handler 將完整 upstream SSE 經 pair stream transform 後收斂成 source-format JSON，不得把 SSE 直接回給 non-stream client。
 
 ```go
 type NormalizedRequest struct {
-	Body              []byte
-	UpstreamStream    bool
-	BridgeToNonStream bool
+ Body              []byte
+ UpstreamStream    bool
+ BridgeToNonStream bool
 }
 ```
 
@@ -152,10 +152,10 @@ Router 輸出：
 
 ```go
 type Route struct {
-	Provider     ProviderProfile
-	Model        string
-	SourceFormat protocol.Format
-	TargetFormat protocol.Format
+ Provider     ProviderProfile
+ Model        string
+ SourceFormat protocol.Format
+ TargetFormat protocol.Format
 }
 ```
 
@@ -163,27 +163,27 @@ type Route struct {
 
 ### 6.1 完整矩陣
 
-| Source | Target | Request | Response |
-|---|---|---|---|
-| Anthropic | Anthropic | normalize | normalize |
-| Anthropic | Chat | A→Chat | Chat→A |
-| Anthropic | Responses | A→Responses | Responses→A |
-| Chat | Anthropic | Chat→A | A→Chat |
-| Chat | Chat | normalize | normalize |
-| Chat | Responses | Chat→Responses | Responses→Chat |
-| Responses | Anthropic | Responses→A | A→Responses |
-| Responses | Chat | Responses→Chat | Chat→Responses |
-| Responses | Responses | normalize | normalize |
+| Source    | Target    | Request        | Response       |
+| --------- | --------- | -------------- | -------------- |
+| Anthropic | Anthropic | normalize      | normalize      |
+| Anthropic | Chat      | A→Chat         | Chat→A         |
+| Anthropic | Responses | A→Responses    | Responses→A    |
+| Chat      | Anthropic | Chat→A         | A→Chat         |
+| Chat      | Chat      | normalize      | normalize      |
+| Chat      | Responses | Chat→Responses | Responses→Chat |
+| Responses | Anthropic | Responses→A    | A→Responses    |
+| Responses | Chat      | Responses→Chat | Chat→Responses |
+| Responses | Responses | normalize      | normalize      |
 
 ### 6.2 Contract
 
 ```go
 type Pair struct {
-	From      protocol.Format
-	To        protocol.Format
-	Request   RequestTransform
-	Response  ResponseTransform
-	NewStream StreamTransformFactory
+ From      protocol.Format
+ To        protocol.Format
+ Request   RequestTransform
+ Response  ResponseTransform
+ NewStream StreamTransformFactory
 }
 
 type RequestTransform func(context.Context, protocol.RequestEnvelope) (protocol.TransformResult, error)
@@ -194,15 +194,15 @@ Registry 由 composition root 明確建立，不使用 package `init()` 隱式�
 
 ```go
 registry, err := transform.NewRegistry(
-	transform.AnthropicIdentity(),
-	transform.AnthropicToChat(),
-	transform.AnthropicToResponses(),
-	transform.ChatToAnthropic(),
-	transform.ChatIdentity(),
-	transform.ChatToResponses(),
-	transform.ResponsesToAnthropic(),
-	transform.ResponsesToChat(),
-	transform.ResponsesIdentity(),
+ transform.AnthropicIdentity(),
+ transform.AnthropicToChat(),
+ transform.AnthropicToResponses(),
+ transform.ChatToAnthropic(),
+ transform.ChatIdentity(),
+ transform.ChatToResponses(),
+ transform.ResponsesToAnthropic(),
+ transform.ResponsesToChat(),
+ transform.ResponsesIdentity(),
 )
 ```
 
@@ -220,18 +220,18 @@ Identity pairs 仍需 decode、validate、model normalization 與 provider norma
 
 ```go
 type RequestEnvelope struct {
-	SourceFormat protocol.Format
-	TargetFormat protocol.Format
-	Model        string
-	Stream       bool
-	Headers      http.Header
-	Body         []byte
+ SourceFormat protocol.Format
+ TargetFormat protocol.Format
+ Model        string
+ Stream       bool
+ Headers      http.Header
+ Body         []byte
 }
 
 type TransformResult struct {
-	Body     []byte
-	Warnings []Warning
-	Losses   []SemanticLoss
+ Body     []byte
+ Warnings []Warning
+ Losses   []SemanticLoss
 }
 ```
 
@@ -251,10 +251,10 @@ HTTP route 決定 source format
 
 Transform 不得 silent drop 欄位：
 
-| 狀況 | 行為 |
-|---|---|
-| 有等價欄位 | 正常轉換 |
-| 可安全降級 | 轉換並記錄 warning/loss |
+| 狀況         | 行為                         |
+| ------------ | ---------------------------- |
+| 有等價欄位   | 正常轉換                     |
+| 可安全降級   | 轉換並記錄 warning/loss      |
 | 無法安全表達 | 回 `400 unsupported_feature` |
 
 `Warnings` 與 `Losses` 在本次 exchange 執行期間由 handler 交給 observer，輸出不含 prompt 內容的結構化 log 與 metrics；不額外改寫公開 API response schema。
@@ -287,17 +287,17 @@ Upstream response
 
 ```go
 type Exchange struct {
-	OriginalRequest   RequestEnvelope
-	TranslatedRequest RequestEnvelope
-	ProviderID        string
-	NewID             func() string
+ OriginalRequest   RequestEnvelope
+ TranslatedRequest RequestEnvelope
+ ProviderID        string
+ NewID             func() string
 }
 
 type ResponseEnvelope struct {
-	Status  int
-	Headers http.Header
-	Body    []byte
-	Exchange Exchange
+ Status  int
+ Headers http.Header
+ Body    []byte
+ Exchange Exchange
 }
 ```
 
@@ -316,25 +316,25 @@ Response transform 必須保留：
 
 ```go
 type ProxyError struct {
-	Kind              ErrorKind
-	Status            int
-	Code              string
-	Message           string
-	RetryAfter        time.Duration
-	UpstreamRequestID string
+ Kind              ErrorKind
+ Status            int
+ Code              string
+ Message           string
+ RetryAfter        time.Duration
+ UpstreamRequestID string
 }
 ```
 
-| 情況 | HTTP/status 行為 |
-|---|---|
-| client JSON 無效 | `400` source-native error |
-| unknown model/provider | `400` source-native error |
-| pair 未註冊 | `422`，不得呼叫 upstream |
-| credential 不存在/refresh 失敗 | `503` |
-| upstream transport error | `502` |
-| upstream `4xx/5xx` | 保留 status，轉 source error envelope |
-| upstream `429` | 保留 `429` 與 `Retry-After` |
-| timeout | `504` |
+| 情況                           | HTTP/status 行為                      |
+| ------------------------------ | ------------------------------------- |
+| client JSON 無效               | `400` source-native error             |
+| unknown model/provider         | `400` source-native error             |
+| pair 未註冊                    | `422`，不得呼叫 upstream              |
+| credential 不存在/refresh 失敗 | `503`                                 |
+| upstream transport error       | `502`                                 |
+| upstream `4xx/5xx`             | 保留 status，轉 source error envelope |
+| upstream `429`                 | 保留 `429` 與 `Retry-After`           |
+| timeout                        | `504`                                 |
 
 不得把 credential、authorization header 或未清理的 upstream body放進 client error 或一般 log。
 
@@ -344,11 +344,11 @@ type ProxyError struct {
 
 ```go
 type SSEFrame struct {
-	Event       string
-	ID          string
-	RetryMillis *int
-	Comments    []string
-	Data        []byte
+ Event       string
+ ID          string
+ RetryMillis *int
+ Comments    []string
+ Data        []byte
 }
 ```
 
@@ -358,8 +358,8 @@ Parser 必須以空行作為完整 frame boundary，支援 multiline `data:`、c
 
 ```go
 type StreamTransform interface {
-	Push(context.Context, protocol.SSEFrame) ([]protocol.SSEFrame, error)
-	Close(context.Context) ([]protocol.SSEFrame, error)
+ Push(context.Context, protocol.SSEFrame) ([]protocol.SSEFrame, error)
+ Close(context.Context) ([]protocol.SSEFrame, error)
 }
 ```
 
@@ -409,14 +409,14 @@ response.created
 
 ### 9.4 Failure semantics
 
-| 狀況 | 行為 |
-|---|---|
-| client disconnect | cancel upstream context |
-| upstream error before response headers | 回一般 HTTP error |
-| upstream error after stream started | source-native stream error event，再關閉 |
-| EOF after terminal event | success |
-| EOF before terminal event | protocol error，不得假裝 success |
-| malformed SSE frame | protocol error，記錄 upstream request ID |
+| 狀況                                   | 行為                                     |
+| -------------------------------------- | ---------------------------------------- |
+| client disconnect                      | cancel upstream context                  |
+| upstream error before response headers | 回一般 HTTP error                        |
+| upstream error after stream started    | source-native stream error event，再關閉 |
+| EOF after terminal event               | success                                  |
+| EOF before terminal event              | protocol error，不得假裝 success         |
+| malformed SSE frame                    | protocol error，記錄 upstream request ID |
 
 Stream 已開始後的 error frame 固定為：
 
@@ -483,12 +483,12 @@ proxy/
 
 ### 13.1 Protocol matrix
 
-| 類型 | Cases |
-|---|---:|
-| Request transforms | 9 |
-| Non-stream response transforms | 9 |
-| Streaming response transforms | 9 |
-| 基本 protocol paths | 27 |
+| 類型                           | Cases |
+| ------------------------------ | ----: |
+| Request transforms             |     9 |
+| Non-stream response transforms |     9 |
+| Streaming response transforms  |     9 |
+| 基本 protocol paths            |    27 |
 
 每條 cross-format path 至少覆蓋：
 

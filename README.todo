@@ -17,8 +17,6 @@
 - [x] `cmd/auth/`:單一 `login --provider <id>` + list / verify / refresh / logout
 - [x] e2e:假 provider(models 端點 + 驗簽的 Google STS)跑通 login → list → verify → refresh → logout
 - [x] e2e:xAI device flow 對真實 `auth.x.ai` 跑通 OIDC discovery + device code 發放
-- [ ] 讓 `runtime` / `provider/*` 直接吃 `auth.Credential`(目前 provider 仍各自從 env 讀 API key,
-      OAuth token 尚未接進 `ModelProvider`;Anthropic OAuth 需 `Authorization: Bearer` + `anthropic-beta` 標頭)
 - [ ] 到期自動 refresh:`ModelProvider` 呼叫前檢查 `Credential.Expired()` 並自動換發
 
 ## M5 — sample wiring 收尾 (完成)

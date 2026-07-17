@@ -1,264 +1,256 @@
 # CLAUDE.md — agentsdk 技術脈絡 (Technical Context)
 
-`agentsdk` 是 `playground/agentsdk` 子專案,Go Agentic Loop SDK + Log Doctor sample。目標導向控制迴圈 SDK,純 Go (1.26),以 `go.work` 多模組管理依賴。
+`agentsdk` 是 Go Agentic Loop SDK、LLM protocol proxy、provider adapter、認證 CLI 與範例程式的 workspace。本文記錄目前程式碼真正採用的邊界與決策；舊的 `proxy/adaptor` one-to-one 設計已不再是 production path。
+
+## 技術基準 (Current Baseline)
+
+- 語言與 workspace：Go `1.26.0`、`go.work`，共 `11` 個 module（root、`mcp`、3 個 provider module、6 個 sample module）。
+- root module：`github.com/bizshuk/agentsdk`。`core/` 保持標準函式庫 only；root 的 runtime、CLI、proxy 與 wiring 會使用外部套件。
+- 目前 proxy 架構：`protocol → route → transform → upstream`，三種 client wire format 的 `3×3` directed pair 已接上 handler。
+- 來源與規格：現行 pairwise 決策見 [`docs/specs/2026-07-16-pairwise-agent-provider-transform.md`](docs/specs/2026-07-16-pairwise-agent-provider-transform.md)；四個來源的 wire-format 盤點見 [`docs/specs/format/README.md`](docs/specs/format/README.md)。
+- 參考 submodule：`tmp/auth2api` 與 `tmp/cliproxyapi` 僅供格式研究與規格追溯，不是 agentsdk 的 runtime dependency。
 
 ## 專案結構 (Project Structure)
 
 ```text
 agentsdk/
-├── README.md                        # 業務範疇總覽 (本專案)
-├── CLAUDE.md                        # 技術脈絡 (本檔)
-├── go.work                          # 多模組: root + sample/logdoctor
-├── go.mod                           # module github.com/bizshuk/agentsdk
-├── main.go                          # auth-cli binary entry (package main)
-├── cmd/proxy.go                     # proxy server CLI composition root
-├── cmd/auth/                        # auth-cli cobra 指令樹
-│   ├── root.go                      # NewRoot() + --auth-dir / --no-browser + saveAndReport
-│   ├── login.go                     # login --provider <id> — 唯一登入入口 (id 即認證路徑)
-│   ├── list.go                      # list — 表格輸出,不印 secret
-│   ├── verify.go                    # verify [name|--all] — 對真實 provider 驗證 + 輪替後存回
-│   └── refresh.go                   # refresh <name> + logout <name>
-├── auth/                            # 機制層 (mechanism,純 stdlib,不認識任何一家 provider)
-│   ├── auth.go                      # Credential / Kind / Authenticator / VerifyResult
-│   ├── options.go                   # Options (導出,provider 套件要讀) + Option
-│   ├── oauth.go                     # OAuthClient: AuthCodeURL / Exchange / Refresh / PostToken
-│   │                                #   (可選 PKCE + 可選 client_secret + single-flight + 429 退避)
-│   ├── device.go                    # Device Authorization Grant (RFC 8628) + OIDC discovery
-│   ├── login.go                     # RunBrowserLogin / RunDeviceLogin / VerifyByRefresh / MergeOAuthToken
-│   ├── apikey.go                    # APIKeySpec + 泛用 APIKeyAuth (env chain + models 端點驗證)
-│   ├── pkce.go callback.go          # RFC 7636 S256;本機 callback server
-│   ├── browser.go jwt.go store.go   # 開瀏覽器;JWT claims (不驗簽);FileStore (0700/0600 + atomic)
-│   ├── authtest/                    # 測試用假 provider 與 helper (給 auth 與各 provider 套件共用)
-│   └── provider/                    # registry (package provider) — import 下列子包,無循環
-│       ├── provider.go              #   ROUTES / New(id) / Login(ctx,id) / For(cred) / IDs()
-│       ├── anthropic/               #   api key (x-api-key) + oauth2 PKCE (claude.ai)
-│       ├── openai/                  #   api key (bearer) + oauth2 PKCE (auth.openai.com, id_token claims)
-│       ├── google/                  #   api key (x-goog-api-key, Gemini)
-│       ├── xai/                     #   api key (bearer) + device code RFC 8628 (OIDC discovery)
-│       ├── antigravity/             #   oauth2 (accounts.google.com, client_secret 無 PKCE, userinfo)
-│       └── vertex/                  #   service account: RS256 JWT assertion → Google STS
-├── proxy/                           # LLM protocol proxy
-│   ├── handler.go                   # bounded generic request/response/stream pipeline
-│   ├── observability.go             # redacted transform warnings/loss metrics
-│   ├── middleware.go                # API key、rate limit、CORS middleware
-│   ├── server.go                    # Gin routes + runtime lifecycle
-│   ├── protocol/                    # envelopes、native errors、SSE framing
-│   │   ├── anthropic/               # Anthropic Messages typed DTO
-│   │   ├── chat/                    # OpenAI Chat Completions typed DTO
-│   │   └── responses/               # OpenAI Responses typed DTO
-│   ├── transform/                   # explicit 3×3 pairwise transforms + collectors
-│   ├── route/                       # qualified model → provider family/forced format
-│   └── upstream/                    # profiles、credential resolver、safe HTTP client
-├── core/                            # 純狀態機 (stdlib only, 連 gosdk 都不 import)
-│   ├── state.go                     # State, RunStatus, Budget, AutonomyLevel L0-L4
-│   ├── input.go                     # Input, InputKind, Percept, ModelResult, ToolResult
-│   ├── effect.go                    # Effect (tagged union, 7 kinds)
-│   ├── message.go                   # Message, Role, Chunk (multimodal text/audio/image/tool)
-│   ├── thinking.go                  # ThinkingPattern 介面 + 6 ThinkingKind 常數
-│   ├── tool.go                      # ToolSchema, RiskLevel
-│   ├── autonomy.go                  # ApprovalPolicy 介面
-│   ├── approval.go                  # PendingApproval, ApprovalDecision
-│   ├── port.go                      # ModelProvider / StateStore / WAL / ToolRegistry / Notifier
-│   └── step.go                      # Step func type, NewStep(patterns) 唯一 dispatch 點
-├── perception/                      # 支柱 1 (M1 實作)
-│   ├── source.go                    # Source 介面 + Multi fan-in (sync.WaitGroup close)
-│   └── normalize.go                 # Normalizer (Percept → Message)
-├── planning/                        # 6 ThinkingPattern 實作
-│   ├── think_then_act.go            # ✅ ThinkThenAct (think → act → observe FSM via scratch)
-│   ├── plan_then_run.go             # ✅ PlanThenRun (blueprint + step dispatch)
-│   ├── do_then_review.go            # ✅ RunThenReview (execute + critique iterate)
-│   ├── one_shot.go                  # ✅ OneShotReasoning (think→done 雙相 FSM)
-│   ├── learn_from_failure.go        # ✅ LearnFromFailure (act→reflect→retry→done,critique OK: prefix + reflection 累積)
-│   ├── choose_agent.go              # ✅ ChooseAgent (select→delegate→done,inline system-msg delegate)
-│   └── helpers.go                   # scratch helpers + newID
-├── memory/                          # 支柱 2 (M2 完整實作)
-│   ├── window.go                    # Window (MaxMessages / MaxTokens) + CharHeuristicCounter
-│   ├── compactor.go                 # Compactor 介面 + HeadlineCompactor (no-LLM fallback)
-│   ├── checkpoint/checkpointer.go   # Checkpoint() / Recover() — 與 Store+WAL 配對
-│   └── filestore/                   # FileStateStore (atomic write-temp+rename) + FileWAL (JSONL append)
-├── middleware/                      # M2 鏈 (tracing/sandbox/approval/sanitizer 留 M3/M4)
-│   ├── middleware.go                # Middleware / Next / Chain
-│   ├── harness/retry.go             # Retry (N 次 + 指數 backoff,認 RetryableError interface)
-│   ├── harness/budget.go            # Budget guard (state.Budget.Exceeded → BudgetExceededError)
-│   ├── harness/timeout.go           # Timeout (per-effect WithTimeout)
-│   └── loopguard/loopguard.go       # 指紋 (sha1+volatile strip) + 連續 CALL_TOOL → REQUEST_APPROVAL
-├── config/                          # 一站式 CLI wiring (AppConfig)
-│   └── app.go                       # OpenForCLI: gosdk/config init + mkdir + slog + filestore Store/WAL
-├── action/                          # 支柱 3 (M1 minimal)
-│   ├── tool.go                      # TypedTool[TArgs,TOut] 泛型 (json.RawMessage)
-│   └── registry.go                  # Registry (記憶體靜態註冊, M3 加 ToolSource 動態)
-├── runtime/                         # Shell
-│   └── loop.go                      # Engine: dispatch + preStep scratch seed + short-circuit on end_turn
-├── internal/testutil/               # 測試 only (FakeProvider / MemStore / MemWAL / CapturingNotifier)
-└── sample/logdoctor/                # 驗證 sample (獨立 go.mod)
-    ├── main.go                      # cobra entry
-    ├── cmd/root.go                  # NewRoot() — 不呼叫 Execute()
-    ├── cmd/run.go                   # RegisterRun(root) — --once --fixture --fake
-    ├── core/listener.go             # domain layer (gosdk noun 慣例)
-    ├── tool/read_log_tail.go        # TypedTool 包裝 listener
-    ├── tool/notify.go               # TypedTool 包裝 io.Writer
-    ├── internal/fake/fake.go        # 腳本化 ScriptedProvider (read_log_tail → notify → end_turn)
-    └── testdata/error.log           # fixture
+├── README.md                         # 業務範疇與使用者導覽
+├── CLAUDE.md                         # 技術脈絡與架構決策（本檔）
+├── go.work                           # root + mcp + provider/* + sample/*
+├── go.mod                            # github.com/bizshuk/agentsdk
+├── main.go                           # auth-cli binary entry
+├── cmd/                              # auth、proxy、video、credential use 指令樹
+├── app/                              # CLI agent composition/lifecycle（Agent、preflight、panic recovery）
+├── config/                           # AppConfig、middleware presets、proxy config
+├── core/                             # 純狀態機、Message/Part、Event、Instruction、ports
+├── perception/                       # ObservationSource 與 normalize helper
+├── planning/                         # 6 個純函式 DecisionRule FSM
+├── action/                           # tool registry、TypedTool/schema、sandbox、approval policy
+├── tool/                             # Read/Write/Edit/Bash/Glob/Grep 內建工具
+├── middleware/                       # chain、retry/timeout/budget/loopguard、安全與 OTel tracing
+├── memory/                           # context window、compactor、checkpoint、JSON state/WAL
+├── runtime/                          # Engine：dispatch Instruction、fold Event、Run/Resume/HITL
+├── cli/                              # 9 種 JSONL Envelope 與 codec
+├── auth/                             # credential、API key、OAuth/PKCE、device flow、FileStore
+├── proxy/                            # Gin HTTP proxy 與 pairwise protocol bridge
+│   ├── protocol/                     # Format、typed DTO、ProxyError、完整 SSE frame parser
+│   ├── route/                        # qualified/exact/prefix model routing
+│   ├── transform/                    # 9 組 request/response/stream pairwise transforms
+│   └── upstream/                     # concrete profile、credential resolver、safe HTTP client
+├── mcp/                              # 獨立 module：MCP Client → action.ToolSource
+├── provider/
+│   ├── anthropic/                    # 獨立 module：anthropic-sdk-go adapter
+│   ├── google/                       # 獨立 module：google.golang.org/genai adapter
+│   └── openaicompat/                 # 獨立 module：stdlib OpenAI-compatible HTTP/SSE adapter
+├── video/                            # audio、frames、subtitles/ffmpeg preprocessing utilities
+├── sample/
+│   ├── file-agent/                   # 6 內建工具的檔案操作 agent
+│   ├── greet-agent/                  # 內建工具 + greet tool
+│   ├── logdoctor/                    # log listener、todo tools、watch/resume/approve CLI
+│   ├── memory-demo/                  # StateStore/WAL/checkpoint demo
+│   ├── middleware-demo/              # middleware chain demo
+│   └── strategy-demo/                # 6 reasoning strategy demo
+├── docs/specs/                       # architecture/spec history
+│   └── format/                       # 37 個 client/provider directed wire entities
+├── plans/                            # 進行中的落地計畫
+└── tmp/                              # submodule 與 runtime symlink，不放 production logic
 ```
 
 ## 技術棧 (Tech Stack)
 
-| 類別 | 技術 | 備註 |
-|------|------|------|
-| 語言 | Go | 1.26 |
-| 多模組 | go.work | root + sample/logdoctor |
-| 測試 | testify | v1.11.1, table-driven + t.Run |
-| CLI | spf13/cobra | sample/logdoctor |
-| Provider | (M4) | anthropic-sdk-go / openaicompat / google.golang.org/genai |
+| 類別 | 技術 | 現況 |
+| --- | --- | --- |
+| Language | Go `1.26.0` | `go.work` 管理 11 個 module |
+| Root runtime | Go stdlib、`github.com/bizshuk/gosdk v1.1.0` | config/log/notify 等組合點在 root 或 sample |
+| HTTP proxy | `gin-gonic/gin v1.11.0`、`gosdk/mw`、`gosdk/router` | `/v1` API、health/ping、localhost CORS、API key、per-IP rate limit |
+| CLI/config | `spf13/cobra v1.10.2`、`spf13/viper v1.20.1` | auth-cli、proxy、samples 與 layered settings |
+| State/schema | `testify v1.11.1`、`invopop/jsonschema v0.14.0` | table-driven tests、TypedTool JSON Schema |
+| IDs/telemetry | `google/uuid v1.6.0`、OpenTelemetry `v1.44.0` | request ID、transform warning/loss metrics |
+| Anthropic adapter | `anthropics/anthropic-sdk-go v1.50.2` | 只在 `provider/anthropic` module 引入 |
+| Google adapter | `google.golang.org/genai v1.62.0` | 只在 `provider/google` module 引入 |
+| OpenAI-compatible adapter | `net/http` + JSON + SSE | `provider/openaicompat` 不依賴 vendor SDK |
+| MCP | `modelcontextprotocol/go-sdk v1.6.1` | `mcp` 獨立 module，轉成 `action.ToolSource` |
 
-## 關鍵決策 (Key Decisions)
+`core/` 不 import `gosdk`、Gin、任何 provider SDK；provider 與 MCP 的重依賴藉由獨立 `go.mod` 隔離。root module 仍包含 proxy、CLI、config、OTel 等應用層依賴，不能再描述成整個 root 都是 stdlib-only。
 
-- **`core/` 純 stdlib**:連 gosdk 都不 import,讓 SDK 可獨立發佈;gosdk wiring 只發生在 sample 組合根 (M2 後)
-- **`core.Step` 是純函式**:patterns 只看 scratch + state.Messages,不能 inspect Input;runtime 在呼叫 Step 前 pre-populate scratch (例如 `react.last_call_id`)
-- **End-turn short-circuit**:runtime 收到 `ModelResult.StopReason=end_turn` (無 tool_calls) 時直接 COMPLETED,跳過 Step — 避免 ReAct 等 pattern 在 act phase 對 stale scratch 發出 CALL_TOOL
-- **Tagged union Effect**:Go 沒有 sum type,用 `Kind` discriminator + 7 個 optional pointer 表達
-- **Notifier 結構性相容**:`core.Notifier` 介面與 `gosdk/notify.Notifier` 方法集相同,結構性滿足,無需 adapter
-- **`sample/logdoctor/core` 撞名**:不同 module path 編譯安全,import 時以 `sdkcore` / `domain` 別名區分
-- **Middleware 鏈組合 (M2)**:retry → timeout → budget → loopguard → base dispatch。state 在每一層都會被 mutate,但因為 Go map 是 reference type,scratch 變更會自動傳遞給下一層與下個 iteration。loopguard state 透過 scratch[loopguard.state] 持久化。
-- **scratch 是 pattern 與 middleware 的通訊介面**:runtime 在 Step 前 preStep 寫入 (例如 `react.last_call_id`),pattern 透過 Decide 讀 scratch 決定 effect,middleware 把 bookkeeping 寫回 scratch 跨迭代累積。
-- **WAL Replay 語意**:`Replay(runID, sinceSeq)` 回傳所有 `input.Seq > sinceSeq` 的 Inputs(State.LastInputSeq 是「已被跑過的最大 Seq」)。Caller 不重發模型呼叫,因為 WAL 已經包含原來的 ModelResult / ToolResult。
-- **`auth/` 分兩層**:`auth/` 只有機制 (Credential / OAuthClient / device flow / PKCE / callback / FileStore),不認識任何一家 provider;`auth/provider/<name>/` 一家一包,只 import `auth`;`auth/provider` 本身是 registry,import 所有子包。依賴單向,無循環。代價是 `auth.Options` 必須導出 (provider 套件住在別的套件,要讀得到它)。
-- **`provider.ROUTES` 是唯一真相來源**:provider id → (provider, kind, 建構子)。`New` / `Login` / `For` / CLI 的旗標說明全部從它推導,新增一家 provider 只要加一列。測試 `TestEveryRouteHasAnAuthenticator` 確保表格不會與實作脫節。
-- **provider id 即認證路徑**:`--provider anthropic` 是 API key,`--provider anthropic_oauth` 是瀏覽器流程 — 認證方式編碼在 id 裡,不另設 `--kind`。OAuth 的 id 帶 `_oauth` 後綴,與憑證檔名的後綴一致 (`anthropic-<email>_oauth.json`)。同一個 email 可以同時有 API key 與 OAuth 憑證,後綴讓兩者不互相覆蓋。
-- **三種 OAuth 變體共用一個 `OAuthClient`**:差異用設定表達 — `UsePKCE` (public client 開,Google installed-app 關)、`ClientSecret` (只有 antigravity 有)、`Encoding` (Anthropic 收 JSON,其餘 form)、`SendState` (只有 Anthropic 開)。device flow (xAI) 另走 `RunDeviceLogin`,不開本機埠。
-- **`SendState` 預設關**:token exchange 的 body 不帶 `state`。CSRF 比對在 callback 收回來的當下就做完了 (`RunBrowserLogin` 比對後才換 token),token 端點不需要它;OpenAI 更會對多出來的 state 直接回 `400 unknown_parameter`。只有 Anthropic 要求 exchange 帶 state。這條是真實 provider 打回來的教訓,別「順手統一」把它加回所有 provider。
-- **Verify 是真的打網路,而且誠實回報做了什麼**:`models_endpoint` (api_key,無副作用) / `userinfo_endpoint` (antigravity,無副作用) / `token_refresh` (其餘 oauth,provider 可能輪替 token) / `sts_exchange` (vertex)。會輪替 token 的那幾條,`VerifyResult.Credential` 會帶回新憑證,**呼叫端必須存回磁碟** (OpenAI 會讓舊 refresh token 立刻失效)。
-- **Login 內建驗證**:所有流程都在存檔前先對 provider 驗一次,不讓一把打不通的憑證安靜落地、把失敗延後到第一次推論才爆。
-- **`Credential.BaseURL`**:對 gateway/proxy 發的 API key 會把 base URL 一起存進憑證,後續 `verify` 必須打回同一個端點,而不是 provider 官方端點。
-- `Proxy registry 明確完整`: `Anthropic Messages`、`OpenAI Chat Completions`、`OpenAI Responses` 以九個 directed pair 明確註冊；每一組都有 request、non-stream response、stream factory，不建立單一 canonical IR。
-- `Provider 與 protocol format 分離`: client format 只決定輸入/輸出 shape；qualified model、credential kind 與 concrete profile capability 才決定 provider endpoint 和 upstream format。unknown model 回 `unknown_model`，不得 fallback 到 Anthropic。
-- `SSE 以完整 frame 轉換`: decoder 保留 event、id、retry 與多行 data；每個 request 建立獨立 stateful transformer，EOF 前未出現 terminal event 一律視為 `unexpected EOF` protocol failure。
-- `xAI Responses 優先`: `xai/<model>` 預設 `/v1/responses`，只有 `xai-chat/<model>` 明確強制 `/v1/chat/completions`。
+## 核心架構決策 (Core Decisions)
+
+- `core` 是純狀態與 transition contract。`core.Decide(state, event)` 不做 I/O，只回傳下一個 `State` 與 `[]Instruction`；runtime 才執行 model、tool、approval、notify、checkpoint。
+- `State` 的對話模型是 `Message{Role, Parts}`；`Part` 支援 text、audio、image、tool use、tool result。JSON tags `scratch` 與 `thinking_kind` 保留以相容舊 state。
+- `Instruction` 是 tagged union，透過 `Kind` + optional payload 表示 `call_model`、`call_tool`、`request_approval`、`notify`、`checkpoint`、`emit`、`done`；不建立 vendor-specific effect type。
+- `runtime.Engine` 是 shell，維護 `ModelProvider`、`ToolRegistry`、`StateStore`、`WriteAheadLog`、`Notifier` 與 middleware。`Middleware == nil` 代表 no-op；`config.DefaultMiddleware()` 與 `config.SecureMiddleware()` 由 composition root 明確選用。
+- `config.DefaultMiddleware()` 順序為 `retry → timeout → budget → loopguard`；安全版本再加入 `sandbox → approval → spotlight → sanitizer`。工具輸出會被 spotlight 標為 untrusted，prompt injection 命中會被 sanitizer 改寫。
+- WAL recovery 先載入 snapshot，再依 `LastInputSeq` replay Event；replay 不重新呼叫模型，避免 crash recovery 產生重複副作用。`memory/filestore` 使用 atomic state write + JSONL append。
+- `planning/` 的六個 strategy（ThinkThenAct、PlanThenRun、RunThenReview、OneShotReasoning、LearnFromFailure、ChooseAgent）都是 phase FSM；working memory 是 rule 與 runtime/middleware 的通訊介面。
+- `action.TypedTool` 用 `invopop/jsonschema` 反射 args schema，呼叫前做 required-field validation；`tool.RegisterDefaults` 集中註冊 Read/Write/Edit/Bash/Glob/Grep。高風險工具由 `DefaultApprovalPolicy` 依 L0–L4 gate。
+- `mcp.Client` 只做 MCP `ListTools`/`CallTool` 與 `core.ToolSpec`/`ToolResult` 轉換，不把 MCP transport 混入 core 或 runtime。
+
+## 認證與 provider 決策 (Auth and Providers)
+
+`auth/` 只提供 mechanism：`Credential`、API key、OAuth authorization-code（PKCE 或 client secret）、device code（RFC 8628 + OIDC discovery）、service-account JWT → Google STS、callback、refresh、FileStore。`auth/provider/<name>/` 封裝單一家 provider，依賴 `auth` 與必要的 provider-specific config 套件；`auth/provider` registry 再統一掛載實作。
+
+`auth/provider.ROUTES` 是 provider id、credential kind、constructor 與 CLI 說明的唯一真相來源，目前 9 個 id：
+
+```text
+anthropic          anthropic_oauth
+openai             openai_oauth
+google             xai                  xai_oauth
+antigravity_oauth  vertex
+```
+
+重要規則：
+
+- 憑證目錄與 JSON 檔案權限固定 `0700` / `0600`，寫入使用 temp + rename。
+- login 在存檔前先 Verify；OAuth/service-account verify 可能輪替 token，呼叫端必須把 `VerifyResult.Credential` 存回。
+- `Credential.BaseURL` 隨 API key 保存，gateway/proxy 憑證 verify 與後續 request 必須回到同一端點。
+- proxy 的 `CredentialResolver` 會在 request 前選 active credential、檢查 expiry、refresh 並持久化新 token；一般 provider `ModelProvider` 呼叫前的自動 refresh 仍列在 [`README.todo`](README.todo)。
+- auth CLI 的預設 namespace 是 `~/.config/agentsdk/data/auth`；proxy config 目前以 `agentSDK` namespace 載入，若兩者要共用憑證，使用 `auth-dir` 明確指定同一目錄。
+
+## Proxy pairwise 決策 (Current Proxy Architecture)
+
+Proxy 不使用 canonical request/response IR，也不保留 legacy `proxy/adaptor`。client protocol 與 concrete provider profile 分離：
+
+```text
+HTTP route/source format
+  → route.Router（qualified、exact、anchored prefix）
+  → transform.Registry（source → target directed pair）
+  → upstream.Profile.NormalizeRequest（provider-specific mutation）
+  → CredentialResolver + safe upstream.Client
+  → reverse response/stream transform
+```
+
+支援的 protocol format：
+
+```text
+anthropic-messages
+openai-chat
+openai-responses
+```
+
+`transform.NewDefaultRegistry()` 強制驗證完整 `3×3 = 9` 組 `(from, to)`，每組必須有 request transform、non-stream response transform 與 stream factory；identity pair 仍會 decode/normalize，不是 raw passthrough。每個 request 的 stream transformer 都是獨立 state，禁止跨 request 污染。
+
+目前 concrete profile：
+
+| Profile | Provider family | Target formats | 特殊規則 |
+| --- | --- | --- | --- |
+| `anthropic` | `anthropic` | Anthropic Messages | `/v1/messages`、`anthropic-version`、`/v1/messages/count_tokens` |
+| `minimax` | `minimax` | Anthropic Messages | Anthropic-compatible `/v1/messages` |
+| `openai-api` | `openai` | Responses、Chat | preferred Responses；`openai-chat/<model>` 強制 Chat |
+| `openai-codex-oauth` | `openai` | Codex Responses | `/codex/responses`；normalizer 強制 `stream=true`、`store=false`，non-stream client 用 SSE bridge |
+| `xai` | `xai` | Responses、Chat | preferred Responses；`xai-chat/<model>` 強制 Chat；只允許 function tools |
+
+路由無法唯一解析 model/provider 時回 `400 unknown_model`，不得 fallback 到 Anthropic。credential kind 會參與 profile selection（例如 `openai` API key 與 OAuth 對應不同 profile）。
+
+### Proxy HTTP surface
+
+- 公開 operational endpoints：`/health`、gosdk 提供的 `/healthz` 與 `/ping`。
+- 受 API key + per-IP `60 requests/minute` 保護的 `/v1`：`GET /models`、`POST /chat/completions`、`POST /responses`、`POST /messages`、`POST /messages/count_tokens`。
+- `/admin/accounts`、`/admin/stats`、`/admin/reload` 目前明確回 `501`，不是已完成的管理 API。
+- downstream 只轉送 profile allowlist headers；`Authorization`、`x-api-key`、`Host`、cookie、forwarded headers 等敏感欄位不 passthrough。upstream redirect 被拒絕並映射為 gateway error。
+- body、upstream error、SSE frame/line、stream collector 都有上限；server 設定 read-header/idle timeout，stream 不設固定 write timeout。request context 會一路傳到 refresh、HTTP、stream，client disconnect 時取消 upstream。
+- SSE parser 以空行作完整 frame boundary，保留 `event`、`id`、`retry`、comments 與 multiline `data`；terminal event 前 EOF 是 protocol failure。stream 已開始後依 source format 發出 native error frame。
+- transform warnings/losses 只進 redacted structured log/OTel metrics，不把 prompt、tool output、credential 或 upstream body 寫入一般 log。
+- `/v1/messages/count_tokens` 只走 provider native capability；不以固定常數冒充 token count，profile 不支援時回 `501`。
+
+## CLI、設定與持久化 (CLI, Config, Persistence)
+
+`main.go` 建立 Cobra root（binary 名稱 `auth-cli`，版本 `0.1.0`），目前指令包含 `login`、`list`、`verify`、`refresh`、`logout`、`use`、`proxy`、`video`。`config.OpenForCLI(appName, level)` 為 sample 建立：
+
+```text
+~/.config/<appName>/
+├── data/
+│   ├── states/<runID>.json
+│   ├── wal/<runID>.jsonl
+│   └── auth/*.json
+└── log/<runID>.log
+```
+
+`app.Run` 是 CLI agent 的共同 lifecycle：config → optional preflight → wall-clock deadline → Bootstrap → panic-safe Engine.Run → optional OnComplete。`app.Main` 只負責 signal binding 與 exit code。
+
+Proxy defaults（`config/proxy.go`）：port `8317`、body limit `200 MB`、model timeout `120s`、stream timeout `600s`、count-tokens timeout `30s`、stats enabled、debug off；未設定 API key 時在記憶體產生 `sk-...`，設定持久化由上層 command 負責。
+
+JSONL 對外 envelope 在 `cli/` 定義 9 種 type：`observation`、`assistant`、`tool_call`、`tool_result`、`approval_request`、`human_decision`、`checkpoint`、`result`、`error`。不得把內部 `State` 欄位直接當成穩定外部 API，新增欄位需維持 JSON round-trip。
 
 ## 模組對應 (Module Mapping)
 
-| 業務領域 | 套件 | 進入點 |
-|---------|------|--------|
-| 核心狀態機 | `agentsdk/core` | `core.Step`, `core.NewStep` |
-| 感知 | `agentsdk/perception` | `perception.Source`, `perception.Multi` |
-| 規劃 | `agentsdk/planning` | `planning.NewReAct` 等 6 個 constructor |
-| 行動 | `agentsdk/action` | `action.NewRegistry`, `action.NewTypedTool` |
-| 認證機制 | `agentsdk/auth` | `auth.OAuthClient`, `auth.RunBrowserLogin` / `RunDeviceLogin`, `auth.NewAPIKey(spec)`, `auth.NewFileStore` |
-| 認證 provider | `agentsdk/auth/provider` | `provider.Login(ctx, id)`, `provider.New(id)`, `provider.For(cred)`, `provider.IDs()` |
-| 認證 CLI | `agentsdk/cmd/auth` | `auth.NewRoot` → `main.go` (binary `auth-cli`) |
-| Protocol proxy | `agentsdk/proxy` | `proxy.New` → `cmd/proxy.go`; `route → transform → upstream → reverse transform` |
-| 配置 | `agentsdk/config` | `config.OpenForCLI`, `config.MustOpenForCLI` → `AppConfig`;`config.OpenAuthStore` |
-| Shell | `agentsdk/runtime` | `runtime.NewEngine`, `Engine.Run` / `Engine.Resume` |
-| Sample | `agentsdk/sample/logdoctor` | `cmd.RegisterRun` → `cobra.Command.Execute` |
-| Test fixtures | `agentsdk/internal/testutil` | (production code MUST NOT import) |
+| 領域 | 套件 / 進入點 |
+| --- | --- |
+| 狀態與 ports | `agentsdk/core`：`NewDecide`、`State`、`Instruction`、`ModelProvider` |
+| 推理策略 | `agentsdk/planning`：6 個 `New*` DecisionRule constructor |
+| runtime | `agentsdk/runtime`：`NewEngine`、`Run`、`RunWithEvent`、`Resume`、`SubmitHumanDecision` |
+| tools/safety | `agentsdk/action`、`agentsdk/tool`：`NewRegistry`、`NewTypedTool`、`RegisterDefaults` |
+| memory | `agentsdk/memory`、`memory/checkpoint`、`memory/filestore` |
+| middleware | `agentsdk/middleware`、`harness`、`loopguard`、`security`、`observability` |
+| app/config | `agentsdk/app`、`agentsdk/config`：`app.Run`、`OpenForCLI`、`SecureMiddleware` |
+| authentication | `agentsdk/auth`、`agentsdk/auth/provider`：`Login`、`For`、`FileStore` |
+| proxy | `agentsdk/proxy`：`proxy.New`、`protocol`、`route`、`transform`、`upstream` |
+| JSONL | `agentsdk/cli`：`Envelope`、`JSONLCodec` |
+| MCP | `agentsdk/mcp`（獨立 module）：`mcp.NewClient` |
+| provider adapters | `agentsdk/provider/anthropic`、`google`、`openaicompat`（各自獨立 module） |
 
-## 開發指南 (Development Guide)
+## 開發與驗證 (Development and Verification)
 
-### 前置需求
-
-- Go 1.26+
-- `bizshuk/gosdk@v1.0.2` 在 module cache (M2 開始用)
-
-### 安裝
+前置需求：Go `1.26+`；使用 provider adapter 時依該 module 的 API key/environment；`video` 的部分指令另需系統 `ffmpeg` 或對應 Python/ML runtime。
 
 ```bash
-cd agentsdk
+cd /Users/shuk/projects/agentSDK
 go work sync
 go mod download
-```
-
-### 建置
-
-```bash
-# root SDK + sample
 go build ./...
+go test ./... -count=1 -timeout=120s
 ```
 
-### 測試
+驗證所有 workspace modules：
 
 ```bash
-# 全套 (root SDK)
-go test ./... -count=1 -timeout=30s
-
-# sample 模組
-cd sample/logdoctor
-go test ./... -count=1 -timeout=30s
+for mod in mcp provider/anthropic provider/google provider/openaicompat \
+  sample/file-agent sample/greet-agent sample/logdoctor \
+  sample/memory-demo sample/middleware-demo sample/strategy-demo; do
+  (cd "$mod" && go test ./... -count=1 -timeout=120s)
+done
 ```
 
-### auth-cli (M6)
+常用本地流程：
 
 ```bash
-# 單一 login 入口: --provider 的 id 就是整條認證路徑 (不需要 --kind)
-go run . login --provider anthropic                  # api key,讀 ANTHROPIC_API_KEY
-go run . login --provider anthropic_oauth            # oauth2 + pkce,本機 :54545 收 callback
-go run . login --provider openai_oauth --no-browser  # 無頭機器: 印 URL,貼回 code
-go run . login --provider xai_oauth                  # device code (RFC 8628),顯示 user code + 輪詢
-go run . login --provider antigravity_oauth          # google oauth (client secret,無 PKCE)
-go run . login --provider google --key AIza...       # api key
-go run . login --provider openai --api-base http://localhost:8317   # 對 gateway 發的金鑰
-go run . login --provider vertex --sa-file sa.json --location us-central1
+go run . login --provider anthropic
+go run . login --provider anthropic_oauth --no-browser
+go run . list
+go run . verify --all
+go run . proxy
 
-go run . list                                       # 表格輸出,不印 secret
-go run . verify --all                               # 對真實 provider 驗證 (輪替後的憑證會存回)
-go run . refresh <name>                             # api_key 會回 ErrRefreshUnsupported
-go run . logout <name>
-```
-
-`ROUTES` (`auth/provider/provider.go`) 是 provider id 的唯一真相來源,目前 9 個 id:
-`anthropic` / `anthropic_oauth` / `openai` / `openai_oauth` / `google` / `xai` / `xai_oauth` /
-`antigravity_oauth` / `vertex`。
-
-憑證預設落在 `~/.config/agentsdk/data/auth/<provider>-<account>.json`(0700 目錄 / 0600 檔),
-可用 `--auth-dir` 覆寫。離線 e2e 的做法: 起一個假 provider,SA JSON 的 `token_uri` 指向它,
-`--api-base` 指向它的 models 端點。
-
-### E2E (M1)
-
-```bash
 cd sample/logdoctor
 go run . --fake --max-turns=10 run --once --fixture testdata/error.log
 ```
 
-預期 JSONL 序列:`call_model → call_tool(read_log_tail) → call_model → call_tool(notify) → call_model → done`
+`sample/logdoctor` 的 real provider 旗標為 `anthropic`、`openaicompat`、`google`；`--fake` 與 `--provider` 互斥。`sample/file-agent` 與 `sample/greet-agent` 使用 Anthropic-compatible adapter、`SecureMiddleware` 與 JSONL effect output。
 
-## Milestone 進度 (Roadmap)
+## 目前狀態與待辦 (Status and Open Items)
 
-| ID | 範疇 | 狀態 | 驗收 |
-|----|------|------|------|
-| M1 | 核心範式 + sample 骨架 | ✅ 完成 | `go test ./...` 全綠 + E2E JSONL 符合預期 |
-| M2 | 系統韌性 + 循環防禦 | ✅ 完成 | Budget 到頂即停 / Retry N 次後 surface / FileStateStore round-trip / Checkpointer.Recover JSON 與原 State 等價,Recover 期間 FakeProvider.CallCount 不變 (不重呼叫 LLM) / loopguard 第 5 次連續 CALL_TOOL 觸發 REQUEST_APPROVAL{Reason:"loop_detected"} / sample logdoctor run + resume CLI 驗證 |
-| M3 | 工具生態 + 執行期安全 | ✅ 完成 | `invopop/jsonschema` 反射 / sandbox allow-deny / spotlight + sanitizer / MCP discover / `runtime/m3_e2e_test.go` runtime 層 e2e 驗證 sanitizer 命中 + spotlight 包覆 + transcript 同步 / `perception/` 去留決策見下方「perception 去留」段 |
-| M4 | 架構解耦 + HITL + 三 provider | ✅ 完成 | mid-run approval State round-trip / `config.SecureMiddleware` 含 approval + spotlight + sanitizer 完整鏈 / `consumeApprovedPendingCall` 讓 `SubmitHumanDecision` 與 `Resume` 真正消費 out-of-band decision / `runtime/m4_hitl_e2e_test.go` 跑通 approve + reject 故事 / 三 provider mock 測試齊(anthropic httptest / google 內部 fixture)/ `--provider=anthropic\|openaicompat\|google` flag 接通 sample |
-| M5 | 內建工具 + sample wiring helper | ✅ 完成 | `tool/` 套件 6 工具(Read/Write/Edit/Bash/Glob/Grep)+ `RegisterDefaults` 一次註冊 / `action.Policy` sandbox re-check / Risk 對應 HITL(Write/Edit/Bash HIGH 觸發 ApprovalGate)/ `config.MustOpenForCLI` 樣板削減 / `sample/greet-agent` 接入 6 內建工具 + SecureMiddleware |
-| M6 | Provider 認證 (`auth/`) | ✅ 完成 | 機制層 (`auth/`) + 6 個 provider 包 + registry,9 個 provider id / 4 種認證機制:api key、OAuth2 authorization-code (PKCE 或 client_secret)、device code (RFC 8628 + OIDC discovery)、service account (RS256 JWT → STS) / PKCE S256 + state CSRF 檢查 + 本機 callback server / FileStore 0700 目錄 + 0600 檔 + atomic write / refresh single-flight + 429 Retry-After 退避 / `verify` 對真實 provider 驗證並存回輪替後的憑證 / e2e: 假 provider(models 端點 + 驗簽的 Google STS)跑通 login → list → verify → refresh → logout;xAI device flow 對真實 `auth.x.ai` 跑通 discovery + device code |
+| 項目 | 狀態 |
+| --- | --- |
+| M1 核心範式與 sample | 完成 |
+| M2 state/WAL/checkpoint/retry/timeout/loopguard | 完成 |
+| M3 tool schema、sandbox、MCP、spotlight、sanitizer、tracing | 完成 |
+| M4 HITL、security wiring、三個 provider adapter | 完成 |
+| M5 built-in tools、sample wiring、`app` lifecycle | 完成 |
+| M6 auth mechanism、9 provider ids、auth CLI | 完成；一般 ModelProvider 呼叫前自動 refresh 仍待補 |
+| Proxy 3×3 pairwise cutover 與安全 hardening | 完成（現行 branch） |
+| 四來源 37 entity wire-format catalog | 完成，見 [`docs/specs/format/README.md`](docs/specs/format/README.md) |
 
-詳細規格見 `docs/specs/`(M3 `2026-07-04-tool-ecosystem-and-runtime-security.md`、M4 `2026-07-04-architecture-decoupling-hitl-and-providers.md`、M5 `2026-07-07-m5-built-in-tools.md`、wiring helper `2026-07-07-appname-wiring-helper.md`)。歷史計畫剩 `plans/plan-only-and-plan-breezy-pike.md` 主綱與已被取代的 `docs/specs/` 對應;`plans/` 內 2026-07-07-m3 / 2026-07-07-m4 plan 已併入對應 spec 並刪除。
+目前明確未完成或刻意保留：
 
-### perception 去留(來自 M3 carry-over)
+- `perception/` 尚無 production consumer；先保留，後續再決定刪除或重新定位，見 [`README.todo`](README.todo)。
+- 一般 `core.ModelProvider` 呼叫前的 expiry/refresh wiring 尚未統一；proxy request path 已有 `CredentialResolver` refresh。
+- Anthropic/Google provider 的 `Stream` 目前以 `Generate` 結果折成 chunk；只有 `openaicompat` 與 proxy path 使用原生/完整 SSE 轉換。
+- `/admin/*` 仍是未實作 placeholder；不要在文件或 client 中當成穩定 API。
 
-**結論: 保留套件,延後決策**。`perception/` 套件(perception/source.go、normalize.go)目前無 consumer,屬無用 scaffolding。理想路徑是**選項 C: 刪除** 整個套件(`core.Observation` / `core.ObservationSource` shim 仍保留供 `testutil` 與 runtime 使用),但 M3 收尾階段未實際刪除,本檔據實記錄為「保留待後續評估」。若 sample 出現多 source fan-in 需求,優先在 sample 端 inline(`sample/logdoctor/core/listener.go` 的 `LogFileListener` 即典型用法),而非重新啟用 `perception/`。刪除 TODO 見 `README.todo`。
+## 慣例與注意事項 (Conventions and Caveats)
 
-## 慣例 (Conventions)
-
-- **命名 (Naming)**
-  - 常數一律 `SCREAMING_SNAKE_CASE` (含 unexported、block-scoped),與 gosdk 一致
-  - `var` / `func` / `type` 仍用 `MixedCaps`
-  - Package 名為單字 (`core`, `action`, `planning`)
-- **錯誤處理 (Error Handling)**
-  - `error` 回傳為主;`ToolResult.Error` 字串欄位是 tool 內部錯誤的載體 (與 panic 解耦)
-  - runtime loop 用 `fmt.Errorf("...: %w", err)` wrap
-- **測試 (Testing)**
-  - table-driven + `t.Run`
-  - `testify/assert` 與 `testify/require` 並用 (assert 為非致命檢查,require 為致命)
-  - testutil 套件為內部,production code 不得 import
-- **文件 (Docs)**
-  - Package docstring 在每個目錄的主要檔案
-  - 中文註解 + 英文關鍵字,遵循 `playground/CLAUDE.md` 全域慣例
-
-## 注意事項 (Caveats)
-
-- **`perception.Multi` close 行為**:用 `sync.WaitGroup` 等所有 source goroutine 完成才 close merged channel (M1 修正重點 — 不能讓子 goroutine 提早關閉導致 race)
-- **runtime preStep scratch seed**:`react.last_call_id` 等 scratch key 由 runtime 寫入,在 Step 呼叫前完成,讓純函式 pattern 能讀到
-- **`Sample/logdoctor/core` 與 `agentsdk/core` 撞名**:sample 端 import 必須用 `sdkcore` / `domain` 別名
-- **`go.work.sum` 已 commit**:workspace lock 檔案進入版控,讓 CI 可離線重建
-- **M2 將引入 gosdk**:`config` (viper) / `log` (slog) / `notify` (Multi/Stdout/Slack) / `metric` (mimir),wiring 點都在 sample 組合根,SDK 核心不變
+- 常數使用 `SCREAMING_SNAKE_CASE`，變數、函式、型別使用 Go `MixedCaps`；package 名稱使用單字。
+- 錯誤以 `fmt.Errorf("...: %w", err)` wrap；公開 error 不帶 credential、authorization、prompt 或未清理 upstream body。
+- 測試採 table-driven + `t.Run`，`testify/assert` 與 `testify/require` 並用；`internal/testutil` 只可被測試使用。
+- `core.Decide`、planning rules、transform pair 不得直接做 I/O、讀 credential 或建立 HTTP request；這些責任分別屬於 runtime、upstream 與 auth。
+- `sample/logdoctor/core` 與 `agentsdk/core` 是不同 module path；import 時使用 `domain` / `sdkcore` alias。
+- `docs/specs/2026-07-16-client-llm-adaptor.md` 是 legacy historical design；修改 proxy 時以 pairwise spec、現行 `proxy/` code 與測試為準。
+- 修改 package tree、module、路由或 protocol contract 後，必須同步本檔；業務範疇變更才同步 `README.md`。格式 catalog 的 entity/來源異動則同步 [`docs/specs/format/README.md`](docs/specs/format/README.md)。

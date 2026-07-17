@@ -13,13 +13,13 @@ Go Agentic Loop SDK、LLM protocol proxy 與 Log Doctor sample，提供目標導
 | 3. 工具生態 | `action/`     | TypedTool / Registry / Sandbox / ApprovalPolicy                                              |
 | 4. 規劃     | `planning/`   | 6 種 ThinkingPattern (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router) |
 
-`core/` 是純狀態機 (state + input + effect + step),只依賴 stdlib,連 gosdk 都不 import。`runtime/loop.go` 是 shell,負責 dispatch effects 到綁定的 port (model / tools / store / notifier)。
+`core/` 是純狀態機 (state + event + instruction + step),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
 
 ## 模組結構
 
 ```tree
 agentsdk/
-├── go.work                    # 多模組: root + sample/logdoctor
+├── go.work                    # 多模組: root + mcp + provider/* + sample/*
 ├── go.mod                     # module github.com/bizshuk/agentsdk
 ├── cmd/proxy.go               # proxy server CLI composition root
 ├── core/                      # 純狀態機 (stdlib only)
@@ -36,7 +36,14 @@ agentsdk/
 │   ├── upstream/              # concrete profiles、credentials、safe HTTP client
 │   ├── handler.go             # bounded generic request pipeline
 │   └── server.go              # Gin route composition
-├── cli/                       # (M2 JSONL codec)
+├── cli/                       # JSONL envelope/codec
+├── app/                       # CLI agent lifecycle/composition root
+├── config/                    # AppConfig、middleware presets、proxy config
+├── auth/                      # credential mechanism + provider registry
+├── tool/                      # 6 個內建工具
+├── mcp/                       # 獨立 module：MCP ToolSource adapter
+├── provider/                  # 獨立 module：anthropic/google/openaicompat adapters
+├── video/                     # audio/frames/subtitles preprocessing
 ├── internal/testutil/         # FakeProvider / MemStore / CapturingNotifier
 └── sample/logdoctor/          # 驗證 sample (cobra CLI + 兩個 tool)
 ```
@@ -55,12 +62,13 @@ client response ← reverse directed pair transform ← provider response
 - concrete profiles 包含 `anthropic`、`minimax`、`openai-api`、`openai-codex-oauth`、`xai`。
 - xAI 預設走 `OpenAI Responses`；qualified model `xai-chat/<model>` 可明確選擇 `OpenAI Chat Completions`。
 - provider selection 由 qualified model、credential kind 與 profile capability 決定，不以 client protocol 綁定 provider。
+- 四個參考來源的 `37` 個 directed wire-format entity 與雙向 payload 範例見 [format catalog](docs/specs/format/README.md)。
 
 ## 設計原則
 
 - **核心純粹**:`core/` 零 vendor 依賴,可獨立發佈;所有 I/O 都在 `runtime/` 與 ports adapter
-- **六種 ThinkingPattern**:透過 `core.Step` 純函式 dispatch;scratch map 作為 pattern 與 runtime 間的純函式通訊介面
-- **Tagged union Effect**:7 種 effect kind 透過 Kind discriminator + optional pointer 欄位表達,JSON round-trip 透過 `omitempty` 精簡
+- **六種 ThinkingPattern**:透過 `core.NewDecide` 與純函式 DecisionRule dispatch;working memory 作為 pattern 與 runtime 間的通訊介面
+- **Tagged union Instruction**:7 種 instruction kind 透過 Kind discriminator + optional pointer 欄位表達,JSON round-trip 透過 `omitempty` 精簡
 - **Notifier 結構性相容**: `core.Notifier` 介面方法集與 `gosdk/notify.Notifier` 完全相同,gosdk 的 Multi / Stdout / Slack 直接傳入,無需 adapter
 
 ## 執行範例 (M1 e2e)
@@ -89,8 +97,12 @@ effect done            ← end_turn
 | M2        | 系統韌性 + 循環防禦 (memory / checkpoint / WAL / loopguard / retry)              | ✅ 完成 |
 | M3        | 工具生態 + 執行期安全 (schema / sandbox / spotlight / sanitizer / MCP / tracing) | ✅ 完成 |
 | M4        | 架構解耦 + HITL 完整 + 三個 LLM provider (anthropic / openaicompat / google)     | ✅ 完成 |
+| M5        | built-in tools、sample wiring、`app` lifecycle                                | ✅ 完成 |
+| M6        | auth mechanism、9 provider ids、auth CLI                                      | ✅ 完成 |
+| Proxy     | 3×3 pairwise protocol transform、provider profile routing、SSE hardening        | ✅ 完成 |
+| Format    | 四來源 `37` 個 client/provider wire-format entity catalog                       | ✅ 完成 |
 
-詳細規格見 `plans/plan-only-and-plan-breezy-pike.md`,各 milestone 實作完成後會轉為 `docs/specs/YYYY-MM-DD-<feature>.md`:
+詳細規格見 `docs/specs/` 與 [`docs/specs/format/README.md`](docs/specs/format/README.md),各 milestone 實作完成後會轉為 `docs/specs/YYYY-MM-DD-<feature>.md`:
 
 - `2026-07-04-core-paradigm-and-sample-skeleton.md` (M1)
 - `2026-07-04-system-resilience-and-loop-defense.md` (M2)
@@ -104,6 +116,6 @@ effect done            ← end_turn
 ## 慣例
 
 - 常數一律 `SCREAMING_SNAKE_CASE` (含 unexported、block-scoped),與 gosdk 一致
-- `go.work` 多模組:每子模組各自 `go.mod`,root SDK 維持 stdlib-only
+- `go.work` 多模組:每子模組各自 `go.mod`;`core/` 維持 stdlib-only,root runtime/proxy/config 可使用應用層依賴
 - 測試:table-driven + `t.Run` + `testify`
 - 中文註解 + 英文關鍵字,遵循 `playground/CLAUDE.md` 慣例
