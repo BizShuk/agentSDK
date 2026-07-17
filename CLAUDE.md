@@ -4,7 +4,7 @@
 
 ## 技術基準 (Current Baseline)
 
-- 語言與 workspace：Go `1.26.0`、`go.work`，共 `11` 個 module（root、`mcp`、3 個 provider module、6 個 sample module）。
+- 語言與 workspace：Go `1.26.0`、`go.work`，共 `12` 個 module（root、`mcp`、3 個 provider module、6 個 sample module、`utils/video`）。
 - root module：`github.com/bizshuk/agentsdk`。`core/` 保持標準函式庫 only；root 的 runtime、CLI、proxy 與 wiring 會使用外部套件。
 - 目前 proxy 架構：`protocol → route → transform → upstream`，三種 client wire format 的 `3×3` directed pair 已接上 handler。
 - 來源與規格：現行 pairwise 決策見 [`docs/specs/2026-07-16-pairwise-agent-provider-transform.md`](docs/specs/2026-07-16-pairwise-agent-provider-transform.md)；四個來源的 wire-format 盤點見 [`docs/specs/format/README.md`](docs/specs/format/README.md)。
@@ -16,10 +16,10 @@
 agentsdk/
 ├── README.md                         # 業務範疇與使用者導覽
 ├── CLAUDE.md                         # 技術脈絡與架構決策（本檔）
-├── go.work                           # root + mcp + provider/* + sample/*
+├── go.work                           # root + mcp + provider/* + sample/* + utils/video
 ├── go.mod                            # github.com/bizshuk/agentsdk
 ├── main.go                           # auth-cli binary entry
-├── cmd/                              # auth、proxy、video、credential use 指令樹
+├── cmd/                              # auth、proxy、credential use 指令樹
 ├── app/                              # CLI agent composition/lifecycle（Agent、preflight、panic recovery）
 ├── config/                           # AppConfig、middleware presets、proxy config
 ├── core/                             # 純狀態機、Message/Part、Event、Instruction、ports
@@ -42,7 +42,7 @@ agentsdk/
 │   ├── anthropic/                    # 獨立 module：anthropic-sdk-go adapter
 │   ├── google/                       # 獨立 module：google.golang.org/genai adapter
 │   └── openaicompat/                 # 獨立 module：stdlib OpenAI-compatible HTTP/SSE adapter
-├── video/                            # audio、frames、subtitles/ffmpeg preprocessing utilities
+├── utils/video/                      # 獨立 module：audio、frames、subtitles/ffmpeg utilities + video CLI command
 ├── sample/
 │   ├── file-agent/                   # 6 內建工具的檔案操作 agent
 │   ├── greet-agent/                  # 內建工具 + greet tool
@@ -60,7 +60,7 @@ agentsdk/
 
 | 類別 | 技術 | 現況 |
 | --- | --- | --- |
-| Language | Go `1.26.0` | `go.work` 管理 11 個 module |
+| Language | Go `1.26.0` | `go.work` 管理 12 個 module |
 | Root runtime | Go stdlib、`github.com/bizshuk/gosdk v1.1.0` | config/log/notify 等組合點在 root 或 sample |
 | HTTP proxy | `gin-gonic/gin v1.11.0`、`gosdk/mw`、`gosdk/router` | `/v1` API、health/ping、localhost CORS、API key、per-IP rate limit |
 | CLI/config | `spf13/cobra v1.10.2`、`spf13/viper v1.20.1` | auth-cli、proxy、samples 與 layered settings |
@@ -154,7 +154,7 @@ openai-responses
 
 ## CLI、設定與持久化 (CLI, Config, Persistence)
 
-`main.go` 建立 Cobra root（binary 名稱 `auth-cli`，版本 `0.1.0`），目前指令包含 `login`、`list`、`verify`、`refresh`、`logout`、`use`、`proxy`、`video`。`config.OpenForCLI(appName, level)` 為 sample 建立：
+`main.go` 建立 Cobra root（binary 名稱 `auth-cli`，版本 `0.1.0`），目前指令包含 `login`、`list`、`verify`、`refresh`、`logout`、`use`、`proxy`、`video`。`video` 由獨立 module 的 `utils/video/cmd.NewCommand()` 組合回 root CLI。`config.OpenForCLI(appName, level)` 為 sample 建立：
 
 ```text
 ~/.config/<appName>/
@@ -187,10 +187,11 @@ JSONL 對外 envelope 在 `cli/` 定義 9 種 type：`observation`、`assistant`
 | JSONL | `agentsdk/cli`：`Envelope`、`JSONLCodec` |
 | MCP | `agentsdk/mcp`（獨立 module）：`mcp.NewClient` |
 | provider adapters | `agentsdk/provider/anthropic`、`google`、`openaicompat`（各自獨立 module） |
+| video utilities | `agentsdk/utils/video`（獨立 module）：`audio`、`frames`、`subtitles`、`ffmpegutil`、`cmd.NewCommand` |
 
 ## 開發與驗證 (Development and Verification)
 
-前置需求：Go `1.26+`；使用 provider adapter 時依該 module 的 API key/environment；`video` 的部分指令另需系統 `ffmpeg` 或對應 Python/ML runtime。
+前置需求：Go `1.26+`；使用 provider adapter 時依該 module 的 API key/environment；`video` module 的部分指令另需系統 `ffmpeg`、`ffprobe` 或對應 Python/ML runtime。
 
 ```bash
 cd /Users/shuk/projects/agentSDK
@@ -203,7 +204,7 @@ go test ./... -count=1 -timeout=120s
 驗證所有 workspace modules：
 
 ```bash
-for mod in mcp provider/anthropic provider/google provider/openaicompat \
+for mod in utils/video mcp provider/anthropic provider/google provider/openaicompat \
   sample/file-agent sample/greet-agent sample/logdoctor \
   sample/memory-demo sample/middleware-demo sample/strategy-demo; do
   (cd "$mod" && go test ./... -count=1 -timeout=120s)

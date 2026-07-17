@@ -19,7 +19,7 @@ Go Agentic Loop SDK、LLM protocol proxy 與 Log Doctor sample，提供目標導
 
 ```tree
 agentsdk/
-├── go.work                    # 多模組: root + mcp + provider/* + sample/*
+├── go.work                    # 多模組: root + mcp + provider/* + sample/* + utils/video
 ├── go.mod                     # module github.com/bizshuk/agentsdk
 ├── cmd/proxy.go               # proxy server CLI composition root
 ├── core/                      # 純狀態機 (stdlib only)
@@ -43,10 +43,12 @@ agentsdk/
 ├── tool/                      # 6 個內建工具
 ├── mcp/                       # 獨立 module：MCP ToolSource adapter
 ├── provider/                  # 獨立 module：anthropic/google/openaicompat adapters
-├── video/                     # audio/frames/subtitles preprocessing
+├── utils/video/               # 獨立 module：audio/frames/subtitles/ffmpeg preprocessing
 ├── internal/testutil/         # FakeProvider / MemStore / CapturingNotifier
 └── sample/logdoctor/          # 驗證 sample (cobra CLI + 兩個 tool)
 ```
+
+`utils/video` 是獨立 Go module（`github.com/bizshuk/agentsdk/utils/video`），不依賴 Agent SDK 核心；root `auth-cli` 只透過 `utils/video/cmd.NewCommand()` 組合 `video` 子指令。
 
 ## Proxy protocol bridge
 
