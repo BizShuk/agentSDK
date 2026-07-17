@@ -1,5 +1,5 @@
 // Package subtitles turns a video's audio track into timestamped text
-// segments ("字幕"). It depends only on internal/preprocess/audio for the
+// segments ("字幕"). It depends only on utils/video/audio for the
 // extraction step — transcription itself is behind the Transcriber
 // interface, so this package has no hard dependency on any specific speech
 // backend and can be exercised standalone with a stub Transcriber.
@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/bizshuk/agentsdk/video/audio"
+	"github.com/bizshuk/agentsdk/utils/video/audio"
 )
 
 // Segment is one timed line of transcript text.

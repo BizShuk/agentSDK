@@ -1,6 +1,6 @@
 // Package audio extracts an audio track from a video (or audio) file via
 // ffmpeg into a transcriber-ready WAV. It has no dependency on
-// internal/preprocess/frames or on any transcription backend — it is a
+// utils/video/frames or on any transcription backend — it is a
 // standalone, independently testable unit: input a media path, output a WAV
 // file, nothing more.
 package audio
@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/bizshuk/agentsdk/video/ffmpegutil"
+	"github.com/bizshuk/agentsdk/utils/video/ffmpegutil"
 )
 
 // Options controls the extracted WAV's format.

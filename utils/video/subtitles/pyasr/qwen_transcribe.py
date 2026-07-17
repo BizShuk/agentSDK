@@ -4,7 +4,7 @@
 Runs independently of the Go binary — `python3 qwen_transcribe.py --audio
 foo.wav --output-path /tmp/out` produces /tmp/out.json with the same
 {"text", "segments": [{"text", "start", "end"}]} shape the Go
-QwenMLXTranscriber (internal/preprocess/subtitles/qwen_mlx.go) parses.
+QwenMLXTranscriber (utils/video/subtitles/qwen_mlx.go) parses.
 
 Exists as a thin wrapper (not a CLI flag on mlx_audio's own `generate.py`)
 because that CLI's --language always sends a real language code (default

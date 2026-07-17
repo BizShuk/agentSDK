@@ -1,5 +1,5 @@
 // Package frames extracts still frames from a video file via ffmpeg. It has
-// no dependency on internal/preprocess/subtitles or on any HTTP/handler
+// no dependency on utils/video/subtitles or on any HTTP/handler
 // code — it is a standalone, independently testable unit: given a video path
 // it returns image files on disk, nothing more.
 package frames
@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/bizshuk/agentsdk/video/ffmpegutil"
+	"github.com/bizshuk/agentsdk/utils/video/ffmpegutil"
 )
 
 // Format is the still-image codec ffmpeg writes. JPEG keeps output small;

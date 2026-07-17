@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bizshuk/agentsdk/video/ffmpegutil"
+	"github.com/bizshuk/agentsdk/utils/video/ffmpegutil"
 )
 
 // synthTestClip renders a short sine-wave audio clip via ffmpeg's lavfi

@@ -1,6 +1,6 @@
 // Package ffmpegutil holds shared, dependency-free helpers (binary discovery,
-// duration probing) used by both internal/preprocess/frames and
-// internal/preprocess/subtitles. Neither of those packages depends on the
+// duration probing) used by both utils/video/frames and
+// utils/video/subtitles. Neither of those packages depends on the
 // other — this package is the only thing they share.
 package ffmpegutil
 
