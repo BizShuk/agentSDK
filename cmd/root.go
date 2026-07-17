@@ -9,8 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bizshuk/agentsdk/config"
 	sdkauth "github.com/bizshuk/agentsdk/auth"
+	"github.com/bizshuk/agentsdk/config"
+	videocmd "github.com/bizshuk/agentsdk/utils/video/cmd"
 	"github.com/spf13/cobra"
 )
 
@@ -65,7 +66,7 @@ so a stored credential is one that was proven to work.`),
 		newLogoutCmd(flags),
 		newUseCmd(flags),
 		proxyCmd,
-		videoCmd,
+		videocmd.NewCommand(),
 	)
 	return root
 }
