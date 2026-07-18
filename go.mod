@@ -3,10 +3,10 @@ module github.com/bizshuk/agentsdk
 go 1.26.0
 
 require (
-	github.com/bizshuk/auth v0.0.0
-	github.com/bizshuk/proxy v0.0.0
 	github.com/bizshuk/agentsdk/utils/video v0.0.0
+	github.com/bizshuk/auth v0.0.0
 	github.com/bizshuk/gosdk v1.1.0
+	github.com/bizshuk/proxy v0.0.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
