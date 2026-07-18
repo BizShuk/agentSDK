@@ -4,3 +4,6 @@
 [submodule "tmp/cliproxyapi"]
 	path = tmp/cliproxyapi
 	url = https://github.com/router-for-me/CLIProxyAPI
+[submodule "auth"]
+	path = auth
+	url = https://github.com/BizShuk/auth.git
