@@ -5,25 +5,26 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bizshuk/agentsdk/auth/auth"
+	"github.com/bizshuk/agentsdk/auth/model"
+	svc "github.com/bizshuk/agentsdk/auth/svc"
 	"github.com/bizshuk/agentsdk/core"
 )
 
 // BuildProvider constructs a concrete ModelProvider from a resolved
 // credential — typically a closure over provider/*.New with the credential's
 // token, e.g. anthropic.New(anthropic.WithAPIKey(cred.APIKey)).
-type BuildProvider func(cred *auth.Credential) (core.ModelProvider, error)
+type BuildProvider func(cred *model.Credential) (core.ModelProvider, error)
 
 // RefreshingProvider wraps a ModelProvider so every call resolves the
 // provider-family credential first: an expired OAuth token is refreshed and
-// persisted by auth.Resolver, and a rotated token rebuilds the inner
+// persisted by svc.Resolver, and a rotated token rebuilds the inner
 // provider before the call proceeds.
 //
 // It lives in config (not runtime) for the same reason DefaultMiddleware
 // does: it wires a concrete mechanism (auth) onto a core port, and the SDK
 // core packages must not depend on auth.
 type RefreshingProvider struct {
-	resolver *auth.Resolver
+	resolver *svc.Resolver
 	family   string
 	build    BuildProvider
 
@@ -35,7 +36,7 @@ type RefreshingProvider struct {
 // NewRefreshingProvider decorates the provider family's credential flow onto
 // a lazily-built ModelProvider. The inner provider is first built on the
 // first call, so construction itself never touches credentials.
-func NewRefreshingProvider(resolver *auth.Resolver, family string, build BuildProvider) (*RefreshingProvider, error) {
+func NewRefreshingProvider(resolver *svc.Resolver, family string, build BuildProvider) (*RefreshingProvider, error) {
 	if resolver == nil {
 		return nil, fmt.Errorf("refreshing provider: resolver is required")
 	}
@@ -104,7 +105,7 @@ func (p *RefreshingProvider) current(ctx context.Context) (core.ModelProvider, e
 	return p.inner, nil
 }
 
-func credentialToken(cred *auth.Credential) string {
+func credentialToken(cred *model.Credential) string {
 	if cred.AccessToken != "" {
 		return cred.AccessToken
 	}

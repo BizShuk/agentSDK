@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/bizshuk/agentsdk/auth/auth"
+	utils "github.com/bizshuk/agentsdk/auth/utils"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory/filestore"
 	gosdkconfig "github.com/bizshuk/gosdk/config"
@@ -27,7 +27,7 @@ type AppConfig struct {
 	LogFile    string             // <LogDir>/<RunID>.log
 	StateStore core.StateStore    // file-backed StateStore, ready to use
 	WAL        core.WriteAheadLog // file-backed WriteAheadLog, ready to use
-	AuthStore  *auth.FileStore    // provider credentials (0600 JSON files)
+	AuthStore  *utils.FileStore    // provider credentials (0600 JSON files)
 }
 
 // OpenForCLI does everything a CLI sample needs in one call:
@@ -86,7 +86,7 @@ func OpenForCLI(appName string, level slog.Level) (*AppConfig, error) {
 	}
 
 	// 5. Provider 憑證 store (0700 目錄 / 0600 檔案)。
-	authStore, err := auth.NewFileStore(authDir(dataDir))
+	authStore, err := utils.NewFileStore(authDir(dataDir))
 	if err != nil {
 		return nil, fmt.Errorf("config: auth store: %w", err)
 	}

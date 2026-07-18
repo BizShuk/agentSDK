@@ -12,6 +12,9 @@
 - 額外修正：`app.Run` 空名稱 guard 恢復（`56df827` 誤改造成的 pre-existing 紅測）；`cmd/use.go` active.json 邏輯收斂到 `auth.SaveActiveName`。
 - 追加步驟 8（user 指示）：CLI 指令集隨 module 走 — `auth/cmd.Install(root, appName)` 掛載憑證指令集（store 目錄解析改 stdlib，`config.OpenAuthStore` 刪除）、`proxy/cmd.NewCommand()` 提供 `proxy` 指令；root `cmd/` 縮為純聚合殼（~50 行），CLI 對外介面不變，三組指令可被任何 cobra root 單獨掛載。
 - 追加步驟 9（user 指示）：`auth`、`proxy` module root 各建 `main.go`（binary-first 佈局），函式庫檔案移入 `auth/auth`、`proxy/proxy` 子套件（package 名不變，import path 加一層，git mv 保留歷史）；全 workspace import path 同步改寫；依賴方向 main → cmd → 函式庫 → 下游，`go list -deps` 驗證函式庫不反向依賴 cmd（無環）。兩 binary 與 `auth-cli` 共用設定/憑證目錄。
+- 追加步驟 10（user 指示，二階段 MVC 拆分）：
+  - **stage A（已完成）**：auth 內部從 `auth/auth` 拆為第一層語意通用 package — `model/`（Credential/Kind/Option/VerifyResult/Authenticator/errors）、`svc/`（OAuth/Device/APIKey/PKCE/Cookie/Resolver flows）、`utils/`（FileStore/active.json/PKCE/OpenBrowser/PrintDeviceCode）。理由：檔名比 package 名更易識別（`auth/auth/store.go` 看不出是憑證檔邏輯；`auth/utils/store.go` 一眼知道是工具層）。`model.Options.OpenBrowser`/`ShowDeviceCode` 預設改 nil（caller 注入），簽名改 `func(any)` — model 不反向依賴 svc.DeviceCode 型別，維持單向。`SetMetadata` 從 svc 搬到 model（local-type method 要求）。全 workspace ~40 檔 import path `auth/auth` → `auth/{model,svc,utils}`，外加 `sdkauth`/`auth` alias 與各檔實質使用的子 package alias 同步處理。11 個 auth 套件全綠。
+  - **stage B（待執行）**：proxy 從 `proxy/proxy` 拆為 `proxy/handlers/`（server/handler/middleware/observability）、`proxy/svc/{route,transform,upstream}/`（第二層 domain）、`proxy/model/`（原 protocol 套件，package 改名 `model`）、`proxy/config/`（LoadConfig/Config，獨立於 handlers）。仍用「第一層通用名、第二層 domain」的拆分哲學。**保留 `proxy/config.go` 已有的 `Providers`/`LegacyAPIKeys` 設定結構** — 那是他人階段的進度，不動。
 
 ## 1. 目標與範圍 (Goal & Scope)
 

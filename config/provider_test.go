@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bizshuk/agentsdk/auth/auth"
+	"github.com/bizshuk/agentsdk/auth/model"
+	utils "github.com/bizshuk/agentsdk/auth/utils"
+	svc "github.com/bizshuk/agentsdk/auth/svc"
 	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/stretchr/testify/assert"
@@ -41,17 +43,17 @@ type rotatingAuthenticator struct {
 
 func (a *rotatingAuthenticator) Provider() string { return "openai" }
 
-func (a *rotatingAuthenticator) Kind() auth.Kind { return auth.KIND_OAUTH }
+func (a *rotatingAuthenticator) Kind() model.Kind { return model.KIND_OAUTH }
 
-func (a *rotatingAuthenticator) Login(ctx context.Context) (*auth.Credential, error) {
+func (a *rotatingAuthenticator) Login(ctx context.Context) (*model.Credential, error) {
 	return nil, errors.New("login not supported")
 }
 
-func (a *rotatingAuthenticator) Verify(ctx context.Context, cred *auth.Credential) (*auth.VerifyResult, error) {
+func (a *rotatingAuthenticator) Verify(ctx context.Context, cred *model.Credential) (*model.VerifyResult, error) {
 	return nil, errors.New("verify not supported")
 }
 
-func (a *rotatingAuthenticator) Refresh(ctx context.Context, cred *auth.Credential) (*auth.Credential, error) {
+func (a *rotatingAuthenticator) Refresh(ctx context.Context, cred *model.Credential) (*model.Credential, error) {
 	a.serial++
 	rotated := *cred
 	rotated.AccessToken = "rotated-" + string(rune('0'+a.serial))
@@ -59,12 +61,12 @@ func (a *rotatingAuthenticator) Refresh(ctx context.Context, cred *auth.Credenti
 	return &rotated, nil
 }
 
-func newOAuthStore(t *testing.T, expiresAt time.Time) *auth.FileStore {
+func newOAuthStore(t *testing.T, expiresAt time.Time) *utils.FileStore {
 	t.Helper()
-	store, err := auth.NewFileStore(t.TempDir())
+	store, err := utils.NewFileStore(t.TempDir())
 	require.NoError(t, err)
-	require.NoError(t, store.Save(&auth.Credential{
-		Provider: "openai", Kind: auth.KIND_OAUTH,
+	require.NoError(t, store.Save(&model.Credential{
+		Provider: "openai", Kind: model.KIND_OAUTH,
 		AccessToken: "initial", RefreshToken: "refresh",
 		ExpiresAt: expiresAt,
 	}))
@@ -74,12 +76,12 @@ func newOAuthStore(t *testing.T, expiresAt time.Time) *auth.FileStore {
 func TestRefreshingProviderRefreshesExpiredBeforeCall(t *testing.T) {
 	store := newOAuthStore(t, time.Now().Add(-time.Minute))
 	authenticator := &rotatingAuthenticator{}
-	resolver := auth.NewResolver(store, func(*auth.Credential) (auth.Authenticator, error) {
+	resolver := svc.NewResolver(store, func(*model.Credential) (model.Authenticator, error) {
 		return authenticator, nil
 	}, nil)
 
 	builds := 0
-	provider, err := config.NewRefreshingProvider(resolver, "openai", func(cred *auth.Credential) (core.ModelProvider, error) {
+	provider, err := config.NewRefreshingProvider(resolver, "openai", func(cred *model.Credential) (core.ModelProvider, error) {
 		builds++
 		return &recordingProvider{token: cred.AccessToken}, nil
 	})
@@ -101,10 +103,10 @@ func TestRefreshingProviderRefreshesExpiredBeforeCall(t *testing.T) {
 
 func TestRefreshingProviderRebuildsOnRotation(t *testing.T) {
 	store := newOAuthStore(t, time.Now().Add(time.Hour))
-	resolver := auth.NewResolver(store, nil, nil)
+	resolver := svc.NewResolver(store, nil, nil)
 
 	builds := 0
-	provider, err := config.NewRefreshingProvider(resolver, "openai", func(cred *auth.Credential) (core.ModelProvider, error) {
+	provider, err := config.NewRefreshingProvider(resolver, "openai", func(cred *model.Credential) (core.ModelProvider, error) {
 		builds++
 		return &recordingProvider{token: cred.AccessToken}, nil
 	})
@@ -116,8 +118,8 @@ func TestRefreshingProviderRebuildsOnRotation(t *testing.T) {
 
 	// Out-of-band rotation (another process saved a new token): the next
 	// call must pick it up and rebuild the inner provider.
-	require.NoError(t, store.Save(&auth.Credential{
-		Provider: "openai", Kind: auth.KIND_OAUTH,
+	require.NoError(t, store.Save(&model.Credential{
+		Provider: "openai", Kind: model.KIND_OAUTH,
 		AccessToken: "out-of-band", RefreshToken: "refresh",
 		ExpiresAt: time.Now().Add(time.Hour),
 	}))
@@ -128,26 +130,26 @@ func TestRefreshingProviderRebuildsOnRotation(t *testing.T) {
 }
 
 func TestRefreshingProviderSurfacesResolveFailure(t *testing.T) {
-	store, err := auth.NewFileStore(t.TempDir())
+	store, err := utils.NewFileStore(t.TempDir())
 	require.NoError(t, err)
-	resolver := auth.NewResolver(store, nil, nil)
+	resolver := svc.NewResolver(store, nil, nil)
 
-	provider, err := config.NewRefreshingProvider(resolver, "openai", func(*auth.Credential) (core.ModelProvider, error) {
+	provider, err := config.NewRefreshingProvider(resolver, "openai", func(*model.Credential) (core.ModelProvider, error) {
 		t.Fatal("build must not run without a credential")
 		return nil, nil
 	})
 	require.NoError(t, err)
 
 	_, err = provider.Generate(context.Background(), core.ModelRequest{})
-	var unavailableErr *auth.UnavailableError
+	var unavailableErr *svc.UnavailableError
 	require.ErrorAs(t, err, &unavailableErr)
 }
 
 func TestNewRefreshingProviderValidatesArguments(t *testing.T) {
-	store, err := auth.NewFileStore(t.TempDir())
+	store, err := utils.NewFileStore(t.TempDir())
 	require.NoError(t, err)
-	resolver := auth.NewResolver(store, nil, nil)
-	build := func(*auth.Credential) (core.ModelProvider, error) { return &recordingProvider{}, nil }
+	resolver := svc.NewResolver(store, nil, nil)
+	build := func(*model.Credential) (core.ModelProvider, error) { return &recordingProvider{}, nil }
 
 	_, err = config.NewRefreshingProvider(nil, "openai", build)
 	assert.ErrorContains(t, err, "resolver is required")
