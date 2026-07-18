@@ -55,7 +55,8 @@ func Run(ctx context.Context, a Agent, opts ...Option) int {
 
 	name := a.Name()
 	if name == "" {
-		name = "agentSDK"
+		slog.Error("app: Agent.Name must not be empty")
+		return EXIT_ERROR
 	}
 
 	// 1. Config. Opens the app dirs, generates the run ID, wires the

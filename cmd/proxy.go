@@ -6,7 +6,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/proxy"
 	"github.com/spf13/cobra"
 )
@@ -20,7 +19,7 @@ var proxyCmd = &cobra.Command{
 }
 
 func runProxy() error {
-	cfg, err := config.LoadProxyConfig()
+	cfg, err := proxy.LoadConfig()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
