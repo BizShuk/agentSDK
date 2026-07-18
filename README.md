@@ -19,7 +19,7 @@ Go Agentic Loop SDK、LLM protocol proxy 與 Log Doctor sample，提供目標導
 
 ```tree
 agentsdk/
-├── go.work                    # 多模組: root + auth submodule + proxy + mcp + provider/* + sample/* + utils/video
+├── go.work                    # 多模組: root + auth submodule + proxy + provider/* + sample/*
 ├── go.mod                     # module github.com/bizshuk/agentsdk
 ├── cmd/proxy.go               # proxy server CLI composition root
 ├── core/                      # 純狀態機 (stdlib only, 含 ObservationSource port)
@@ -28,7 +28,6 @@ agentsdk/
 ├── action/                    # TypedTool + Registry
 ├── middleware/                # (M2 鏈)
 ├── runtime/                   # Loop: dispatch + checkpoint + WAL
-├── cli/                       # JSONL envelope/codec
 ├── app/                       # CLI agent lifecycle/composition root
 ├── config/                    # AppConfig、middleware presets、RefreshingProvider
 ├── tool/                      # 6 個內建工具
@@ -41,14 +40,12 @@ agentsdk/
 │   ├── config.go              # proxy 設定 (gosdk layered viper, APP_NAME=agentSDK)
 │   ├── handler.go             # bounded generic request pipeline
 │   └── server.go              # Gin route composition
-├── mcp/                       # 獨立 module：MCP ToolSource adapter
 ├── provider/                  # 獨立 module：anthropic/google/openaicompat adapters
-├── utils/video/               # 獨立 module：audio/frames/subtitles/ffmpeg preprocessing
 ├── internal/testutil/         # FakeProvider / MemStore / CapturingNotifier
 └── sample/logdoctor/          # 驗證 sample (cobra CLI + 兩個 tool)
 ```
 
-`auth` 是 production Git submodule（`https://github.com/BizShuk/auth.git`），`utils/video`、`auth`、`proxy` 都是獨立 Go module，且各自攜帶自己的 CLI surface：`auth/cmd.Install` 掛載憑證指令集（login/list/verify/refresh/logout/use）、`proxy/cmd.NewCommand()` 提供 `proxy` 指令、`utils/video/cmd.NewCommand()` 提供 `video` 指令。root `cmd/` 只是聚合殼，把三者組合成 `auth-cli`；任何 cobra root 都能單獨掛載其中一組。`auth` 與 `proxy` module root 另有 `main.go`（auth 函式庫位於 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫位於 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`），可各自 build 出獨立同名 binary，與 `auth-cli` 共用設定與憑證目錄。`auth` 依賴 viper/cobra + stdlib；`proxy` 依賴 `auth` 與 gin/gosdk；SDK 核心群（core/runtime/...）不依賴兩者。依賴方向固定為 `binary(root cmd) → proxy → auth`。
+`auth` 是 production Git submodule（`https://github.com/BizShuk/auth.git`），`auth` 與 `proxy` 都是獨立 Go module；二者各自攜帶自己的 CLI surface：`auth/cmd.Install` 掛載憑證指令集（login/list/verify/refresh/logout/use）、`proxy/cmd.NewCommand()` 提供 `proxy` 指令。root `cmd/` 只是聚合殼，把二者組合成 `auth-cli`；任何 cobra root 都能單獨掛載其中一組。`auth` 與 `proxy` module root 另有 `main.go`（auth 函式庫位於 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫位於 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`），可各自 build 出獨立同名 binary，與 `auth-cli` 共用設定與憑證目錄。`auth` 依賴 viper/cobra + stdlib；`proxy` 依賴 `auth` 與 gin/gosdk；SDK 核心群（core/runtime/...）不依賴任一。依賴方向固定為 `binary(root cmd) → proxy → auth`。
 
 ## Proxy protocol bridge
 

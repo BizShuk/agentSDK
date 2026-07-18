@@ -6,6 +6,16 @@
 ## Pending
 
 - [x] `perception/` 去留:已刪除套件(無 production consumer;`core.ObservationSource` port 保留在 `core`)
+- [x] `cli/` + `mcp/` 去留:已刪除套件(無 production consumer)
+  - `cli/` 為 JSONL 9 種 envelope + codec,只有 self test;`runtime/loop.go` 的 `Emitter` 註解改成「websocket writer 或其他 transport 承接」
+  - `mcp/` 為獨立 module + `modelcontextprotocol/go-sdk` 依賴,只有 self test;從 `go.work` 移除,`CLAUDE.md` 同步刪除對應條目
+  - 後續:若日後需要 MCP 或 JSONL 對外 wire format,以獨立 module 重新落地並補 wiring
+- [x] `video-utils` 外部依賴移除 (2026-07-19)
+  - `cmd/root.go` 移除 `videocmd` import 與 `videocmd.NewCommand()`;package doc 改為「auth + proxy 二者組裝」
+  - `cmd/root_test.go` 刪除(`TestNewRootBuildsIndependentVideoCommands` 唯一目的就是驗證 video command 指標獨立)
+  - `go.mod` / `go.sum` 移除 `github.com/bizshuk/video-utils` require
+  - `CLAUDE.md` 與 `README.md` 同步拿掉 video-utils / `video` 指令相關條目;模組數 12 → 11
+  - 前置需求段拿掉 ffmpeg/ffprobe 描述;若日後重啟,以獨立 git repo clone 後 add workspace module
 
 ## M6 — Provider 認證 (`auth/`)
 

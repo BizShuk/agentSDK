@@ -4,7 +4,6 @@ go 1.26.0
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.50.2
-	github.com/bizshuk/agentsdk/utils/video v0.0.0
 	github.com/bizshuk/auth v0.0.0-20260718180648-a05ed97812a8
 	github.com/bizshuk/gosdk v1.1.0
 	github.com/bizshuk/proxy v0.0.0-20260718192130-f6b9abe5a249
@@ -94,5 +93,3 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/bizshuk/agentsdk/utils/video => ./utils/video

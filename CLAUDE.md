@@ -4,7 +4,7 @@
 
 ## 技術基準 (Current Baseline)
 
-- 語言與 workspace：Go `1.26.0`、`go.work`，共 `14` 個 module（root、`auth` submodule、`proxy`、`mcp`、3 個 provider module、6 個 sample module、`utils/video`）。
+- 語言與 workspace：Go `1.26.0`、`go.work`，共 `11` 個 module（root、`auth` submodule、`proxy`、3 個 provider module、6 個 sample module）。2026-07-19 移除原 `cli/` + `mcp/` 兩個未對接的套件,並移除外部 `video-utils` 依賴 (`go.mod` 與 `cmd/` wiring 同步清掉)。
 - root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/planning/action/tool/memory/middleware/runtime/cli）與組合層（app/config/cmd）。`core/` 保持標準函式庫 only；`auth` 是 production Git submodule 且獨立 module，`proxy` 也是獨立 module；依賴方向固定 `root cmd → proxy → auth`，SDK 核心群不依賴兩者。
 - 目前 proxy 架構：`protocol → route → transform → upstream`，三種 client wire format 的 `3×3` directed pair 已接上 handler。
 - 來源與規格：現行 pairwise 決策見 [`proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md`](proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md)；四個來源的 wire-format 盤點見 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md)。
@@ -16,10 +16,10 @@
 agentsdk/
 ├── README.md                         # 業務範疇與使用者導覽
 ├── CLAUDE.md                         # 技術脈絡與架構決策（本檔）
-├── go.work                           # root + auth submodule + proxy + mcp + provider/* + sample/* + utils/video
+├── go.work                           # root + auth submodule + proxy + provider/* + sample/*
 ├── go.mod                            # github.com/bizshuk/agentsdk
 ├── main.go                           # auth-cli binary entry
-├── cmd/                              # 聚合殼：掛載 auth/cmd、proxy/cmd、utils/video/cmd
+├── cmd/                              # 聚合殼：掛載 auth/cmd、proxy/cmd
 ├── app/                              # CLI agent composition/lifecycle（Agent、preflight、panic recovery）
 ├── config/                           # AppConfig、middleware presets、RefreshingProvider
 ├── core/                             # 純狀態機、Message/Part、Event、Instruction、ports（含 ObservationSource）
@@ -29,7 +29,7 @@ agentsdk/
 ├── middleware/                       # chain、retry/timeout/budget/loopguard、安全與 OTel tracing
 ├── memory/                           # context window、compactor、checkpoint、JSON state/WAL
 ├── runtime/                          # Engine：dispatch Instruction、fold Event、Run/Resume/HITL
-├── cli/                              # 9 種 JSONL Envelope 與 codec
+├── cli/                              # (已刪除) 9 種 JSONL Envelope 與 codec —— 無 production caller
 ├── auth/                             # Git submodule + 獨立 module；main.go 可 build 出獨立 `auth` binary
 │   ├── model/                        # Credential、options 與 credential metadata
 │   ├── svc/                          # Login、OAuth/PKCE、device flow、FileStore、Resolver
@@ -48,12 +48,12 @@ agentsdk/
 │   │   └── upstream/                  # concrete profile、credential resolver、safe HTTP client
 │   ├── docs/                         # proxy-owned plans/specs + wire-format catalog
 │   └── cmd/                          # `proxy` 指令（NewCommand）
-├── mcp/                              # 獨立 module：MCP Client → action.ToolSource
+├── mcp/                              # (已刪除) 獨立 module：MCP Client → action.ToolSource —— 無 production caller
 ├── provider/
 │   ├── anthropic/                    # 獨立 module：anthropic-sdk-go adapter
 │   ├── google/                       # 獨立 module：google.golang.org/genai adapter
 │   └── openaicompat/                 # 獨立 module：stdlib OpenAI-compatible HTTP/SSE adapter
-├── utils/video/                      # 獨立 module：audio、frames、subtitles/ffmpeg utilities + video CLI command
+├── video-utils 外部依賴              # (已移除 2026-07-19) 原 `github.com/bizshuk/video-utils`：audio、frames、subtitles/ffmpeg utilities + video CLI command。root module 不再依賴,`cmd/` 不再掛載 video 子指令;若日後重啟,改以獨立 git repo clone 後 add 為 workspace module
 ├── sample/
 │   ├── file-agent/                   # 6 內建工具的檔案操作 agent
 │   ├── greet-agent/                  # 內建工具 + greet tool
@@ -70,7 +70,7 @@ agentsdk/
 
 | 類別 | 技術 | 現況 |
 | --- | --- | --- |
-| Language | Go `1.26.0` | `go.work` 管理 14 個 module |
+| Language | Go `1.26.0` | `go.work` 管理 12 個 module |
 | Root runtime | Go stdlib、`github.com/bizshuk/gosdk v1.1.0` | config/log/notify 等組合點在 root 或 sample |
 | Auth module | `viper` + stdlib | Git submodule + 獨立 module；credential 機制、Resolver、active.json |
 | HTTP proxy | `gin-gonic/gin v1.11.0`、`gosdk/mw`、`gosdk/router` | 獨立 module；`/v1` API、health/ping、localhost CORS、API key、per-IP rate limit |
@@ -166,7 +166,7 @@ openai-responses
 
 ## CLI、設定與持久化 (CLI, Config, Persistence)
 
-`main.go` 建立 Cobra root（binary 名稱 `auth-cli`，版本 `0.1.0`），目前指令包含 `login`、`list`、`verify`、`refresh`、`logout`、`use`、`proxy`、`video`。root `cmd/` 是純聚合殼：憑證指令集由 `auth/cmd.Install(root, appName)` 掛載（含 `auth-dir`/`no-browser` 共用旗標與 stdlib 的 `~/.config/<app>/data/auth` 目錄解析）、`proxy` 由 `proxy/cmd.NewCommand()`、`video` 由 `utils/video/cmd.NewCommand()` 組合回 root CLI；三個指令集都可被任何 cobra root 單獨掛載使用。`auth` 與 `proxy` module root 各有 `main.go`（auth 函式庫在 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫在 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`），`cd auth && go build .` / `cd proxy && go build .` 即得同名獨立 binary，與 `auth-cli` 共用相同設定與憑證目錄。`config.OpenForCLI(appName, level)` 為 sample 建立：
+`main.go` 建立 Cobra root（binary 名稱 `auth-cli`，版本 `0.1.0`），目前指令包含 `login`、`list`、`verify`、`refresh`、`logout`、`use`、`proxy`。root `cmd/` 是純聚合殼：憑證指令集由 `auth/cmd.Install(root, appName)` 掛載（含 `auth-dir`/`no-browser` 共用旗標與 stdlib 的 `~/.config/<app>/data/auth` 目錄解析）、`proxy` 由 `proxy/cmd.NewCommand()` 組合回 root CLI；兩個指令集都可被任何 cobra root 單獨掛載使用。`auth` 與 `proxy` module root 各有 `main.go`（auth 函式庫在 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫在 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`），`cd auth && go build .` / `cd proxy && go build .` 即得同名獨立 binary，與 `auth-cli` 共用相同設定與憑證目錄。`config.OpenForCLI(appName, level)` 為 sample 建立：
 
 ```text
 ~/.config/<appName>/
@@ -181,7 +181,7 @@ openai-responses
 
 Proxy defaults（`proxy/config.go`）：port `8317`、body limit `200 MB`、model timeout `120s`、stream timeout `600s`、count-tokens timeout `30s`、stats enabled、debug off；未設定 API key 時在記憶體產生 `sk-...`，設定持久化由上層 command 負責。
 
-JSONL 對外 envelope 在 `cli/` 定義 9 種 type：`observation`、`assistant`、`tool_call`、`tool_result`、`approval_request`、`human_decision`、`checkpoint`、`result`、`error`。不得把內部 `State` 欄位直接當成穩定外部 API，新增欄位需維持 JSON round-trip。
+JSONL 對外 envelope (`cli/`) 於 2026-07-19 移除：原 9 種 type (`observation`、`assistant`、`tool_call`、`tool_result`、`approval_request`、`human_decision`、`checkpoint`、`result`、`error`) 無 production caller；外部 wire-format 需求改由 sample 自訂 codec 承接，或待新需求再決定是否以獨立 module 重啟。不得把內部 `State` 欄位直接當成穩定外部 API，新增欄位需維持 JSON round-trip。
 
 ## 模組對應 (Module Mapping)
 
@@ -196,14 +196,14 @@ JSONL 對外 envelope 在 `cli/` 定義 9 種 type：`observation`、`assistant`
 | app/config | `agentsdk/app`、`agentsdk/config`：`app.Run`、`OpenForCLI`、`SecureMiddleware`、`NewRefreshingProvider` |
 | authentication | `github.com/bizshuk/auth/{model,svc,utils,provider}`（Git submodule + 獨立 module，root 有 `auth` binary main）：`Login`、`For`、`FileStore`、`NewResolver` |
 | proxy | `agentsdk/proxy/handlers`、`agentsdk/proxy/config`、`agentsdk/proxy/model`、`agentsdk/proxy/svc/{route,transform,upstream}`（獨立 module，root 有 `proxy` binary main）：`handlers.New`、`config.LoadConfig`、`model.Format`、`svc/route.Router` |
-| JSONL | `agentsdk/cli`：`Envelope`、`JSONLCodec` |
-| MCP | `agentsdk/mcp`（獨立 module）：`mcp.NewClient` |
+| JSONL | (已移除 2026-07-19) 原 `agentsdk/cli`：`Envelope`、`JSONLCodec` |
+| MCP | (已移除 2026-07-19) 原 `agentsdk/mcp` 獨立 module：`mcp.NewClient` 實作 `action.ToolSource`，目前無 caller；若日後需要 MCP，重新以獨立 module 落地並補上 wiring |
 | provider adapters | `agentsdk/provider/anthropic`、`google`、`openaicompat`（各自獨立 module） |
-| video utilities | `agentsdk/utils/video`（獨立 module）：`audio`、`frames`、`subtitles`、`ffmpegutil`、`cmd.NewCommand` |
+| video utilities | (已移除 2026-07-19) 原 `github.com/bizshuk/video-utils`（外部 module，獨立 git repo）：`audio`、`frames`、`subtitles`、`ffmpegutil`、`cmd.NewCommand`。root 不再依賴,不再列入模組對應表 |
 
 ## 開發與驗證 (Development and Verification)
 
-前置需求：Go `1.26+`；使用 provider adapter 時依該 module 的 API key/environment；`video` module 的部分指令另需系統 `ffmpeg`、`ffprobe` 或對應 Python/ML runtime。
+前置需求：Go `1.26+`；使用 provider adapter 時依該 module 的 API key/environment。
 
 ```bash
 cd /Users/shuk/projects/agentSDK
@@ -216,7 +216,7 @@ go test ./... -count=1 -timeout=120s
 驗證所有 workspace modules：
 
 ```bash
-for mod in auth proxy utils/video mcp provider/anthropic provider/google provider/openaicompat \
+for mod in auth proxy provider/anthropic provider/google provider/openaicompat \
   sample/file-agent sample/greet-agent sample/logdoctor \
   sample/memory-demo sample/middleware-demo sample/strategy-demo; do
   (cd "$mod" && go test ./... -count=1 -timeout=120s)
@@ -236,7 +236,7 @@ cd sample/logdoctor
 go run . --fake --max-turns=10 run --once --fixture testdata/error.log
 ```
 
-`sample/logdoctor` 的 real provider 旗標為 `anthropic`、`openaicompat`、`google`；`--fake` 與 `--provider` 互斥。`sample/file-agent` 與 `sample/greet-agent` 使用 Anthropic-compatible adapter、`SecureMiddleware` 與 JSONL effect output。
+`sample/logdoctor` 的 real provider 旗標為 `anthropic`、`openaicompat`、`google`；`--fake` 與 `--provider` 互斥。`sample/file-agent` 與 `sample/greet-agent` 使用 Anthropic-compatible adapter 與 `SecureMiddleware`。
 
 ## 目前狀態與待辦 (Status and Open Items)
 

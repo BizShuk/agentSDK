@@ -19,8 +19,8 @@ import (
 	"github.com/bizshuk/agentsdk/middleware"
 )
 
-// Emitter is the callback for INSTRUCTION_EMIT — typically wired to cli.Codec
-// or a websocket writer.
+// Emitter is the callback for INSTRUCTION_EMIT — typically wired to a
+// websocket writer or other transport that consumes runtime effects.
 type Emitter func(core.Instruction)
 
 // Engine is the agent runtime. All fields are required except Middleware

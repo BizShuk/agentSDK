@@ -1,13 +1,12 @@
 // Package cmd is the aggregation shell of the auth-cli binary: it mounts the
-// command sets carried by the auth, proxy, and utils/video modules onto one
-// cobra root. Command logic lives with its module — nothing here but wiring.
+// command sets carried by the auth and proxy modules onto one cobra root.
+// Command logic lives with its module — nothing here but wiring.
 package cmd
 
 import (
 	"strings"
 
 	proxycmd "github.com/bizshuk/proxy/cmd"
-	videocmd "github.com/bizshuk/agentsdk/utils/video/cmd"
 	authcmd "github.com/bizshuk/auth/cmd"
 	"github.com/spf13/cobra"
 )
@@ -46,7 +45,6 @@ so a stored credential is one that was proven to work.`),
 	_ = authcmd.Install(root, APP_NAME)
 	root.AddCommand(
 		proxycmd.NewCommand(),
-		videocmd.NewCommand(),
 	)
 	return root
 }
