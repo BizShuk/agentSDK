@@ -4,9 +4,6 @@ go 1.26.0
 
 require (
 	github.com/bizshuk/agentsdk v0.0.0
-	github.com/bizshuk/agentsdk/provider/anthropic v0.0.0-00010101000000-000000000000
-	github.com/bizshuk/agentsdk/provider/google v0.0.0-00010101000000-000000000000
-	github.com/bizshuk/agentsdk/provider/openaicompat v0.0.0-00010101000000-000000000000
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 )
@@ -34,6 +31,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/anthropics/anthropic-sdk-go v1.50.2 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
+	github.com/bizshuk/auth v0.0.0-20260718180648-a05ed97812a8 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -71,9 +69,3 @@ require (
 )
 
 replace github.com/bizshuk/agentsdk => ../..
-
-replace github.com/bizshuk/agentsdk/provider/anthropic => ../../provider/anthropic
-
-replace github.com/bizshuk/agentsdk/provider/openaicompat => ../../provider/openaicompat
-
-replace github.com/bizshuk/agentsdk/provider/google => ../../provider/google
