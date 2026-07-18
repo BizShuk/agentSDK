@@ -1,7 +1,8 @@
-go 1.26.0
+go 1.26.3
 
 use (
 	.
+	./auth
 	./mcp
 	./provider/anthropic
 	./provider/google

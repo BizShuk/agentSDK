@@ -1,5 +1,8 @@
 # TODO
 
+- [ ] credential key should be just placeholder, and replace by env and .env
+- [x] DefaultEnvironmentNames add ollama and llmbox
+
 ## Pending
 
 - [ ] `perception/` 去留(刪除套件;M3 carry-over,見 `CLAUDE.md`「perception 去留」段)
@@ -17,7 +20,7 @@
 - [x] `cmd/auth/`:單一 `login --provider <id>` + list / verify / refresh / logout
 - [x] e2e:假 provider(models 端點 + 驗簽的 Google STS)跑通 login → list → verify → refresh → logout
 - [x] e2e:xAI device flow 對真實 `auth.x.ai` 跑通 OIDC discovery + device code 發放
-- [ ] 到期自動 refresh:`ModelProvider` 呼叫前檢查 `Credential.Expired()` 並自動換發
+- [x] 到期自動 refresh:`config.NewRefreshingProvider` 於每次呼叫前經 `auth.Resolver` 檢查到期並自動換發(token rotation 時重建 inner provider)
 
 ## M5 — sample wiring 收尾 (完成)
 
