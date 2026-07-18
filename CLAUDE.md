@@ -36,12 +36,15 @@ agentsdk/
 │   ├── provider/                     # 6 個 auth provider 包 + ROUTES registry
 │   └── authtest/                     # 共用測試假 provider
 ├── proxy/                            # 獨立 module；main.go 可 build 出獨立 `proxy` binary
-│   ├── proxy/                        # 函式庫：server、handler、config、middleware、observability
-│   ├── cmd/                          # `proxy` 指令（NewCommand）
-│   ├── protocol/                     # Format、typed DTO、ProxyError、完整 SSE frame parser
-│   ├── route/                        # qualified/exact/prefix model routing
-│   ├── transform/                    # 9 組 request/response/stream pairwise transforms
-│   └── upstream/                     # concrete profile、credential resolver adapter、safe HTTP client
+│   ├── handlers/                     # Gin HTTP surface：server、handler、middleware、observability
+│   ├── config/                       # LoadConfig/Config（gosdk layered viper、APP_NAME=agentSDK）
+│   ├── model/                        # protocol：DTO、SSE parser、ProxyError；package 改名 model
+│   │   └── {anthropic,chat,responses}/  # 三個 sub-format 套件
+│   ├── svc/                          # 第二層 domain
+│   │   ├── route/                    # qualified model → provider family
+│   │   ├── transform/                 # 9 組 pairwise request/response/stream transforms
+│   │   └── upstream/                  # concrete profile、credential resolver、safe HTTP client
+│   └── cmd/                          # `proxy` 指令（NewCommand）
 ├── mcp/                              # 獨立 module：MCP Client → action.ToolSource
 ├── provider/
 │   ├── anthropic/                    # 獨立 module：anthropic-sdk-go adapter
@@ -190,7 +193,7 @@ JSONL 對外 envelope 在 `cli/` 定義 9 種 type：`observation`、`assistant`
 | middleware | `agentsdk/middleware`、`harness`、`loopguard`、`security`、`observability` |
 | app/config | `agentsdk/app`、`agentsdk/config`：`app.Run`、`OpenForCLI`、`SecureMiddleware`、`NewRefreshingProvider` |
 | authentication | `agentsdk/auth/auth`、`agentsdk/auth/provider`（獨立 module，root 有 `auth` binary main）：`Login`、`For`、`FileStore`、`NewResolver` |
-| proxy | `agentsdk/proxy/proxy`（獨立 module，root 有 `proxy` binary main）：`proxy.New`、`LoadConfig`、`protocol`、`route`、`transform`、`upstream` |
+| proxy | `agentsdk/proxy/handlers`、`agentsdk/proxy/config`、`agentsdk/proxy/model`、`agentsdk/proxy/svc/{route,transform,upstream}`（獨立 module，root 有 `proxy` binary main）：`handlers.New`、`config.LoadConfig`、`model.Format`、`svc/route.Router` |
 | JSONL | `agentsdk/cli`：`Envelope`、`JSONLCodec` |
 | MCP | `agentsdk/mcp`（獨立 module）：`mcp.NewClient` |
 | provider adapters | `agentsdk/provider/anthropic`、`google`、`openaicompat`（各自獨立 module） |
