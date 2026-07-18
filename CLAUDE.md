@@ -4,11 +4,11 @@
 
 ## 技術基準 (Current Baseline)
 
-- 語言與 workspace：Go `1.26.0`、`go.work`，共 `14` 個 module（root、`auth`、`proxy`、`mcp`、3 個 provider module、6 個 sample module、`utils/video`）。
-- root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/planning/action/tool/memory/middleware/runtime/cli）與組合層（app/config/cmd）。`core/` 保持標準函式庫 only；`auth` 與 `proxy` 已拆為獨立 module，依賴方向固定 `root cmd → proxy → auth`，SDK 核心群不依賴兩者。
+- 語言與 workspace：Go `1.26.0`、`go.work`，共 `14` 個 module（root、`auth` submodule、`proxy`、`mcp`、3 個 provider module、6 個 sample module、`utils/video`）。
+- root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/planning/action/tool/memory/middleware/runtime/cli）與組合層（app/config/cmd）。`core/` 保持標準函式庫 only；`auth` 是 production Git submodule 且獨立 module，`proxy` 也是獨立 module；依賴方向固定 `root cmd → proxy → auth`，SDK 核心群不依賴兩者。
 - 目前 proxy 架構：`protocol → route → transform → upstream`，三種 client wire format 的 `3×3` directed pair 已接上 handler。
 - 來源與規格：現行 pairwise 決策見 [`docs/specs/2026-07-16-pairwise-agent-provider-transform.md`](docs/specs/2026-07-16-pairwise-agent-provider-transform.md)；四個來源的 wire-format 盤點見 [`docs/specs/format/README.md`](docs/specs/format/README.md)。
-- 參考 submodule：`tmp/auth2api` 與 `tmp/cliproxyapi` 僅供格式研究與規格追溯，不是 agentsdk 的 runtime dependency。
+- Git submodule：`auth` 是 production auth module（`https://github.com/BizShuk/auth.git`）；`tmp/auth2api` 與 `tmp/cliproxyapi` 僅供格式研究與規格追溯，不是 agentsdk 的 runtime dependency。
 
 ## 專案結構 (Project Structure)
 
@@ -16,7 +16,7 @@
 agentsdk/
 ├── README.md                         # 業務範疇與使用者導覽
 ├── CLAUDE.md                         # 技術脈絡與架構決策（本檔）
-├── go.work                           # root + auth + proxy + mcp + provider/* + sample/* + utils/video
+├── go.work                           # root + auth submodule + proxy + mcp + provider/* + sample/* + utils/video
 ├── go.mod                            # github.com/bizshuk/agentsdk
 ├── main.go                           # auth-cli binary entry
 ├── cmd/                              # 聚合殼：掛載 auth/cmd、proxy/cmd、utils/video/cmd
@@ -30,8 +30,10 @@ agentsdk/
 ├── memory/                           # context window、compactor、checkpoint、JSON state/WAL
 ├── runtime/                          # Engine：dispatch Instruction、fold Event、Run/Resume/HITL
 ├── cli/                              # 9 種 JSONL Envelope 與 codec
-├── auth/                             # 獨立 module；main.go 可 build 出獨立 `auth` binary
-│   ├── auth/                         # 函式庫：credential、OAuth/PKCE、device flow、FileStore、Resolver
+├── auth/                             # Git submodule + 獨立 module；main.go 可 build 出獨立 `auth` binary
+│   ├── model/                        # Credential、options 與 credential metadata
+│   ├── svc/                          # Login、OAuth/PKCE、device flow、FileStore、Resolver
+│   ├── utils/                        # active name、store、browser、PKCE helper
 │   ├── cmd/                          # login/list/verify/refresh/logout/use 指令集（Install 掛載）
 │   ├── provider/                     # 6 個 auth provider 包 + ROUTES registry
 │   └── authtest/                     # 共用測試假 provider
@@ -70,7 +72,7 @@ agentsdk/
 | --- | --- | --- |
 | Language | Go `1.26.0` | `go.work` 管理 14 個 module |
 | Root runtime | Go stdlib、`github.com/bizshuk/gosdk v1.1.0` | config/log/notify 等組合點在 root 或 sample |
-| Auth module | `viper` + stdlib | 獨立 module；credential 機制、Resolver、active.json |
+| Auth module | `viper` + stdlib | Git submodule + 獨立 module；credential 機制、Resolver、active.json |
 | HTTP proxy | `gin-gonic/gin v1.11.0`、`gosdk/mw`、`gosdk/router` | 獨立 module；`/v1` API、health/ping、localhost CORS、API key、per-IP rate limit |
 | CLI/config | `spf13/cobra v1.10.2`、`spf13/viper v1.20.1` | auth-cli、proxy、samples 與 layered settings |
 | State/schema | `testify v1.11.1`、`invopop/jsonschema v0.14.0` | table-driven tests、TypedTool JSON Schema |
@@ -164,7 +166,7 @@ openai-responses
 
 ## CLI、設定與持久化 (CLI, Config, Persistence)
 
-`main.go` 建立 Cobra root（binary 名稱 `auth-cli`，版本 `0.1.0`），目前指令包含 `login`、`list`、`verify`、`refresh`、`logout`、`use`、`proxy`、`video`。root `cmd/` 是純聚合殼：憑證指令集由 `auth/cmd.Install(root, appName)` 掛載（含 `auth-dir`/`no-browser` 共用旗標與 stdlib 的 `~/.config/<app>/data/auth` 目錄解析）、`proxy` 由 `proxy/cmd.NewCommand()`、`video` 由 `utils/video/cmd.NewCommand()` 組合回 root CLI；三個指令集都可被任何 cobra root 單獨掛載使用。`auth` 與 `proxy` module root 各有 `main.go`（函式庫在 `auth/auth`、`proxy/proxy` 子套件），`cd auth && go build .` / `cd proxy && go build .` 即得同名獨立 binary，與 `auth-cli` 共用相同設定與憑證目錄。`config.OpenForCLI(appName, level)` 為 sample 建立：
+`main.go` 建立 Cobra root（binary 名稱 `auth-cli`，版本 `0.1.0`），目前指令包含 `login`、`list`、`verify`、`refresh`、`logout`、`use`、`proxy`、`video`。root `cmd/` 是純聚合殼：憑證指令集由 `auth/cmd.Install(root, appName)` 掛載（含 `auth-dir`/`no-browser` 共用旗標與 stdlib 的 `~/.config/<app>/data/auth` 目錄解析）、`proxy` 由 `proxy/cmd.NewCommand()`、`video` 由 `utils/video/cmd.NewCommand()` 組合回 root CLI；三個指令集都可被任何 cobra root 單獨掛載使用。`auth` 與 `proxy` module root 各有 `main.go`（auth 函式庫在 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫在 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`），`cd auth && go build .` / `cd proxy && go build .` 即得同名獨立 binary，與 `auth-cli` 共用相同設定與憑證目錄。`config.OpenForCLI(appName, level)` 為 sample 建立：
 
 ```text
 ~/.config/<appName>/
@@ -192,7 +194,7 @@ JSONL 對外 envelope 在 `cli/` 定義 9 種 type：`observation`、`assistant`
 | memory | `agentsdk/memory`、`memory/checkpoint`、`memory/filestore` |
 | middleware | `agentsdk/middleware`、`harness`、`loopguard`、`security`、`observability` |
 | app/config | `agentsdk/app`、`agentsdk/config`：`app.Run`、`OpenForCLI`、`SecureMiddleware`、`NewRefreshingProvider` |
-| authentication | `agentsdk/auth/auth`、`agentsdk/auth/provider`（獨立 module，root 有 `auth` binary main）：`Login`、`For`、`FileStore`、`NewResolver` |
+| authentication | `github.com/bizshuk/auth/{model,svc,utils,provider}`（Git submodule + 獨立 module，root 有 `auth` binary main）：`Login`、`For`、`FileStore`、`NewResolver` |
 | proxy | `agentsdk/proxy/handlers`、`agentsdk/proxy/config`、`agentsdk/proxy/model`、`agentsdk/proxy/svc/{route,transform,upstream}`（獨立 module，root 有 `proxy` binary main）：`handlers.New`、`config.LoadConfig`、`model.Format`、`svc/route.Router` |
 | JSONL | `agentsdk/cli`：`Envelope`、`JSONLCodec` |
 | MCP | `agentsdk/mcp`（獨立 module）：`mcp.NewClient` |

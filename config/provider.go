@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bizshuk/agentsdk/auth/model"
-	svc "github.com/bizshuk/agentsdk/auth/svc"
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/auth/model"
+	svc "github.com/bizshuk/auth/svc"
 )
 
 // BuildProvider constructs a concrete ModelProvider from a resolved

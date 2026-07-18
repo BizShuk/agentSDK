@@ -3,7 +3,7 @@ module github.com/bizshuk/agentsdk
 go 1.26.0
 
 require (
-	github.com/bizshuk/agentsdk/auth v0.0.0
+	github.com/bizshuk/auth v0.0.0
 	github.com/bizshuk/agentsdk/proxy v0.0.0
 	github.com/bizshuk/agentsdk/utils/video v0.0.0
 	github.com/bizshuk/gosdk v1.1.0
@@ -77,6 +77,6 @@ require (
 
 replace github.com/bizshuk/agentsdk/utils/video => ./utils/video
 
-replace github.com/bizshuk/agentsdk/auth => ./auth
+replace github.com/bizshuk/auth => ./auth
 
 replace github.com/bizshuk/agentsdk/proxy => ./proxy

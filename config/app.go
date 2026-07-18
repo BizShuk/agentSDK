@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
-	utils "github.com/bizshuk/agentsdk/auth/utils"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory/filestore"
+	utils "github.com/bizshuk/auth/utils"
 	gosdkconfig "github.com/bizshuk/gosdk/config"
 )
 
@@ -27,7 +27,7 @@ type AppConfig struct {
 	LogFile    string             // <LogDir>/<RunID>.log
 	StateStore core.StateStore    // file-backed StateStore, ready to use
 	WAL        core.WriteAheadLog // file-backed WriteAheadLog, ready to use
-	AuthStore  *utils.FileStore    // provider credentials (0600 JSON files)
+	AuthStore  *utils.FileStore   // provider credentials (0600 JSON files)
 }
 
 // OpenForCLI does everything a CLI sample needs in one call:

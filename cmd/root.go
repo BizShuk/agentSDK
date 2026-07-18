@@ -6,9 +6,9 @@ package cmd
 import (
 	"strings"
 
-	authcmd "github.com/bizshuk/agentsdk/auth/cmd"
 	proxycmd "github.com/bizshuk/agentsdk/proxy/cmd"
 	videocmd "github.com/bizshuk/agentsdk/utils/video/cmd"
+	authcmd "github.com/bizshuk/auth/cmd"
 	"github.com/spf13/cobra"
 )
 

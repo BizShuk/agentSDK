@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bizshuk/agentsdk/auth/model"
-	utils "github.com/bizshuk/agentsdk/auth/utils"
-	svc "github.com/bizshuk/agentsdk/auth/svc"
 	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/auth/model"
+	svc "github.com/bizshuk/auth/svc"
+	utils "github.com/bizshuk/auth/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
