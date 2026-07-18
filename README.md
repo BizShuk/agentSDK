@@ -6,12 +6,12 @@ Go Agentic Loop SDK、LLM protocol proxy 與 Log Doctor sample，提供目標導
 
 四大支柱對應到頂層 package,架構即文件:
 
-| 支柱        | 套件                       | 角色                                                                                         |
-| ----------- | -------------------------- | -------------------------------------------------------------------------------------------- |
-| 1. 認知架構 | `core` (ObservationSource) | 觀察來源 port (Percepts channel);原 `perception/` 套件無 consumer 已移除                    |
-| 2. 系統韌性 | `memory/`                  | Window / Compactor / Checkpoint (M2)                                                         |
-| 3. 工具生態 | `action/`                  | TypedTool / Registry / Sandbox / ApprovalPolicy                                              |
-| 4. 規劃     | `planning/`                | 6 種 ThinkingPattern (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router) |
+| 支柱        | 套件                       | 角色                                                                                          |
+| ----------- | -------------------------- | --------------------------------------------------------------------------------------------- |
+| 1. 認知架構 | `core` (ObservationSource) | 觀察來源 port (Percepts channel);原 `perception/` 套件無 consumer 已移除                      |
+| 2. 系統韌性 | `memory/`                  | Window / Compactor / Checkpoint (M2)                                                          |
+| 3. 工具生態 | `action/`                  | TypedTool / Registry / Sandbox / ApprovalPolicy                                               |
+| 4. 規劃     | `planning/`                | 6 種 ThinkingPattern (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router)  |
 
 `core/` 是純狀態機 (state + event + instruction + step),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
 
@@ -48,7 +48,7 @@ agentsdk/
 └── sample/logdoctor/          # 驗證 sample (cobra CLI + 兩個 tool)
 ```
 
-`utils/video`、`auth`、`proxy` 都是獨立 Go module：`utils/video` 不依賴 Agent SDK 核心，root `auth-cli` 透過 `utils/video/cmd.NewCommand()` 組合 `video` 子指令；`auth` 只依賴 viper + stdlib；`proxy` 依賴 `auth` 與 gin/gosdk，SDK 核心群（core/runtime/...）不依賴兩者。依賴方向固定為 `binary(root cmd) → proxy → auth`。
+`utils/video`、`auth`、`proxy` 都是獨立 Go module，且各自攜帶自己的 CLI surface：`auth/cmd.Install` 掛載憑證指令集（login/list/verify/refresh/logout/use）、`proxy/cmd.NewCommand()` 提供 `proxy` 指令、`utils/video/cmd.NewCommand()` 提供 `video` 指令。root `cmd/` 只是聚合殼，把三者組合成 `auth-cli`；任何 cobra root 都能單獨掛載其中一組。`auth` 與 `proxy` module root 另有 `main.go`（函式庫位於 `auth/auth`、`proxy/proxy` 子套件），可各自 build 出獨立同名 binary，與 `auth-cli` 共用設定與憑證目錄。`auth` 依賴 viper/cobra + stdlib；`proxy` 依賴 `auth` 與 gin/gosdk；SDK 核心群（core/runtime/...）不依賴兩者。依賴方向固定為 `binary(root cmd) → proxy → auth`。
 
 ## Proxy protocol bridge
 

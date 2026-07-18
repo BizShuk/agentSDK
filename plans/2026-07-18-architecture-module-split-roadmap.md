@@ -10,6 +10,8 @@
 - root 直接依賴剩 `gosdk`、OTel(trace)、cobra/viper/jsonschema；gin、uuid、OTel metric 隨 proxy 遷出（gosdk 因 `config.OpenForCLI`/`app` 需留在 root，修正本計畫步驟 5 原「root go.mod 無 gin/gosdk」的過度預期）。
 - refresh 語義統一：`auth.Resolver`（active.json → 字母序 → env → 過期換發）+ proxy thin adapter + `config.NewRefreshingProvider`。
 - 額外修正：`app.Run` 空名稱 guard 恢復（`56df827` 誤改造成的 pre-existing 紅測）；`cmd/use.go` active.json 邏輯收斂到 `auth.SaveActiveName`。
+- 追加步驟 8（user 指示）：CLI 指令集隨 module 走 — `auth/cmd.Install(root, appName)` 掛載憑證指令集（store 目錄解析改 stdlib，`config.OpenAuthStore` 刪除）、`proxy/cmd.NewCommand()` 提供 `proxy` 指令；root `cmd/` 縮為純聚合殼（~50 行），CLI 對外介面不變，三組指令可被任何 cobra root 單獨掛載。
+- 追加步驟 9（user 指示）：`auth`、`proxy` module root 各建 `main.go`（binary-first 佈局），函式庫檔案移入 `auth/auth`、`proxy/proxy` 子套件（package 名不變，import path 加一層，git mv 保留歷史）；全 workspace import path 同步改寫；依賴方向 main → cmd → 函式庫 → 下游，`go list -deps` 驗證函式庫不反向依賴 cmd（無環）。兩 binary 與 `auth-cli` 共用設定/憑證目錄。
 
 ## 1. 目標與範圍 (Goal & Scope)
 

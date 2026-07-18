@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/bizshuk/agentsdk/auth"
+	"github.com/bizshuk/agentsdk/auth/auth"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory/filestore"
 	gosdkconfig "github.com/bizshuk/gosdk/config"
@@ -101,24 +101,6 @@ func OpenForCLI(appName string, level slog.Level) (*AppConfig, error) {
 		WAL:        wal,
 		AuthStore:  authStore,
 	}, nil
-}
-
-// OpenAuthStore 只做憑證 store 的 wiring — 給不需要 StateStore / WAL / run log
-// 的 CLI (例如 auth-cli) 用,避免為了拿一個目錄而建出一整套 run 基礎設施。
-//
-// dirOverride 非空時直接用它,否則落在 ~/.config/<appName>/data/auth。
-func OpenAuthStore(appName, dirOverride string) (*auth.FileStore, error) {
-	if dirOverride != "" {
-		return auth.NewFileStore(dirOverride)
-	}
-	if appName == "" {
-		return nil, fmt.Errorf("config: appName must not be empty")
-	}
-	gosdkconfig.Default(gosdkconfig.WithAppName(appName))
-	if gosdkconfig.GetAppName() == "" {
-		return nil, fmt.Errorf("config: gosdk/config not initialised (call config.Default(config.WithAppName(%q)))", appName)
-	}
-	return auth.NewFileStore(authDir(gosdkconfig.GetAppDataDir()))
 }
 
 func authDir(dataDir string) string {

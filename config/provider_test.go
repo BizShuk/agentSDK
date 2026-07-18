@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bizshuk/agentsdk/auth"
+	"github.com/bizshuk/agentsdk/auth/auth"
 	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/stretchr/testify/assert"

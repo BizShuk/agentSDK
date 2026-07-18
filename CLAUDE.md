@@ -19,7 +19,7 @@ agentsdk/
 ├── go.work                           # root + auth + proxy + mcp + provider/* + sample/* + utils/video
 ├── go.mod                            # github.com/bizshuk/agentsdk
 ├── main.go                           # auth-cli binary entry
-├── cmd/                              # auth、proxy、credential use 指令樹
+├── cmd/                              # 聚合殼：掛載 auth/cmd、proxy/cmd、utils/video/cmd
 ├── app/                              # CLI agent composition/lifecycle（Agent、preflight、panic recovery）
 ├── config/                           # AppConfig、middleware presets、RefreshingProvider
 ├── core/                             # 純狀態機、Message/Part、Event、Instruction、ports（含 ObservationSource）
@@ -30,9 +30,14 @@ agentsdk/
 ├── memory/                           # context window、compactor、checkpoint、JSON state/WAL
 ├── runtime/                          # Engine：dispatch Instruction、fold Event、Run/Resume/HITL
 ├── cli/                              # 9 種 JSONL Envelope 與 codec
-├── auth/                             # 獨立 module：credential、OAuth/PKCE、device flow、FileStore、Resolver
-├── proxy/                            # 獨立 module：Gin HTTP proxy 與 pairwise protocol bridge
-│   ├── config.go                     # proxy 設定（gosdk layered viper、APP_NAME=agentSDK）
+├── auth/                             # 獨立 module；main.go 可 build 出獨立 `auth` binary
+│   ├── auth/                         # 函式庫：credential、OAuth/PKCE、device flow、FileStore、Resolver
+│   ├── cmd/                          # login/list/verify/refresh/logout/use 指令集（Install 掛載）
+│   ├── provider/                     # 6 個 auth provider 包 + ROUTES registry
+│   └── authtest/                     # 共用測試假 provider
+├── proxy/                            # 獨立 module；main.go 可 build 出獨立 `proxy` binary
+│   ├── proxy/                        # 函式庫：server、handler、config、middleware、observability
+│   ├── cmd/                          # `proxy` 指令（NewCommand）
 │   ├── protocol/                     # Format、typed DTO、ProxyError、完整 SSE frame parser
 │   ├── route/                        # qualified/exact/prefix model routing
 │   ├── transform/                    # 9 組 request/response/stream pairwise transforms
@@ -156,7 +161,7 @@ openai-responses
 
 ## CLI、設定與持久化 (CLI, Config, Persistence)
 
-`main.go` 建立 Cobra root（binary 名稱 `auth-cli`，版本 `0.1.0`），目前指令包含 `login`、`list`、`verify`、`refresh`、`logout`、`use`、`proxy`、`video`。`video` 由獨立 module 的 `utils/video/cmd.NewCommand()` 組合回 root CLI。`config.OpenForCLI(appName, level)` 為 sample 建立：
+`main.go` 建立 Cobra root（binary 名稱 `auth-cli`，版本 `0.1.0`），目前指令包含 `login`、`list`、`verify`、`refresh`、`logout`、`use`、`proxy`、`video`。root `cmd/` 是純聚合殼：憑證指令集由 `auth/cmd.Install(root, appName)` 掛載（含 `auth-dir`/`no-browser` 共用旗標與 stdlib 的 `~/.config/<app>/data/auth` 目錄解析）、`proxy` 由 `proxy/cmd.NewCommand()`、`video` 由 `utils/video/cmd.NewCommand()` 組合回 root CLI；三個指令集都可被任何 cobra root 單獨掛載使用。`auth` 與 `proxy` module root 各有 `main.go`（函式庫在 `auth/auth`、`proxy/proxy` 子套件），`cd auth && go build .` / `cd proxy && go build .` 即得同名獨立 binary，與 `auth-cli` 共用相同設定與憑證目錄。`config.OpenForCLI(appName, level)` 為 sample 建立：
 
 ```text
 ~/.config/<appName>/
@@ -184,8 +189,8 @@ JSONL 對外 envelope 在 `cli/` 定義 9 種 type：`observation`、`assistant`
 | memory | `agentsdk/memory`、`memory/checkpoint`、`memory/filestore` |
 | middleware | `agentsdk/middleware`、`harness`、`loopguard`、`security`、`observability` |
 | app/config | `agentsdk/app`、`agentsdk/config`：`app.Run`、`OpenForCLI`、`SecureMiddleware`、`NewRefreshingProvider` |
-| authentication | `agentsdk/auth`、`agentsdk/auth/provider`（獨立 module）：`Login`、`For`、`FileStore`、`NewResolver` |
-| proxy | `agentsdk/proxy`（獨立 module）：`proxy.New`、`LoadConfig`、`protocol`、`route`、`transform`、`upstream` |
+| authentication | `agentsdk/auth/auth`、`agentsdk/auth/provider`（獨立 module，root 有 `auth` binary main）：`Login`、`For`、`FileStore`、`NewResolver` |
+| proxy | `agentsdk/proxy/proxy`（獨立 module，root 有 `proxy` binary main）：`proxy.New`、`LoadConfig`、`protocol`、`route`、`transform`、`upstream` |
 | JSONL | `agentsdk/cli`：`Envelope`、`JSONLCodec` |
 | MCP | `agentsdk/mcp`（獨立 module）：`mcp.NewClient` |
 | provider adapters | `agentsdk/provider/anthropic`、`google`、`openaicompat`（各自獨立 module） |
