@@ -7,7 +7,7 @@
 - 語言與 workspace：Go `1.26.0`、`go.work`，共 `14` 個 module（root、`auth` submodule、`proxy`、`mcp`、3 個 provider module、6 個 sample module、`utils/video`）。
 - root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/planning/action/tool/memory/middleware/runtime/cli）與組合層（app/config/cmd）。`core/` 保持標準函式庫 only；`auth` 是 production Git submodule 且獨立 module，`proxy` 也是獨立 module；依賴方向固定 `root cmd → proxy → auth`，SDK 核心群不依賴兩者。
 - 目前 proxy 架構：`protocol → route → transform → upstream`，三種 client wire format 的 `3×3` directed pair 已接上 handler。
-- 來源與規格：現行 pairwise 決策見 [`docs/specs/2026-07-16-pairwise-agent-provider-transform.md`](docs/specs/2026-07-16-pairwise-agent-provider-transform.md)；四個來源的 wire-format 盤點見 [`docs/specs/format/README.md`](docs/specs/format/README.md)。
+- 來源與規格：現行 pairwise 決策見 [`proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md`](proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md)；四個來源的 wire-format 盤點見 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md)。
 - Git submodule：`auth` 是 production auth module（`https://github.com/BizShuk/auth.git`）；`tmp/auth2api` 與 `tmp/cliproxyapi` 僅供格式研究與規格追溯，不是 agentsdk 的 runtime dependency。
 
 ## 專案結構 (Project Structure)
@@ -46,6 +46,7 @@ agentsdk/
 │   │   ├── route/                    # qualified model → provider family
 │   │   ├── transform/                 # 9 組 pairwise request/response/stream transforms
 │   │   └── upstream/                  # concrete profile、credential resolver、safe HTTP client
+│   ├── docs/                         # proxy-owned plans/specs + wire-format catalog
 │   └── cmd/                          # `proxy` 指令（NewCommand）
 ├── mcp/                              # 獨立 module：MCP Client → action.ToolSource
 ├── provider/
@@ -60,8 +61,7 @@ agentsdk/
 │   ├── memory-demo/                  # StateStore/WAL/checkpoint demo
 │   ├── middleware-demo/              # middleware chain demo
 │   └── strategy-demo/                # 6 reasoning strategy demo
-├── docs/specs/                       # architecture/spec history
-│   └── format/                       # 37 個 client/provider directed wire entities
+├── docs/specs/                       # root SDK architecture/spec history
 ├── plans/                            # 進行中的落地計畫
 └── tmp/                              # submodule 與 runtime symlink，不放 production logic
 ```
@@ -249,7 +249,7 @@ go run . --fake --max-turns=10 run --once --fixture testdata/error.log
 | M5 built-in tools、sample wiring、`app` lifecycle | 完成 |
 | M6 auth mechanism、9 provider ids、auth CLI | 完成；`config.NewRefreshingProvider` 已補上呼叫前自動 refresh |
 | Proxy 3×3 pairwise cutover 與安全 hardening | 完成（現行 branch） |
-| 四來源 37 entity wire-format catalog | 完成，見 [`docs/specs/format/README.md`](docs/specs/format/README.md) |
+| 四來源 37 entity wire-format catalog | 完成，見 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md) |
 | module 拆分：`auth`、`proxy` 獨立 module；`config` 解體；`perception/` 刪除 | 完成，見 [`plans/2026-07-18-architecture-module-split-roadmap.md`](plans/2026-07-18-architecture-module-split-roadmap.md) |
 
 目前明確未完成或刻意保留：
@@ -266,5 +266,5 @@ go run . --fake --max-turns=10 run --once --fixture testdata/error.log
 - 測試採 table-driven + `t.Run`，`testify/assert` 與 `testify/require` 並用；`internal/testutil` 只可被測試使用。
 - `core.Decide`、planning rules、transform pair 不得直接做 I/O、讀 credential 或建立 HTTP request；這些責任分別屬於 runtime、upstream 與 auth。
 - `sample/logdoctor/core` 與 `agentsdk/core` 是不同 module path；import 時使用 `domain` / `sdkcore` alias。
-- `docs/specs/2026-07-16-client-llm-adaptor.md` 是 legacy historical design；修改 proxy 時以 pairwise spec、現行 `proxy/` code 與測試為準。
-- 修改 package tree、module、路由或 protocol contract 後，必須同步本檔；業務範疇變更才同步 `README.md`。格式 catalog 的 entity/來源異動則同步 [`docs/specs/format/README.md`](docs/specs/format/README.md)。
+- `proxy/docs/specs/2026-07-16-client-llm-adaptor.md` 是 legacy historical design；修改 proxy 時以 pairwise spec、現行 `proxy/` code 與測試為準。
+- 修改 package tree、module、路由或 protocol contract 後，必須同步本檔；業務範疇變更才同步 `README.md`。格式 catalog 的 entity/來源異動則同步 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md)。

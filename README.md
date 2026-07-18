@@ -64,7 +64,7 @@ client response ← reverse directed pair transform ← provider response
 - concrete profiles 包含 `anthropic`、`minimax`、`openai-api`、`openai-codex-oauth`、`xai`。
 - xAI 預設走 `OpenAI Responses`；qualified model `xai-chat/<model>` 可明確選擇 `OpenAI Chat Completions`。
 - provider selection 由 qualified model、credential kind 與 profile capability 決定，不以 client protocol 綁定 provider。
-- 四個參考來源的 `37` 個 directed wire-format entity 與雙向 payload 範例見 [format catalog](docs/specs/format/README.md)。
+- 四個參考來源的 `37` 個 directed wire-format entity 與雙向 payload 範例見 [format catalog](proxy/docs/specs/format/README.md)。
 
 ## 設計原則
 
@@ -104,7 +104,7 @@ effect done            ← end_turn
 | Proxy     | 3×3 pairwise protocol transform、provider profile routing、SSE hardening        | ✅ 完成 |
 | Format    | 四來源 `37` 個 client/provider wire-format entity catalog                       | ✅ 完成 |
 
-詳細規格見 `docs/specs/` 與 [`docs/specs/format/README.md`](docs/specs/format/README.md),各 milestone 實作完成後會轉為 `docs/specs/YYYY-MM-DD-<feature>.md`:
+詳細規格見 `docs/specs/`、`proxy/docs/specs/` 與 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md),root milestone 實作完成後會轉為 `docs/specs/YYYY-MM-DD-<feature>.md`:
 
 - `2026-07-04-core-paradigm-and-sample-skeleton.md` (M1)
 - `2026-07-04-system-resilience-and-loop-defense.md` (M2)
