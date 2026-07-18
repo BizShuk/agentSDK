@@ -10,7 +10,7 @@ import (
 	sdkcore "github.com/bizshuk/agentsdk/core"
 )
 
-// BurstSuppressor is a perception.Source wrapper that drops percepts whose
+// BurstSuppressor is a core.ObservationSource wrapper that drops percepts whose
 // fingerprint matches the most recent emission within the cooldown
 // window. Mirrors the TS version of log_doctor: a 12-char sha1 of
 // (rule-id + text), per-rule cooldown to absorb bursts.

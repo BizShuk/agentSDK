@@ -6,12 +6,12 @@ Go Agentic Loop SDK、LLM protocol proxy 與 Log Doctor sample，提供目標導
 
 四大支柱對應到頂層 package,架構即文件:
 
-| 支柱        | 套件          | 角色                                                                                         |
-| ----------- | ------------- | -------------------------------------------------------------------------------------------- |
-| 1. 認知架構 | `perception/` | Source 介面 (Percepts channel) + NormalizeFunc                                               |
-| 2. 系統韌性 | `memory/`     | Window / Compactor / Checkpoint (M2)                                                         |
-| 3. 工具生態 | `action/`     | TypedTool / Registry / Sandbox / ApprovalPolicy                                              |
-| 4. 規劃     | `planning/`   | 6 種 ThinkingPattern (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router) |
+| 支柱        | 套件                       | 角色                                                                                         |
+| ----------- | -------------------------- | -------------------------------------------------------------------------------------------- |
+| 1. 認知架構 | `core` (ObservationSource) | 觀察來源 port (Percepts channel);原 `perception/` 套件無 consumer 已移除                    |
+| 2. 系統韌性 | `memory/`                  | Window / Compactor / Checkpoint (M2)                                                         |
+| 3. 工具生態 | `action/`                  | TypedTool / Registry / Sandbox / ApprovalPolicy                                              |
+| 4. 規劃     | `planning/`                | 6 種 ThinkingPattern (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router) |
 
 `core/` 是純狀態機 (state + event + instruction + step),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
 
@@ -19,28 +19,28 @@ Go Agentic Loop SDK、LLM protocol proxy 與 Log Doctor sample，提供目標導
 
 ```tree
 agentsdk/
-├── go.work                    # 多模組: root + mcp + provider/* + sample/* + utils/video
+├── go.work                    # 多模組: root + auth + proxy + mcp + provider/* + sample/* + utils/video
 ├── go.mod                     # module github.com/bizshuk/agentsdk
 ├── cmd/proxy.go               # proxy server CLI composition root
-├── core/                      # 純狀態機 (stdlib only)
-├── perception/                # 支柱 1
+├── core/                      # 純狀態機 (stdlib only, 含 ObservationSource port)
 ├── memory/                    # 支柱 2 (M2)
 ├── planning/                  # 6 thinking patterns
 ├── action/                    # TypedTool + Registry
 ├── middleware/                # (M2 鏈)
 ├── runtime/                   # Loop: dispatch + checkpoint + WAL
-├── proxy/                     # LLM protocol bridge + provider routing/upstream
+├── cli/                       # JSONL envelope/codec
+├── app/                       # CLI agent lifecycle/composition root
+├── config/                    # AppConfig、middleware presets、RefreshingProvider
+├── tool/                      # 6 個內建工具
+├── auth/                      # 獨立 module：credential mechanism + provider registry + Resolver
+├── proxy/                     # 獨立 module：LLM protocol bridge + provider routing/upstream
 │   ├── protocol/              # Anthropic Messages / OpenAI Chat / Responses DTO + SSE
 │   ├── transform/             # 明確的 3×3 pairwise request/response/stream transforms
 │   ├── route/                 # qualified model → provider family
 │   ├── upstream/              # concrete profiles、credentials、safe HTTP client
+│   ├── config.go              # proxy 設定 (gosdk layered viper, APP_NAME=agentSDK)
 │   ├── handler.go             # bounded generic request pipeline
 │   └── server.go              # Gin route composition
-├── cli/                       # JSONL envelope/codec
-├── app/                       # CLI agent lifecycle/composition root
-├── config/                    # AppConfig、middleware presets、proxy config
-├── auth/                      # credential mechanism + provider registry
-├── tool/                      # 6 個內建工具
 ├── mcp/                       # 獨立 module：MCP ToolSource adapter
 ├── provider/                  # 獨立 module：anthropic/google/openaicompat adapters
 ├── utils/video/               # 獨立 module：audio/frames/subtitles/ffmpeg preprocessing
@@ -48,7 +48,7 @@ agentsdk/
 └── sample/logdoctor/          # 驗證 sample (cobra CLI + 兩個 tool)
 ```
 
-`utils/video` 是獨立 Go module（`github.com/bizshuk/agentsdk/utils/video`），不依賴 Agent SDK 核心；root `auth-cli` 只透過 `utils/video/cmd.NewCommand()` 組合 `video` 子指令。
+`utils/video`、`auth`、`proxy` 都是獨立 Go module：`utils/video` 不依賴 Agent SDK 核心，root `auth-cli` 透過 `utils/video/cmd.NewCommand()` 組合 `video` 子指令；`auth` 只依賴 viper + stdlib；`proxy` 依賴 `auth` 與 gin/gosdk，SDK 核心群（core/runtime/...）不依賴兩者。依賴方向固定為 `binary(root cmd) → proxy → auth`。
 
 ## Proxy protocol bridge
 
@@ -118,6 +118,6 @@ effect done            ← end_turn
 ## 慣例
 
 - 常數一律 `SCREAMING_SNAKE_CASE` (含 unexported、block-scoped),與 gosdk 一致
-- `go.work` 多模組:每子模組各自 `go.mod`;`core/` 維持 stdlib-only,root runtime/proxy/config 可使用應用層依賴
+- `go.work` 多模組:每子模組各自 `go.mod`;`core/` 維持 stdlib-only,root config/app 與獨立 module (auth/proxy) 可使用應用層依賴
 - 測試:table-driven + `t.Run` + `testify`
 - 中文註解 + 英文關鍵字,遵循 `playground/CLAUDE.md` 慣例

@@ -4,8 +4,8 @@
 
 ## 技術基準 (Current Baseline)
 
-- 語言與 workspace：Go `1.26.0`、`go.work`，共 `12` 個 module（root、`mcp`、3 個 provider module、6 個 sample module、`utils/video`）。
-- root module：`github.com/bizshuk/agentsdk`。`core/` 保持標準函式庫 only；root 的 runtime、CLI、proxy 與 wiring 會使用外部套件。
+- 語言與 workspace：Go `1.26.0`、`go.work`，共 `14` 個 module（root、`auth`、`proxy`、`mcp`、3 個 provider module、6 個 sample module、`utils/video`）。
+- root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/planning/action/tool/memory/middleware/runtime/cli）與組合層（app/config/cmd）。`core/` 保持標準函式庫 only；`auth` 與 `proxy` 已拆為獨立 module，依賴方向固定 `root cmd → proxy → auth`，SDK 核心群不依賴兩者。
 - 目前 proxy 架構：`protocol → route → transform → upstream`，三種 client wire format 的 `3×3` directed pair 已接上 handler。
 - 來源與規格：現行 pairwise 決策見 [`docs/specs/2026-07-16-pairwise-agent-provider-transform.md`](docs/specs/2026-07-16-pairwise-agent-provider-transform.md)；四個來源的 wire-format 盤點見 [`docs/specs/format/README.md`](docs/specs/format/README.md)。
 - 參考 submodule：`tmp/auth2api` 與 `tmp/cliproxyapi` 僅供格式研究與規格追溯，不是 agentsdk 的 runtime dependency。
@@ -16,14 +16,13 @@
 agentsdk/
 ├── README.md                         # 業務範疇與使用者導覽
 ├── CLAUDE.md                         # 技術脈絡與架構決策（本檔）
-├── go.work                           # root + mcp + provider/* + sample/* + utils/video
+├── go.work                           # root + auth + proxy + mcp + provider/* + sample/* + utils/video
 ├── go.mod                            # github.com/bizshuk/agentsdk
 ├── main.go                           # auth-cli binary entry
 ├── cmd/                              # auth、proxy、credential use 指令樹
 ├── app/                              # CLI agent composition/lifecycle（Agent、preflight、panic recovery）
-├── config/                           # AppConfig、middleware presets、proxy config
-├── core/                             # 純狀態機、Message/Part、Event、Instruction、ports
-├── perception/                       # ObservationSource 與 normalize helper
+├── config/                           # AppConfig、middleware presets、RefreshingProvider
+├── core/                             # 純狀態機、Message/Part、Event、Instruction、ports（含 ObservationSource）
 ├── planning/                         # 6 個純函式 DecisionRule FSM
 ├── action/                           # tool registry、TypedTool/schema、sandbox、approval policy
 ├── tool/                             # Read/Write/Edit/Bash/Glob/Grep 內建工具
@@ -31,12 +30,13 @@ agentsdk/
 ├── memory/                           # context window、compactor、checkpoint、JSON state/WAL
 ├── runtime/                          # Engine：dispatch Instruction、fold Event、Run/Resume/HITL
 ├── cli/                              # 9 種 JSONL Envelope 與 codec
-├── auth/                             # credential、API key、OAuth/PKCE、device flow、FileStore
-├── proxy/                            # Gin HTTP proxy 與 pairwise protocol bridge
+├── auth/                             # 獨立 module：credential、OAuth/PKCE、device flow、FileStore、Resolver
+├── proxy/                            # 獨立 module：Gin HTTP proxy 與 pairwise protocol bridge
+│   ├── config.go                     # proxy 設定（gosdk layered viper、APP_NAME=agentSDK）
 │   ├── protocol/                     # Format、typed DTO、ProxyError、完整 SSE frame parser
 │   ├── route/                        # qualified/exact/prefix model routing
 │   ├── transform/                    # 9 組 request/response/stream pairwise transforms
-│   └── upstream/                     # concrete profile、credential resolver、safe HTTP client
+│   └── upstream/                     # concrete profile、credential resolver adapter、safe HTTP client
 ├── mcp/                              # 獨立 module：MCP Client → action.ToolSource
 ├── provider/
 │   ├── anthropic/                    # 獨立 module：anthropic-sdk-go adapter
@@ -60,9 +60,10 @@ agentsdk/
 
 | 類別 | 技術 | 現況 |
 | --- | --- | --- |
-| Language | Go `1.26.0` | `go.work` 管理 12 個 module |
+| Language | Go `1.26.0` | `go.work` 管理 14 個 module |
 | Root runtime | Go stdlib、`github.com/bizshuk/gosdk v1.1.0` | config/log/notify 等組合點在 root 或 sample |
-| HTTP proxy | `gin-gonic/gin v1.11.0`、`gosdk/mw`、`gosdk/router` | `/v1` API、health/ping、localhost CORS、API key、per-IP rate limit |
+| Auth module | `viper` + stdlib | 獨立 module；credential 機制、Resolver、active.json |
+| HTTP proxy | `gin-gonic/gin v1.11.0`、`gosdk/mw`、`gosdk/router` | 獨立 module；`/v1` API、health/ping、localhost CORS、API key、per-IP rate limit |
 | CLI/config | `spf13/cobra v1.10.2`、`spf13/viper v1.20.1` | auth-cli、proxy、samples 與 layered settings |
 | State/schema | `testify v1.11.1`、`invopop/jsonschema v0.14.0` | table-driven tests、TypedTool JSON Schema |
 | IDs/telemetry | `google/uuid v1.6.0`、OpenTelemetry `v1.44.0` | request ID、transform warning/loss metrics |
@@ -71,7 +72,7 @@ agentsdk/
 | OpenAI-compatible adapter | `net/http` + JSON + SSE | `provider/openaicompat` 不依賴 vendor SDK |
 | MCP | `modelcontextprotocol/go-sdk v1.6.1` | `mcp` 獨立 module，轉成 `action.ToolSource` |
 
-`core/` 不 import `gosdk`、Gin、任何 provider SDK；provider 與 MCP 的重依賴藉由獨立 `go.mod` 隔離。root module 仍包含 proxy、CLI、config、OTel 等應用層依賴，不能再描述成整個 root 都是 stdlib-only。
+`core/` 不 import `gosdk`、Gin、任何 provider SDK；auth、proxy、provider 與 MCP 的重依賴藉由獨立 `go.mod` 隔離。root module 的直接外部依賴縮減為 `gosdk`、OTel(trace)、`cobra`/`viper`、`jsonschema`、`uuid` 已隨 proxy 遷出；root 仍非 stdlib-only（組合層在此）。
 
 ## 核心架構決策 (Core Decisions)
 
@@ -103,8 +104,9 @@ antigravity_oauth  vertex
 - 憑證目錄與 JSON 檔案權限固定 `0700` / `0600`，寫入使用 temp + rename。
 - login 在存檔前先 Verify；OAuth/service-account verify 可能輪替 token，呼叫端必須把 `VerifyResult.Credential` 存回。
 - `Credential.BaseURL` 隨 API key 保存，gateway/proxy 憑證 verify 與後續 request 必須回到同一端點。
-- proxy 的 `CredentialResolver` 會在 request 前選 active credential、檢查 expiry、refresh 並持久化新 token；一般 provider `ModelProvider` 呼叫前的自動 refresh 仍列在 [`README.todo`](README.todo)。
-- auth CLI 的預設 namespace 是 `~/.config/agentsdk/data/auth`；proxy config 目前以 `agentSDK` namespace 載入，若兩者要共用憑證，使用 `auth-dir` 明確指定同一目錄。
+- `auth.Resolver` 是共用的 credential 解析機制：active.json 選取 → 同 provider 字母序 fallback → 環境變數 fallback（`DefaultEnvironmentNames`，含 ollama/llmbox）→ 過期自動 refresh 並持久化。active.json 讀寫慣例由 `auth.LoadActiveNames`/`SaveActiveName` 統一。
+- proxy 的 `upstream.CredentialResolver` 是 `auth.Resolver` 的 thin adapter，只把 `auth.UnavailableError` 映射為 `credential_unavailable` ProxyError；runtime 路徑由 `config.NewRefreshingProvider` 包裝任意 `core.ModelProvider`，每次呼叫前 resolve/refresh，token rotation 時重建 inner provider。
+- auth CLI 的預設 namespace 是 `~/.config/agentsdk/data/auth`；proxy config 目前以 `agentSDK` namespace 載入（`proxy.APP_NAME`），若兩者要共用憑證，使用 `auth-dir` 明確指定同一目錄。
 
 ## Proxy pairwise 決策 (Current Proxy Architecture)
 
@@ -167,7 +169,7 @@ openai-responses
 
 `app.Run` 是 CLI agent 的共同 lifecycle：config → optional preflight → wall-clock deadline → Bootstrap → panic-safe Engine.Run → optional OnComplete。`app.Main` 只負責 signal binding 與 exit code。
 
-Proxy defaults（`config/proxy.go`）：port `8317`、body limit `200 MB`、model timeout `120s`、stream timeout `600s`、count-tokens timeout `30s`、stats enabled、debug off；未設定 API key 時在記憶體產生 `sk-...`，設定持久化由上層 command 負責。
+Proxy defaults（`proxy/config.go`）：port `8317`、body limit `200 MB`、model timeout `120s`、stream timeout `600s`、count-tokens timeout `30s`、stats enabled、debug off；未設定 API key 時在記憶體產生 `sk-...`，設定持久化由上層 command 負責。
 
 JSONL 對外 envelope 在 `cli/` 定義 9 種 type：`observation`、`assistant`、`tool_call`、`tool_result`、`approval_request`、`human_decision`、`checkpoint`、`result`、`error`。不得把內部 `State` 欄位直接當成穩定外部 API，新增欄位需維持 JSON round-trip。
 
@@ -181,9 +183,9 @@ JSONL 對外 envelope 在 `cli/` 定義 9 種 type：`observation`、`assistant`
 | tools/safety | `agentsdk/action`、`agentsdk/tool`：`NewRegistry`、`NewTypedTool`、`RegisterDefaults` |
 | memory | `agentsdk/memory`、`memory/checkpoint`、`memory/filestore` |
 | middleware | `agentsdk/middleware`、`harness`、`loopguard`、`security`、`observability` |
-| app/config | `agentsdk/app`、`agentsdk/config`：`app.Run`、`OpenForCLI`、`SecureMiddleware` |
-| authentication | `agentsdk/auth`、`agentsdk/auth/provider`：`Login`、`For`、`FileStore` |
-| proxy | `agentsdk/proxy`：`proxy.New`、`protocol`、`route`、`transform`、`upstream` |
+| app/config | `agentsdk/app`、`agentsdk/config`：`app.Run`、`OpenForCLI`、`SecureMiddleware`、`NewRefreshingProvider` |
+| authentication | `agentsdk/auth`、`agentsdk/auth/provider`（獨立 module）：`Login`、`For`、`FileStore`、`NewResolver` |
+| proxy | `agentsdk/proxy`（獨立 module）：`proxy.New`、`LoadConfig`、`protocol`、`route`、`transform`、`upstream` |
 | JSONL | `agentsdk/cli`：`Envelope`、`JSONLCodec` |
 | MCP | `agentsdk/mcp`（獨立 module）：`mcp.NewClient` |
 | provider adapters | `agentsdk/provider/anthropic`、`google`、`openaicompat`（各自獨立 module） |
@@ -204,7 +206,7 @@ go test ./... -count=1 -timeout=120s
 驗證所有 workspace modules：
 
 ```bash
-for mod in utils/video mcp provider/anthropic provider/google provider/openaicompat \
+for mod in auth proxy utils/video mcp provider/anthropic provider/google provider/openaicompat \
   sample/file-agent sample/greet-agent sample/logdoctor \
   sample/memory-demo sample/middleware-demo sample/strategy-demo; do
   (cd "$mod" && go test ./... -count=1 -timeout=120s)
@@ -235,16 +237,17 @@ go run . --fake --max-turns=10 run --once --fixture testdata/error.log
 | M3 tool schema、sandbox、MCP、spotlight、sanitizer、tracing | 完成 |
 | M4 HITL、security wiring、三個 provider adapter | 完成 |
 | M5 built-in tools、sample wiring、`app` lifecycle | 完成 |
-| M6 auth mechanism、9 provider ids、auth CLI | 完成；一般 ModelProvider 呼叫前自動 refresh 仍待補 |
+| M6 auth mechanism、9 provider ids、auth CLI | 完成；`config.NewRefreshingProvider` 已補上呼叫前自動 refresh |
 | Proxy 3×3 pairwise cutover 與安全 hardening | 完成（現行 branch） |
 | 四來源 37 entity wire-format catalog | 完成，見 [`docs/specs/format/README.md`](docs/specs/format/README.md) |
+| module 拆分：`auth`、`proxy` 獨立 module；`config` 解體；`perception/` 刪除 | 完成，見 [`plans/2026-07-18-architecture-module-split-roadmap.md`](plans/2026-07-18-architecture-module-split-roadmap.md) |
 
 目前明確未完成或刻意保留：
 
-- `perception/` 尚無 production consumer；先保留，後續再決定刪除或重新定位，見 [`README.todo`](README.todo)。
-- 一般 `core.ModelProvider` 呼叫前的 expiry/refresh wiring 尚未統一；proxy request path 已有 `CredentialResolver` refresh。
 - Anthropic/Google provider 的 `Stream` 目前以 `Generate` 結果折成 chunk；只有 `openaicompat` 與 proxy path 使用原生/完整 SSE 轉換。
 - `/admin/*` 仍是未實作 placeholder；不要在文件或 client 中當成穩定 API。
+- release tag 順序：`auth` → `proxy` → root（replace 指向相對路徑，只在本 repo workspace 生效；samples 於 repo 外單獨 build 需等 tag）。
+- credential 儲存改 env placeholder（`README.todo` 新項）尚未設計，動工前先開 plan。
 
 ## 慣例與注意事項 (Conventions and Caveats)
 

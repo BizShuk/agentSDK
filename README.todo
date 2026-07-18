@@ -5,7 +5,7 @@
 
 ## Pending
 
-- [ ] `perception/` 去留(刪除套件;M3 carry-over,見 `CLAUDE.md`「perception 去留」段)
+- [x] `perception/` 去留:已刪除套件(無 production consumer;`core.ObservationSource` port 保留在 `core`)
 
 ## M6 — Provider 認證 (`auth/`)
 
