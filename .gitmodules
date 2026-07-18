@@ -7,3 +7,6 @@
 [submodule "auth"]
 	path = auth
 	url = https://github.com/BizShuk/auth.git
+[submodule "proxy"]
+	path = proxy
+	url = https://github.com/BizShuk/proxy.git
