@@ -1,4 +1,4 @@
-go 1.26.3
+go 1.26.0
 
 use (
 	.
@@ -7,6 +7,7 @@ use (
 	./provider/anthropic
 	./provider/google
 	./provider/openaicompat
+	./proxy
 	./sample/file-agent
 	./sample/greet-agent
 	./sample/logdoctor
