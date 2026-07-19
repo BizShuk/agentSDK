@@ -124,4 +124,4 @@ func TestToolSpecForwardedAsInputSchema(t *testing.T) {
 }
 
 // Compile-time: ensure Provider satisfies the port.
-var _ core.ModelProvider = (*anthropic.Provider)(nil)
+var _ core.Provider = (*anthropic.Provider)(nil)

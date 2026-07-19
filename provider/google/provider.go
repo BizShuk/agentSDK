@@ -43,8 +43,25 @@ func New(ctx context.Context, opts ...Option) (*Provider, error) {
 	return &Provider{client: c, model: cfg.model}, nil
 }
 
-// Name implements core.ModelProvider.
+// Name implements core.Provider (convenience).
+// Returns "google:<model>" — use ID() for the family alone.
 func (p *Provider) Name() string { return "google:" + p.model }
+
+// ID implements core.Provider.
+func (p *Provider) ID() string { return "google" }
+
+// Models implements core.Provider.
+func (p *Provider) Models() []core.ModelSpec {
+	return []core.ModelSpec{
+		{ID: "gemini-2.5-pro", Family: "gemini-pro", Reasoning: true, Input: []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO}, ContextWindow: 1000000, MaxTokens: 8192},
+		{ID: "gemini-2.0-flash", Family: "gemini-flash", Reasoning: false, Input: []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO}, ContextWindow: 1000000, MaxTokens: 8192},
+	}
+}
+
+// AuthSchemes implements core.Provider.
+func (p *Provider) AuthSchemes() []string {
+	return []string{"api_key"}
+}
 
 // Generate implements core.ModelProvider.
 func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {

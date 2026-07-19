@@ -20,7 +20,12 @@ type recordingProvider struct {
 	calls int
 }
 
-func (p *recordingProvider) Name() string { return "recording" }
+func (p *recordingProvider) ID() string         { return "recording" }
+func (p *recordingProvider) Name() string       { return "recording" }
+func (p *recordingProvider) Models() []core.ModelSpec {
+	return []core.ModelSpec{{ID: "recording-1", Family: "recording"}}
+}
+func (p *recordingProvider) AuthSchemes() []string { return []string{"api_key"} }
 
 func (p *recordingProvider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
 	p.calls++
@@ -81,7 +86,7 @@ func TestRefreshingProviderRefreshesExpiredBeforeCall(t *testing.T) {
 	}, nil)
 
 	builds := 0
-	provider, err := config.NewRefreshingProvider(resolver, "openai", func(cred *model.Credential) (core.ModelProvider, error) {
+	provider, err := config.NewRefreshingProvider(resolver, "openai", func(cred *model.Credential) (core.Provider, error) {
 		builds++
 		return &recordingProvider{token: cred.AccessToken}, nil
 	})
@@ -106,7 +111,7 @@ func TestRefreshingProviderRebuildsOnRotation(t *testing.T) {
 	resolver := svc.NewResolver(store, nil, nil)
 
 	builds := 0
-	provider, err := config.NewRefreshingProvider(resolver, "openai", func(cred *model.Credential) (core.ModelProvider, error) {
+	provider, err := config.NewRefreshingProvider(resolver, "openai", func(cred *model.Credential) (core.Provider, error) {
 		builds++
 		return &recordingProvider{token: cred.AccessToken}, nil
 	})
@@ -134,7 +139,7 @@ func TestRefreshingProviderSurfacesResolveFailure(t *testing.T) {
 	require.NoError(t, err)
 	resolver := svc.NewResolver(store, nil, nil)
 
-	provider, err := config.NewRefreshingProvider(resolver, "openai", func(*model.Credential) (core.ModelProvider, error) {
+	provider, err := config.NewRefreshingProvider(resolver, "openai", func(*model.Credential) (core.Provider, error) {
 		t.Fatal("build must not run without a credential")
 		return nil, nil
 	})
@@ -149,7 +154,7 @@ func TestNewRefreshingProviderValidatesArguments(t *testing.T) {
 	store, err := utils.NewFileStore(t.TempDir())
 	require.NoError(t, err)
 	resolver := svc.NewResolver(store, nil, nil)
-	build := func(*model.Credential) (core.ModelProvider, error) { return &recordingProvider{}, nil }
+	build := func(*model.Credential) (core.Provider, error) { return &recordingProvider{}, nil }
 
 	_, err = config.NewRefreshingProvider(nil, "openai", build)
 	assert.ErrorContains(t, err, "resolver is required")

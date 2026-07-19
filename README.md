@@ -31,6 +31,14 @@ agentsdk/
 ├── app/                       # CLI agent lifecycle/composition root
 ├── config/                    # AppConfig、middleware presets、RefreshingProvider
 ├── tool/                      # 6 個內建工具
+├── hook/                      # lifecycle hooks (PreToolUse/PostToolUse/...; command hook exit 2 = block)
+├── permission/                # permission rules × mode (allow/ask/deny specifier, deny > ask > allow)
+├── session/                   # session 管理層 (list / resume / fork / tree; WAL JSONL 為 transcript 真相)
+├── contextfile/               # AGENTS.md / CLAUDE.md 階層載入 + @import 展開
+├── skill/                     # SKILL.md skills + slash commands + prompt templates (progressive disclosure)
+├── subagent/                  # markdown agent definitions + task tool (RunFunc closure DI, depth guard)
+├── wire/                      # headless 表面: stream-json envelope / RPC framing / print formatter
+├── tui/                       # 獨立 module：differential-rendering terminal UI (zero-dep, 不 import agentsdk)
 ├── auth/                      # Git submodule + 獨立 module：credential mechanism + provider registry + Resolver
 ├── proxy/                     # 獨立 module：LLM protocol bridge + provider routing/upstream
 │   ├── protocol/              # Anthropic Messages / OpenAI Chat / Responses DTO + SSE
@@ -42,6 +50,7 @@ agentsdk/
 │   └── server.go              # Gin route composition
 ├── provider/                  # 獨立 module：anthropic/google/openaicompat adapters
 ├── internal/testutil/         # FakeProvider / MemStore / CapturingNotifier
+├── sample/code-agent/         # 全 harness 組合 CLI（tui 互動 / -p / --json、session flags、.agentsdk 探索）
 └── sample/logdoctor/          # 驗證 sample (cobra CLI + 兩個 tool)
 ```
 
@@ -69,6 +78,7 @@ client response ← reverse directed pair transform ← provider response
 - **六種 ThinkingPattern**:透過 `core.NewDecide` 與純函式 DecisionRule dispatch;working memory 作為 pattern 與 runtime 間的通訊介面
 - **Tagged union Instruction**:7 種 instruction kind 透過 Kind discriminator + optional pointer 欄位表達,JSON round-trip 透過 `omitempty` 精簡
 - **Notifier 結構性相容**: `core.Notifier` 介面方法集與 `gosdk/notify.Notifier` 完全相同,gosdk 的 Multi / Stdout / Slack 直接傳入,無需 adapter
+- **Harness 能力可插拔**: hooks / permission / session / skill / subagent / wire 各自為只依賴 `core` 的 package,`runtime.Engine` 持有 nil 即 no-op 的 port,全部由 agent 層 (composition root) 注入 — 借鏡 pi 的單向依賴與 claude-code 的 harness 事件面
 
 ## 執行範例 (M1 e2e)
 
@@ -100,6 +110,7 @@ effect done            ← end_turn
 | M6        | auth mechanism、9 provider ids、auth CLI                                      | ✅ 完成 |
 | Proxy     | 3×3 pairwise protocol transform、provider profile routing、SSE hardening        | ✅ 完成 |
 | Format    | 四來源 `37` 個 client/provider wire-format entity catalog                       | ✅ 完成 |
+| Harness   | hooks / permission / session / contextfile / skill / subagent / wire / tui skeleton + steering queue | 🚧 skeleton |
 
 詳細規格見 `docs/specs/`、`proxy/docs/specs/` 與 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md),root milestone 實作完成後會轉為 `docs/specs/YYYY-MM-DD-<feature>.md`:
 

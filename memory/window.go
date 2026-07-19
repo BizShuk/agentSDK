@@ -10,7 +10,7 @@ import "github.com/bizshuk/agentsdk/core"
 
 // TokenCounter reports the token size of a slice of messages.
 //
-// Providers implement it natively (Anthropic / Google); openaicompat may
+// Providers implement it natively (Anthropic / Google); ollama may
 // fall back to a chars/4 heuristic. The default agentsdk does not bundle a
 // tokenizer (no cgo tiktoken); callers wire one in.
 type TokenCounter interface {

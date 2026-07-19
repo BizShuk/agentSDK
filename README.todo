@@ -3,6 +3,18 @@
 - [ ] credential key should be just placeholder, and replace by env and .env
 - [x] DefaultEnvironmentNames add ollama and llmbox
 
+## Harness/UX（2026-07-19 skeleton 落地，細節待補）
+
+- [x] `sample/code-agent`：組合 tui + wire + harness 全套的互動 CLI（tui 的第一個 caller）— 2026-07-19 落地：互動 TUI / `-p` print / `--json` wire、session flags（`-c`/`-r`/`--fork`/`--sessions`）、`--fake` scripted provider、`.agentsdk/` skills/commands/agents 探索
+- [ ] `tui`：Editor（raw mode、autocomplete、bracketed paste）、Markdown component、行級 diff、CJK 寬度、ioctl Size
+- [ ] `hook`/`permission`：settings 檔載入層（JSON → Rules），對齊 claude-code settings 階層
+- [ ] `runtime`：follow-up phase reset 目前只認 `think_then_act.phase`，其他五個 rule 需通用 reset 慣例
+- [ ] `wire`：approval_request/human_decision 與 Engine HITL 的實際串接（目前只有 envelope 定義）
+- [ ] `session`：in-place tree branching（pi /tree 式單檔多分支）與 rewind
+- [ ] `subagent`：RunFunc 的 engine factory 標準組裝（app 層 helper）；tools allowlist 生效
+- [ ] `contextfile`：auto-memory 寫回（MEMORY.md 索引式）
+- [ ] streaming delta：provider 原生 SSE 接進 `core.StreamEvent`（目前只有 folded events；`STREAM_MESSAGE_DELTA` 保留位）
+
 ## Pending
 
 - [x] `perception/` 去留:已刪除套件(無 production consumer;`core.ObservationSource` port 保留在 `core`)

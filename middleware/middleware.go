@@ -35,7 +35,7 @@ type Next func(ctx context.Context, state core.State, eff core.Instruction) (cor
 
 // Dispatcher is the terminal Next — what the chain wraps when it has
 // nothing else to do. In runtime.Loop, this is the function that calls
-// ModelProvider / ToolRegistry / Notifier.
+// ModelProvider / ToolRegistry / Notifier — see core.Provider for the LLM-side port.
 type Dispatcher func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error)
 
 // Middleware transforms a Next into another Next.

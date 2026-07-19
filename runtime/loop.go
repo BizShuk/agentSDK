@@ -13,6 +13,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
@@ -31,7 +32,7 @@ type Emitter func(core.Instruction)
 //	loop.Middleware = config.DefaultMiddleware()
 type Engine struct {
 	Step       core.Decide
-	Model      core.ModelProvider
+	Model      core.Provider
 	Tools      core.ToolRegistry
 	Store      core.StateStore
 	Log        core.WriteAheadLog
@@ -39,6 +40,13 @@ type Engine struct {
 	Notifier   core.Notifier
 	Emitter    Emitter
 	Middleware middleware.Middleware // nil = Identity(); wire config.DefaultMiddleware() for M2 chain
+	Hooks      core.Hooks            // nil = no lifecycle hooks; default impl: hook.Runner
+	Sink       core.EventSink        // nil = no presentation stream events
+
+	// Steering / follow-up queues — see Steer / FollowUp (harness.go).
+	queueMu       sync.Mutex
+	steerQueue    []string
+	followUpQueue []string
 
 	// chain is the resolved chain — built lazily on first dispatch.
 	chain     middleware.Dispatcher
@@ -46,7 +54,7 @@ type Engine struct {
 }
 
 // NewEngine is a constructor that accepts nil-able optionals and defaults them.
-func NewEngine(step core.Decide, model core.ModelProvider, tools core.ToolRegistry) *Engine {
+func NewEngine(step core.Decide, model core.Provider, tools core.ToolRegistry) *Engine {
 	return &Engine{Step: step, Model: model, Tools: tools}
 }
 
@@ -64,7 +72,7 @@ func (e *Engine) resolveChain() middleware.Middleware {
 }
 
 // runInstruction is the terminal Next — what the middleware chain wraps.
-// Implements the core.ModelProvider / ToolRegistry calls and other ports.
+// Implements the core.Provider / ToolRegistry calls and other ports.
 func (e *Engine) runInstruction(ctx context.Context, s core.State, inst core.Instruction) (core.State, *core.Event, bool, error) {
 	switch inst.Kind {
 	case core.INSTRUCTION_CALL_MODEL:
@@ -331,7 +339,12 @@ func (e *Engine) SubmitHumanDecision(ctx context.Context, runID string, decision
 //
 // Returns the final State and any terminal error.
 func (e *Engine) Run(ctx context.Context, state core.State) (core.State, error) {
-	return e.runStep(ctx, state, core.Event{})
+	_ = e.fireHook(ctx, core.HookEvent{Name: core.HOOK_SESSION_START, RunID: state.RunID})
+	e.emitStream(core.StreamEvent{Kind: core.STREAM_RUN_START, RunID: state.RunID})
+	out, err := e.runStep(ctx, state, core.Event{})
+	e.emitStream(core.StreamEvent{Kind: core.STREAM_RUN_END, RunID: out.RunID, Status: out.Status})
+	_ = e.fireHook(ctx, core.HookEvent{Name: core.HOOK_STOP, RunID: out.RunID})
+	return out, err
 }
 
 // RunWithEvent is exported so tests / sample can drive a one-shot
@@ -370,11 +383,28 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 		if preStep.WorkingMemory == nil {
 			preStep.WorkingMemory = make(map[string]any, 4)
 		}
+		// Steering: user messages queued mid-run (Engine.Steer) are appended
+		// before Decide so the next model call sees them.
+		for _, msg := range e.drainSteering() {
+			preStep.Messages = append(preStep.Messages, userMessage(msg))
+		}
 		// end_turn / max_tokens / error → short-circuit to DONE before
 		// Decide sees the event. This avoids the case where ThinkThenAct
 		// (or any rule that set its phase to "dispatch" on the prior turn)
 		// would otherwise emit DONE on stale working memory.
 		if event.ModelResult != nil && len(event.ModelResult.ToolCalls) == 0 {
+			// Follow-up queue: instead of completing, feed the next queued
+			// user message and keep the run going (one per would-be stop).
+			if msg, ok := e.popFollowUp(); ok {
+				preStep.Messages = append(preStep.Messages, userMessage(msg))
+				// Reset the rule phase so the FSM re-enters reasoning
+				// instead of emitting DONE on stale dispatch memory (same
+				// seam as the pending_call seeding above).
+				delete(preStep.WorkingMemory, "think_then_act.phase")
+				current = preStep
+				event = core.Event{}
+				continue
+			}
 			preStep.Status = core.RUN_STATUS_COMPLETED
 			if e.Store != nil {
 				_ = e.Store.Save(ctx, preStep)
@@ -424,6 +454,28 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 			if e.Emitter != nil {
 				e.Emitter(inst)
 			}
+			// PreToolUse gate: a blocking hook decision skips dispatch and
+			// folds a failed ToolResult back so the model sees the refusal.
+			if inst.Kind == core.INSTRUCTION_CALL_TOOL && inst.CallTool != nil {
+				dec := e.fireHook(ctx, core.HookEvent{
+					Name:     core.HOOK_PRE_TOOL_USE,
+					RunID:    next.RunID,
+					ToolName: inst.CallTool.Call.Name,
+					ToolCall: &inst.CallTool.Call,
+				})
+				if len(dec.ReplaceArgs) > 0 {
+					inst.CallTool.Call.Args = dec.ReplaceArgs
+				}
+				if dec.Block {
+					res := blockedToolResult(inst.CallTool.Call, dec.Reason)
+					next = appendToolResultMessage(next, res)
+					ev := core.Event{Kind: core.EVENT_TOOL_RESULT, ToolResult: &res, ReceivedAt: time.Now().UTC()}
+					if nextEvent == nil {
+						nextEvent = &ev
+					}
+					continue
+				}
+			}
 			updated, out, term, err := chain(ctx, next, inst)
 			if err != nil {
 				next.Status = core.RUN_STATUS_FAILED
@@ -436,6 +488,22 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 				return next, err
 			}
 			next = updated
+			if inst.Kind == core.INSTRUCTION_CALL_TOOL && inst.CallTool != nil && out != nil && out.ToolResult != nil {
+				post := e.fireHook(ctx, core.HookEvent{
+					Name:       core.HOOK_POST_TOOL_USE,
+					RunID:      next.RunID,
+					ToolName:   inst.CallTool.Call.Name,
+					ToolCall:   &inst.CallTool.Call,
+					ToolResult: out.ToolResult,
+				})
+				if post.SystemNote != "" {
+					next.Messages = append(next.Messages, core.Message{
+						Role:  core.ROLE_SYSTEM,
+						Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: post.SystemNote}},
+						Ts:    time.Now().UTC(),
+					})
+				}
+			}
 			if term {
 				terminal = true
 				if out != nil {
@@ -447,6 +515,8 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 				nextEvent = out
 			}
 		}
+
+		e.emitFolded(next, nextEvent)
 
 		if e.Store != nil {
 			_ = e.Store.Save(ctx, next)
@@ -460,6 +530,13 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 		}
 
 		if nextEvent == nil {
+			if msg, ok := e.popFollowUp(); ok {
+				next.Messages = append(next.Messages, userMessage(msg))
+				delete(next.WorkingMemory, "think_then_act.phase")
+				current = next
+				event = core.Event{}
+				continue
+			}
 			next.Status = core.RUN_STATUS_COMPLETED
 			if e.Store != nil {
 				_ = e.Store.Save(ctx, next)
@@ -476,4 +553,3 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 		event = *nextEvent
 	}
 }
-

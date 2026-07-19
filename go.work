@@ -2,10 +2,12 @@ go 1.26.0
 
 use (
 	.
+	./sample/code-agent
 	./sample/file-agent
 	./sample/greet-agent
 	./sample/logdoctor
 	./sample/memory-demo
 	./sample/middleware-demo
 	./sample/strategy-demo
+	./tui
 )

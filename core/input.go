@@ -76,7 +76,7 @@ type ModelResult struct {
 }
 
 // TokenUsage tracks token accounting. Providers report approximate counts;
-// openaicompat may fall back to chars/4 heuristic.
+// ollama may fall back to chars/4 heuristic.
 type TokenUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`

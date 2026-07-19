@@ -14,7 +14,7 @@ import (
 )
 
 // TestDIProviderSwap exercises the M4 promise: the same runtime.Loop
-// must accept two different ModelProviders without code changes. We
+// must accept two different Providers without code changes. We
 // run the loop twice with different FakeProviders, each producing a
 // distinct scripted transcript; both should reach RUN_STATUS_COMPLETED.
 func TestDIProviderSwap(t *testing.T) {

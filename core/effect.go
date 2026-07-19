@@ -23,7 +23,7 @@ const (
 	INSTRUCTION_DONE InstructionKind = "done"
 )
 
-// CallModelInstruction is dispatched to ModelProvider.Generate / Stream.
+// CallModelInstruction is dispatched to Provider.Generate / Stream.
 type CallModelInstruction struct {
 	RequestID string      `json:"request_id"`
 	Messages  []Message   `json:"messages"`

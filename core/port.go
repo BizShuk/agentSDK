@@ -5,26 +5,131 @@ import (
 	"encoding/json"
 )
 
-// ModelProvider is the LLM-side port. Adapters live under provider/*.
+// ---------------------------------------------------------------------------
+// Provider — outer LLM-facing port.
 //
-// Three methods reflect three distinct capabilities:
-//   - Generate:     blocking, returns full result.
-//   - Stream:       returns a channel; runtime folds into ModelResult.
-//   - CountTokens:  separate to allow cheap heuristics for non-Anthropic.
-type ModelProvider interface {
-	Name() string
+// The interface intentionally exposes only the surface runtime and proxy need:
+// model identity, available model catalog, supported auth flavors, and the
+// three call shapes (blocking Generate, streaming Stream, cheap CountTokens).
+//
+// Every provider package under provider/<name>/ implements this interface
+// directly. Per-provider DTO conversion (Messages ⇄ native wire format),
+// auth assembly (API key / OAuth header set), and stream parsing all live
+// INSIDE that provider package — runtime and proxy never see them.
+// ---------------------------------------------------------------------------
+
+// Provider is the outer interface every agentsdk provider package implements.
+//
+// Implementations must:
+//   - Be safe to call concurrently.
+//   - Honor ctx cancellation for every blocking call.
+//   - Return provider-specific errors (HTTP / SSE / SDK errors) verbatim;
+//     the runtime / proxy layers wrap them at their boundary.
+type Provider interface {
+	// ID reports the provider family (e.g. "anthropic", "ollama"). It must
+	// NOT carry a model id — Models() enumerates those.
+	ID() string
+
+	// Models enumerates the provider's static catalog. Dynamic catalog
+	// providers may return the last-known snapshot.
+	Models() []ModelSpec
+
+	// AuthSchemes advertises which auth flavors the provider accepts.
+	// Use this so the proxy / CLI can pick the right credential kind.
+	//
+	//   "api_key"   — long-lived key from environment or store
+	//   "oauth"     — OAuth access token (carried as Bearer)
+	//   "keyless"   — no auth needed (local Ollama, public endpoints)
+	AuthSchemes() []string
+
+	// Generate sends a blocking request. Returns the full ModelResult.
 	Generate(ctx context.Context, req ModelRequest) (ModelResult, error)
+
+	// Stream returns a channel of model chunks. The final chunk carries
+	// Done=true; the runtime closes over the channel and folds into a
+	// ModelResult.
 	Stream(ctx context.Context, req ModelRequest) (<-chan ModelChunk, error)
+
+	// CountTokens returns an approximate token count for a transcript.
+	// Implementations may use a heuristic — accuracy is not guaranteed.
 	CountTokens(ctx context.Context, msgs []Message) (int, error)
 }
 
-// ModelRequest is the bridge between Decide-produced instructions and the provider.
+// ModelSpec is one entry in a provider's catalog. It mirrors pi/ai's Model
+// type (id / reasoning / input modalities / contextWindow / maxTokens) so
+// picker UIs and budget middleware can plan across providers.
+type ModelSpec struct {
+	ID           string    `json:"id"`
+	Family       string    `json:"family,omitempty"` // provider family hint (e.g. "claude-opus")
+	Reasoning    bool      `json:"reasoning,omitempty"`
+	Input        []Modality `json:"input,omitempty"`
+	ContextWindow int      `json:"context_window,omitempty"`
+	MaxTokens    int       `json:"max_tokens,omitempty"`
+}
+
+// Modality enumerates input types a model accepts. Most providers take text;
+// some take images inline; audio is rare and Anthropic-specific.
+type Modality string
+
+const (
+	MODALITY_TEXT  Modality = "text"
+	MODALITY_IMAGE Modality = "image"
+	MODALITY_AUDIO Modality = "audio"
+)
+
+// Auth carries the resolved credentials for a single request. Callers
+// (runtime, proxy dispatcher) populate this before calling Generate/Stream
+// using a credential store or env-var lookup; the provider itself does not
+// reach out to fetch credentials.
+//
+// At most one of APIKey / Bearer should be set. Headers / BaseURL are
+// optional overrides.
+//
+// Mirrors pi/ai's ModelAuth type.
+type Auth struct {
+	// APIKey is sent as `x-api-key: <value>` (Anthropic-style) or
+	// `Authorization: Bearer <value>` (OpenAI-style) depending on the
+	// provider. Empty when using OAuth.
+	APIKey string `json:"api_key,omitempty"`
+
+	// Bearer is the OAuth access token. Empty when using an API key.
+	Bearer string `json:"bearer,omitempty"`
+
+	// Headers carries provider-specific overrides (e.g. anthropic-beta,
+	// ChatGPT-Account-ID). Merged on top of provider defaults; nil values
+	// suppress a default header of the same name.
+	Headers map[string]string `json:"headers,omitempty"`
+
+	// BaseURL overrides the provider's default base URL. Empty means
+	// use the provider default (Ollama → localhost:11434, codex →
+	// chatgpt.com/backend-api, etc.).
+	BaseURL string `json:"base_url,omitempty"`
+}
+
+// ---------------------------------------------------------------------------
+// ModelRequest — the bridge between runtime / proxy and a Provider.
+//
+// Auth is optional: providers whose constructor already accepted a
+// credential (anthropic.WithAPIKey, etc.) can ignore the field and use the
+// baked-in secret. Providers built for OAuth dispatch (where the proxy
+// resolves the access token per request) read req.Auth.
+// ---------------------------------------------------------------------------
+
+// ModelRequest is what runtime / proxy sends to a Provider.
 type ModelRequest struct {
 	Messages    []Message    `json:"messages"`
 	Tools       []ToolSpec   `json:"tools,omitempty"`
 	MaxTokens   int          `json:"max_tokens,omitempty"`
 	StopReasons []string     `json:"stop_reasons,omitempty"`
+
+	// Auth overrides the provider's built-in credential for this call.
+	// Empty value = use the credential bound at construction time.
+	Auth Auth `json:"auth,omitempty"`
 }
+
+// ---------------------------------------------------------------------------
+// Other ports — unchanged.
+// ---------------------------------------------------------------------------
 
 // StateStore persists State. Implementations must be safe for concurrent use
 // across runs — RunID is the namespace.
@@ -74,3 +179,8 @@ type Tool interface {
 type Notifier interface {
 	Notify(ctx context.Context, message string) error
 }
+
+// Compile-time assertion: any *anthropic.Provider, *google.Provider, and
+// *ollama.Provider must satisfy Provider. The provider modules own
+// their own compile-time assertion (they import core directly).
+var _ Provider = nil

@@ -7,7 +7,7 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 	anthropicprovider "github.com/bizshuk/agentsdk/provider/anthropic"
 	googleprovider "github.com/bizshuk/agentsdk/provider/google"
-	openaicompatprovider "github.com/bizshuk/agentsdk/provider/openaicompat"
+	ollamaprovider "github.com/bizshuk/agentsdk/provider/ollama"
 	"github.com/spf13/cobra"
 )
 
@@ -15,9 +15,9 @@ import (
 type providerName string
 
 const (
-	providerAnthropic    providerName = "anthropic"
-	providerOpenAICompat providerName = "openaicompat"
-	providerGoogle       providerName = "google"
+	providerAnthropic providerName = "anthropic"
+	providerOllama    providerName = "ollama"
+	providerGoogle    providerName = "google"
 )
 
 // selectProvider builds a real ModelProvider from --provider. --fake is
@@ -28,7 +28,7 @@ const (
 // Credentials default to the provider's canonical env var
 // (ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY), matching the
 // plan's "CI uses if [ -n "$KEY" ]" convention.
-func selectProvider(name providerName) (core.ModelProvider, error) {
+func selectProvider(name providerName) (core.Provider, error) {
 	switch name {
 	case providerAnthropic:
 		p, err := anthropicprovider.New()
@@ -36,10 +36,10 @@ func selectProvider(name providerName) (core.ModelProvider, error) {
 			return nil, fmt.Errorf("anthropic provider: %w", err)
 		}
 		return p, nil
-	case providerOpenAICompat:
-		p, err := openaicompatprovider.New()
+	case providerOllama:
+		p, err := ollamaprovider.New()
 		if err != nil {
-			return nil, fmt.Errorf("openaicompat provider: %w", err)
+			return nil, fmt.Errorf("ollama provider: %w", err)
 		}
 		return p, nil
 	case providerGoogle:
@@ -49,13 +49,13 @@ func selectProvider(name providerName) (core.ModelProvider, error) {
 		}
 		return p, nil
 	default:
-		return nil, fmt.Errorf("unknown provider %q (want anthropic|openaicompat|google)", name)
+		return nil, fmt.Errorf("unknown provider %q (want anthropic|ollama|google)", name)
 	}
 }
 
 // resolveProvider picks the provider per the root flags: --fake wins
 // (offline), else --provider. Exactly one must be set.
-func resolveProvider(cmd *cobra.Command) (core.ModelProvider, bool /*isFake*/, error) {
+func resolveProvider(cmd *cobra.Command) (core.Provider, bool /*isFake*/, error) {
 	fakeMode, _ := cmd.Root().PersistentFlags().GetBool("fake")
 	providerFlag, _ := cmd.Root().PersistentFlags().GetString("provider")
 
@@ -66,7 +66,7 @@ func resolveProvider(cmd *cobra.Command) (core.ModelProvider, bool /*isFake*/, e
 		return nil, true, nil
 	}
 	if providerFlag == "" {
-		return nil, false, fmt.Errorf("either --fake or --provider=<anthropic|openaicompat|google> is required")
+		return nil, false, fmt.Errorf("either --fake or --provider=<anthropic|ollama|google> is required")
 	}
 	p, err := selectProvider(providerName(providerFlag))
 	if err != nil {
