@@ -13,9 +13,9 @@ type config struct {
 type Option func(*config)
 
 // defaultConfig returns the built-in defaults. model defaults to
-// MiniMax-M3 (current flagship).
+// minimax-M2 (current flagship).
 func defaultConfig() config {
-	return config{model: "MiniMax-M3"}
+	return config{model: "minimax-M2"}
 }
 
 // WithAPIKey overrides the MINIMAX_API_KEY env lookup.

@@ -4,8 +4,8 @@
 
 ## 技術基準 (Current Baseline)
 
-- 語言與 workspace：Go `1.26.0`、`go.work`，共 `11` 個 module（root、`auth` submodule、`proxy`、`tui`、7 個 sample module；`provider/*` 已於 551410d 併回 root module，不再各自帶 go.mod）。2026-07-19 移除原 `cli/` + `mcp/` 兩個未對接的套件,並移除外部 `video-utils` 依賴 (`go.mod` 與 `cmd/` wiring 同步清掉)。同日落地 harness/UX skeleton：`hook`、`permission`、`session`、`contextfile`、`skill`、`subagent`、`wire` 七個 core-only package + `tui` 獨立 module + runtime steering/follow-up queue，計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md)、來源調查見 [`docs/memory/2026-07-19-agent-client-feature-catalog.md`](docs/memory/2026-07-19-agent-client-feature-catalog.md)。
-- root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/planning/action/tool/memory/middleware/runtime）、harness 群（hook/permission/session/contextfile/skill/subagent/wire，全部只依賴 core）與組合層（app/config/cmd）。`core/` 保持標準函式庫 only；`auth` 是 production Git submodule 且獨立 module，`proxy` 也是獨立 module；依賴方向固定 `root cmd → proxy → auth`，SDK 核心群不依賴兩者。
+- 語言與 workspace：Go `1.26.0`、`go.work`，共 `11` 個 module entries（root、sibling `../ai/llm_provider`、sibling `../ai/proxy`、`tui`、7 個 sample module）。Dependency analyzer 已於 2026-07-20 移至獨立 repo `~/projects/go-dependency-analysis`，不再屬於本 workspace。`provider/*` 已於 551410d 併回 root module，不再各自帶 go.mod。2026-07-19 移除原 `cli/` + `mcp/` 兩個未對接的套件,並移除外部 `video-utils` 依賴 (`go.mod` 與 `cmd/` wiring 同步清掉)。同日落地 harness/UX skeleton：`hook`、`permission`、`session`、`contextfile`、`skill`、`subagent`、`wire` 七個 core-only package + `tui` 獨立 module + runtime steering/follow-up queue，計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md)、來源調查見 [`docs/memory/2026-07-19-agent-client-feature-catalog.md`](docs/memory/2026-07-19-agent-client-feature-catalog.md)。
+- root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/planning/action/tool/memory/middleware/runtime）、harness 群（hook/permission/session/contextfile/skill/subagent/wire，全部只依賴 core）與組合層（app/config）。`core/` 保持標準函式庫 only；`auth` 是 production Git submodule 且獨立 module，`proxy` 也是獨立 module；依賴方向固定 `main.go → proxy → auth`，SDK 核心群不依賴兩者。
 - 目前 proxy 架構：`protocol → route → transform → upstream`，三種 client wire format 的 `3×3` directed pair 已接上 handler。
 - 來源與規格：現行 pairwise 決策見 [`proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md`](proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md)；四個來源的 wire-format 盤點見 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md)。
 - Git submodule：`auth` 是 production auth module（`https://github.com/BizShuk/auth.git`）；`tmp/auth2api` 與 `tmp/cliproxyapi` 僅供格式研究與規格追溯，不是 agentsdk 的 runtime dependency。
@@ -16,10 +16,9 @@
 agentsdk/
 ├── README.md                         # 業務範疇與使用者導覽
 ├── CLAUDE.md                         # 技術脈絡與架構決策（本檔）
-├── go.work                           # root + auth submodule + proxy + provider/* + sample/*
+├── go.work                           # root + llm_provider/proxy siblings + tui + analyzer + sample/*
 ├── go.mod                            # github.com/bizshuk/agentsdk
-├── main.go                           # auth-cli binary entry
-├── cmd/                              # 聚合殼：掛載 auth/cmd、proxy/cmd
+├── main.go                           # auth-cli binary entry (cobra assembly + error exit)
 ├── app/                              # CLI agent composition/lifecycle（Agent、preflight、panic recovery）
 ├── config/                           # AppConfig、middleware presets、RefreshingProvider
 ├── core/                             # 純狀態機、Message/Part、Event、Instruction、ports（含 ObservationSource）
@@ -80,7 +79,7 @@ agentsdk/
 
 | 類別                      | 技術                                                | 現況                                                                            |
 | ------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Language                  | Go `1.26.0`                                         | `go.work` 管理 11 個 module                                                     |
+| Language                  | Go `1.26.0`                                         | `go.work` 管理 11 個 module entries                                              |
 | Root runtime              | Go stdlib、`github.com/bizshuk/gosdk v1.1.0`        | config/log/notify 等組合點在 root 或 sample                                     |
 | Auth module               | `viper` + stdlib                                    | Git submodule + 獨立 module；credential 機制、Resolver、active.json             |
 | HTTP proxy                | `gin-gonic/gin v1.11.0`、`gosdk/mw`、`gosdk/router` | 獨立 module；`/v1` API、health/ping、localhost CORS、API key、per-IP rate limit |
@@ -183,7 +182,7 @@ openai-responses
 
 ## CLI、設定與持久化 (CLI, Config, Persistence)
 
-`main.go` 建立 Cobra root（binary 名稱 `auth-cli`，版本 `0.1.0`），目前指令包含 `login`、`list`、`verify`、`refresh`、`logout`、`use`、`proxy`。root `cmd/` 是純聚合殼：憑證指令集由 `auth/cmd.Install(root, appName)` 掛載（含 `auth-dir`/`no-browser` 共用旗標與 stdlib 的 `~/.config/<app>/data/auth` 目錄解析）、`proxy` 由 `proxy/cmd.NewCommand()` 組合回 root CLI；兩個指令集都可被任何 cobra root 單獨掛載使用。`auth` 與 `proxy` module root 各有 `main.go`（auth 函式庫在 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫在 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`），`cd auth && go build .` / `cd proxy && go build .` 即得同名獨立 binary，與 `auth-cli` 共用相同設定與憑證目錄。`config.OpenForCLI(appName, level)` 為 sample 建立：
+`main.go` 直接建立 Cobra root（binary 名稱 `auth-cli`，版本 `0.1.0`），目前指令包含 `login`、`list`、`verify`、`refresh`、`logout`、`use`、`proxy`。root 端以 `auth/cmd.Install(root, APP_NAME)` 掛載憑證指令集（含 `auth-dir`/`no-browser` 共用旗標與 stdlib 的 `~/.config/<app>/data/auth` 目錄解析），並 `root.AddCommand(proxycmd.NewCommand())` 加入 proxy 指令；兩個指令集都可被任何 cobra root 單獨掛載使用。`auth` 與 `proxy` module root 各有 `main.go`（auth 函式庫在 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫在 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`），`cd auth && go build .` / `cd proxy && go build .` 即得同名獨立 binary，與 `auth-cli` 共用相同設定與憑證目錄。`config.OpenForCLI(appName, level)` 為 sample 建立：
 
 ```text
 ~/.config/<appName>/
@@ -217,6 +216,7 @@ JSONL 對外 envelope (`cli/`) 於 2026-07-19 移除：原 9 種 type (`observat
 | subagents         | `agentsdk/subagent`：`ParseDef`、`DiscoverDefs`、`NewSpawner`（`task` tool）、`Depth`                                                                                                                                                            |
 | headless wire     | `agentsdk/wire`：`Envelope`、`NewEncoder`/`NewDecoder`、`NewSink`、`ReadRequest`/`WriteResponse`、`FormatStream`                                                                                                                                 |
 | terminal UI       | `agentsdk/tui`（獨立 module）：`Renderer`、`Component`、`Terminal`、`VisibleWidth`/`WrapText`                                                                                                                                                    |
+| dependency graph  | external CLI `github.com/bizshuk/go-dependency-analysis`：Go tooling facts + JSON policy heuristics；不加入本 workspace、不被本 repo import                                                                                                        |
 | middleware        | `agentsdk/middleware`、`harness`、`loopguard`、`security`、`observability`                                                                                                                                                                       |
 | app/config        | `agentsdk/app`、`agentsdk/config`：`app.Run`、`OpenForCLI`、`SecureMiddleware`、`NewRefreshingProvider`                                                                                                                                          |
 | authentication    | `github.com/bizshuk/auth/{model,svc,utils,provider}`（Git submodule + 獨立 module，root 有 `auth` binary main）：`Login`、`For`、`FileStore`、`NewResolver`                                                                                      |
@@ -236,7 +236,14 @@ go work sync
 go mod download
 go build ./...
 go test ./... -count=1 -timeout=120s
+go-dependency-analysis --workspace /Users/shuk/projects/agentSDK/go.work --format text
+go-dependency-analysis --workspace /Users/shuk/projects/agentSDK/go.work --format json --json-indent='  '
+go-dependency-analysis --workspace /Users/shuk/projects/agentSDK/go.work --format mermaid
+go-dependency-analysis --workspace /Users/shuk/projects/agentSDK/go.work \
+  --policy /Users/shuk/projects/go-dependency-analysis/examples/agentsdk.json
 ```
+
+Analyzer 的 `go-tool-fact` 來自當次 Go toolchain/build context；`policy-heuristic` 才是 layer/heavy dependency 建議。`unused-direct-candidate` 必須先檢查 tests、build tags、platform files、generated code 與 tools，不能直接刪 require。完整 flags 與限制見獨立 repo `/Users/shuk/projects/go-dependency-analysis/README.md`。
 
 驗證所有 workspace modules：
 

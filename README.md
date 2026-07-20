@@ -19,9 +19,9 @@ Go Agentic Loop SDK、LLM protocol proxy 與 Log Doctor sample，提供目標導
 
 ```tree
 agentsdk/
-├── go.work                    # 多模組: root + auth submodule + proxy + provider/* + sample/*
+├── go.work                    # 11 modules：root + llm_provider/proxy siblings + tui + 7 samples
 ├── go.mod                     # module github.com/bizshuk/agentsdk
-├── cmd/proxy.go               # proxy server CLI composition root
+├── main.go                    # auth-cli binary: cobra assembly (auth subcommands + proxy subcommand)
 ├── core/                      # 純狀態機 (stdlib only, 含 ObservationSource port)
 ├── memory/                    # 支柱 2 (M2)
 ├── planning/                  # 6 thinking patterns
@@ -54,7 +54,7 @@ agentsdk/
 └── sample/logdoctor/          # 驗證 sample (cobra CLI + 兩個 tool)
 ```
 
-`auth` 是 production Git submodule（`https://github.com/BizShuk/auth.git`），`auth` 與 `proxy` 都是獨立 Go module；二者各自攜帶自己的 CLI surface：`auth/cmd.Install` 掛載憑證指令集（login/list/verify/refresh/logout/use）、`proxy/cmd.NewCommand()` 提供 `proxy` 指令。root `cmd/` 只是聚合殼，把二者組合成 `auth-cli`；任何 cobra root 都能單獨掛載其中一組。`auth` 與 `proxy` module root 另有 `main.go`（auth 函式庫位於 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫位於 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`），可各自 build 出獨立同名 binary，與 `auth-cli` 共用設定與憑證目錄。`auth` 依賴 viper/cobra + stdlib；`proxy` 依賴 `auth` 與 gin/gosdk；SDK 核心群（core/runtime/...）不依賴任一。依賴方向固定為 `binary(root cmd) → proxy → auth`。
+`auth` 是 production Git submodule（`https://github.com/BizShuk/auth.git`），`auth` 與 `proxy` 都是獨立 Go module；二者各自攜帶自己的 CLI surface：`auth/cmd.Install` 掛載憑證指令集（login/list/verify/refresh/logout/use）、`proxy/cmd.NewCommand()` 提供 `proxy` 指令。`main.go` 直接組出 cobra root，把二者組合成 `auth-cli`；任何 cobra root 都能單獨掛載其中一組。`auth` 與 `proxy` module root 另有 `main.go`（auth 函式庫位於 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫位於 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`），可各自 build 出獨立同名 binary，與 `auth-cli` 共用設定與憑證目錄。`auth` 依賴 viper/cobra + stdlib；`proxy` 依賴 `auth` 與 gin/gosdk；SDK 核心群（core/runtime/...）不依賴任一。依賴方向固定為 `binary(main.go) → proxy → auth`。
 
 ## Proxy protocol bridge
 
@@ -126,6 +126,7 @@ effect done            ← end_turn
 ## 慣例
 
 - 常數一律 `SCREAMING_SNAKE_CASE` (含 unexported、block-scoped),與 gosdk 一致
-- `go.work` 多模組:每子模組各自 `go.mod`;`core/` 維持 stdlib-only,root config/app 與獨立 module (auth/proxy) 可使用應用層依賴
+- `go.work` 多模組：目前 11 個 `use` entries（root、`../ai/llm_provider`、`../ai/proxy`、`tui`、7 samples）；`core/` 維持 stdlib-only，root config/app 與獨立 module 可使用應用層依賴
+- 依賴分析工具已移至獨立 repo `~/projects/go-dependency-analysis`：`go-dependency-analysis --workspace /Users/shuk/projects/agentSDK/go.work --format text`
 - 測試:table-driven + `t.Run` + `testify`
 - 中文註解 + 英文關鍵字,遵循 `playground/CLAUDE.md` 慣例

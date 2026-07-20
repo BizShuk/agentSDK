@@ -1,4 +1,4 @@
-// SSE parser for the OpenAI-compatible /v1/chat/completions stream.
+// SSE parser for the OpenAI-compatible /chat/completions stream.
 // The wire shape we read is documented at
 // https://platform.openai.com/docs/api-reference/chat-streaming:
 //
@@ -9,7 +9,7 @@
 // We ignore everything except the `data:` lines; each one is a JSON
 // object we unmarshal as StreamChunk and project into core.ModelChunk.
 
-package ollama
+package google
 
 import (
 	"bufio"

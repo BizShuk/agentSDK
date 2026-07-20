@@ -1,17 +1,17 @@
-// Package ollama provides a stdlib-only HTTP adapter for any
-// OpenAI-compatible /v1/chat/completions endpoint. The default base
-// URL points at a local Ollama instance
-// (http://localhost:11434/v1); the same wire format also covers
-// LM Studio, vLLM, and the public OpenAI API.
+// Package google provides a stdlib-only HTTP adapter for Google
+// Generative AI's OpenAI-compatible /chat/completions endpoint. The
+// default base URL points at
+// https://generativelanguage.googleapis.com/v1beta/openai — Google
+// publishes a wire-compatible surface that mirrors OpenAI's chat
+// format.
 //
 // This file owns the wire-format DTOs shared by generate and stream.
-// Shapes mirror OpenAI's /v1/chat/completions exactly — see
-// https://platform.openai.com/docs/api-reference/chat.
-package ollama
+// Shapes mirror OpenAI's /v1/chat/completions exactly.
+package google
 
 import "encoding/json"
 
-// RequestBody is the POST /v1/chat/completions wire shape we send upstream.
+// RequestBody is the POST /chat/completions wire shape we send upstream.
 type RequestBody struct {
 	Model       string        `json:"model"`
 	Messages    []ChatMessage `json:"messages"`
@@ -54,7 +54,7 @@ type ToolDef struct {
 	} `json:"function"`
 }
 
-// Response is the non-stream response shape from /v1/chat/completions.
+// Response is the non-stream response shape from /chat/completions.
 type Response struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
@@ -72,7 +72,7 @@ type Response struct {
 	} `json:"usage"`
 }
 
-// StreamChunk is one SSE event from /v1/chat/completions?stream=true.
+// StreamChunk is one SSE event from /chat/completions?stream=true.
 // FinishReason is a pointer so we can distinguish "not set" from "".
 // Usage is only present on the terminal chunk (when the server reports it).
 type StreamChunk struct {

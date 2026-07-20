@@ -12,11 +12,11 @@ import "encoding/json"
 
 // RequestBody is the POST /v1/chat/completions wire shape we send.
 type RequestBody struct {
-	Model     string       `json:"model"`
+	Model     string        `json:"model"`
 	Messages  []ChatMessage `json:"messages"`
-	MaxTokens int          `json:"max_tokens,omitempty"`
-	Stream    bool         `json:"stream,omitempty"`
-	Tools     []ToolDef    `json:"tools,omitempty"`
+	MaxTokens int           `json:"max_tokens,omitempty"`
+	Stream    bool          `json:"stream,omitempty"`
+	Tools     []ToolDef     `json:"tools,omitempty"`
 }
 
 // ChatMessage is one element of request.messages.
@@ -74,10 +74,10 @@ type Response struct {
 // response. The Choices[0].Delta.Content carries the incremental text.
 type StreamChunk struct {
 	Choices []struct {
-		Index   int `json:"index"`
-		Delta   struct {
-			Role    string     `json:"role,omitempty"`
-			Content string     `json:"content,omitempty"`
+		Index int `json:"index"`
+		Delta struct {
+			Role    string `json:"role,omitempty"`
+			Content string `json:"content,omitempty"`
 		} `json:"delta"`
 		FinishReason string `json:"finish_reason,omitempty"`
 	} `json:"choices"`

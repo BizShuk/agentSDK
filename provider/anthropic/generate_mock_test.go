@@ -56,7 +56,7 @@ func TestGenerateParsesTextAndToolUse(t *testing.T) {
 
 	mr, err := p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{
-			Role: core.ROLE_USER,
+			Role:  core.ROLE_USER,
 			Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "diagnose"}},
 		}},
 	})
@@ -116,7 +116,7 @@ func TestToolSpecForwardedAsInputSchema(t *testing.T) {
 		Tools: []core.ToolSpec{{
 			Name: "read_log_tail", Description: "read log",
 			Parameters: json.RawMessage(`{"type":"object","properties":{"n":{"type":"integer"}},"required":["n"]}`),
-			Risk:        core.RISK_LEVEL_LOW,
+			Risk:       core.RISK_LEVEL_LOW,
 		}},
 	})
 	require.NoError(t, err)

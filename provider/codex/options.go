@@ -19,7 +19,7 @@ type Option func(*config)
 // defaultConfig seeds the defaults — gpt-5 model and the default
 // Codex upstream URL.
 func defaultConfig() config {
-	return config{model: "gpt-5"}
+	return config{model: "gpt-5.5"}
 }
 
 // WithAPIKey sets a long-lived OpenAI API key. Most deployments use

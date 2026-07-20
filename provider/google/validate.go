@@ -1,4 +1,4 @@
-package ollama
+package google
 
 import "fmt"
 
@@ -9,14 +9,14 @@ import "fmt"
 // Returns nil on success or a descriptive error otherwise.
 func (r RequestBody) Validate() error {
 	if r.Model == "" {
-		return fmt.Errorf("ollama: model is required")
+		return fmt.Errorf("google: model is required")
 	}
 	if len(r.Messages) == 0 {
-		return fmt.Errorf("ollama: at least one message is required")
+		return fmt.Errorf("google: at least one message is required")
 	}
 	for i, m := range r.Messages {
 		if m.Role != "system" && m.Role != "user" && m.Role != "assistant" && m.Role != "tool" {
-			return fmt.Errorf("ollama: message[%d] role %q must be system|user|assistant|tool", i, m.Role)
+			return fmt.Errorf("google: message[%d] role %q must be system|user|assistant|tool", i, m.Role)
 		}
 	}
 	return nil

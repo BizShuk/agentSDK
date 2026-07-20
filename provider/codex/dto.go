@@ -36,12 +36,12 @@ import "encoding/json"
 // stream/store, strip max_output_tokens) before marshalling; what
 // arrives here is already the FINAL wire shape.
 type RequestBody struct {
-	Model       string      `json:"model"`
-	Instructions string     `json:"instructions"`                // lifted system+developer messages joined with "\n\n"
-	Input       []InputItem `json:"input"`                       // non-instruction messages
-	Stream      bool        `json:"stream"`                      // always true
-	Store       bool        `json:"store"`                       // always false
-	Tools       []Tool      `json:"tools,omitempty"`
+	Model        string      `json:"model"`
+	Instructions string      `json:"instructions"` // lifted system+developer messages joined with "\n\n"
+	Input        []InputItem `json:"input"`        // non-instruction messages
+	Stream       bool        `json:"stream"`       // always true
+	Store        bool        `json:"store"`        // always false
+	Tools        []Tool      `json:"tools,omitempty"`
 
 	// The following two fields are intentionally NOT serialized by
 	// Codex. MaxOutputTokens is stripped in provider.buildRequestBody
@@ -56,8 +56,8 @@ type RequestBody struct {
 
 // InputItem is one element of request.input.
 type InputItem struct {
-	Type    string         `json:"type"`     // "message"
-	Role    string         `json:"role"`     // "user" | "assistant" | "tool"
+	Type    string         `json:"type"` // "message"
+	Role    string         `json:"role"` // "user" | "assistant" | "tool"
 	Content []ContentBlock `json:"content"`
 }
 
@@ -65,7 +65,7 @@ type InputItem struct {
 // OutputItem.Content. The discriminator type distinguishes text
 // from image inputs and from assistant outputs.
 type ContentBlock struct {
-	Type     string    `json:"type"`               // "input_text" | "output_text" | "input_image"
+	Type     string    `json:"type"` // "input_text" | "output_text" | "input_image"
 	Text     string    `json:"text,omitempty"`
 	ImageURL *ImageURL `json:"image_url,omitempty"`
 }
@@ -100,9 +100,9 @@ type Response struct {
 // OutputItem is one element of response.output. The `type`
 // discriminator distinguishes a message (text reply) from a tool call.
 type OutputItem struct {
-	Type    string         `json:"type"`               // "message" | "tool_call"
-	Role    string         `json:"role,omitempty"`      // "assistant" when type=message
-	Content []ContentBlock `json:"content,omitempty"`  // populated when type=message
+	Type    string         `json:"type"`              // "message" | "tool_call"
+	Role    string         `json:"role,omitempty"`    // "assistant" when type=message
+	Content []ContentBlock `json:"content,omitempty"` // populated when type=message
 	// tool_call fields:
 	ID        string `json:"id,omitempty"`        // tool call id
 	Name      string `json:"name,omitempty"`      // tool name

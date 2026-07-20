@@ -24,7 +24,7 @@ func TestNewRequiresAPIKey(t *testing.T) {
 func TestNewAcceptsExplicitAPIKey(t *testing.T) {
 	p, err := codex.New(codex.WithAPIKey("sk-test"))
 	require.NoError(t, err)
-	assert.Equal(t, "codex:gpt-5", p.Name())
+	assert.Equal(t, "codex:gpt-5.5", p.Name())
 	assert.Equal(t, "codex", p.ID())
 }
 
@@ -41,7 +41,7 @@ func TestNewWithOAuthSetsBearerOverAPIKey(t *testing.T) {
 	}
 	p, err := codex.NewWithOAuth(creds, codex.WithAPIKey("sk-fallback"))
 	require.NoError(t, err)
-	assert.Equal(t, "codex:gpt-5", p.Name())
+	assert.Equal(t, "codex:gpt-5.5", p.Name())
 	// Bearer wins. We exercise this further in TestBearerHeaderFromOAuth.
 }
 
@@ -197,12 +197,12 @@ func TestLiteModelForcesParallelFalse(t *testing.T) {
 
 func TestIsLiteModel(t *testing.T) {
 	cases := map[string]bool{
-		"gpt-5":          false,
-		"gpt-5-mini":     false,
-		"gpt-5.6":        true,
-		"gpt-5.6-sol":    true,
-		"":               false,
-		"some-other":     false,
+		"gpt-5":       false,
+		"gpt-5-mini":  false,
+		"gpt-5.6":     true,
+		"gpt-5.6-sol": true,
+		"":            false,
+		"some-other":  false,
 	}
 	for model, want := range cases {
 		t.Run(model, func(t *testing.T) {
@@ -294,14 +294,16 @@ func TestDefaultCatalogReturnsExpectedFamily(t *testing.T) {
 	require.NoError(t, err)
 	models := p.Models()
 	require.NotEmpty(t, models)
-	// Sanity: the catalog MUST contain at least the two lite models
-	// (the wire contract pins parallel_tool_calls=false on them).
+	// Sanity: the catalog MUST ship the gpt-5.6 family variants
+	// (gpt-5.6-sol is the lite one — the wire contract pins
+	// parallel_tool_calls=false on it, see IsLiteModel).
 	ids := map[string]bool{}
 	for _, m := range models {
 		ids[m.ID] = true
 	}
-	assert.True(t, ids["gpt-5.6"], "gpt-5.6 must be in catalog")
 	assert.True(t, ids["gpt-5.6-sol"], "gpt-5.6-sol must be in catalog")
+	assert.True(t, ids["gpt-5.6-terra"], "gpt-5.6-terra must be in catalog")
+	assert.True(t, ids["gpt-5.6-luna"], "gpt-5.6-luna must be in catalog")
 	assert.True(t, ids["gpt-5"])
 }
 

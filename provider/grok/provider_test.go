@@ -102,9 +102,9 @@ func TestBearerHeaderFromOAuth(t *testing.T) {
 
 	// OAuth path: even if an API key is configured, the bearer wins.
 	creds := grok.OAuthCredentials{
-		AccessToken: "oauth-access-token",
+		AccessToken:  "oauth-access-token",
 		RefreshToken: "oauth-refresh",
-		ExpiresAt:   time.Now().Add(1 * time.Hour),
+		ExpiresAt:    time.Now().Add(1 * time.Hour),
 	}
 	p, err := grok.NewWithOAuth(
 		creds,

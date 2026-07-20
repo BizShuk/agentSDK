@@ -80,9 +80,9 @@ func (t ToolUnionParam) MarshalJSON() ([]byte, error) {
 
 // ToolParam is the wire shape of one entry in request.tools.
 type ToolParam struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description,omitempty"`
-	InputSchema ToolInputSchema   `json:"input_schema"`
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	InputSchema ToolInputSchema `json:"input_schema"`
 }
 
 // ToolInputSchema is the loose {"type":"object",...} envelope the SDK
