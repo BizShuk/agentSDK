@@ -16,7 +16,11 @@ import "github.com/bizshuk/agentsdk/core"
 // a follow-up after they ship a stable API.
 func DefaultCatalog() []core.ModelSpec {
 	return []core.ModelSpec{
-		// minimax-M2 family — current flagship, supports reasoning.
+		// MiniMax-M3 family — current flagship, supports reasoning.
+		{ID: "MiniMax-M3", Family: "MiniMax-M3", Reasoning: true,
+			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE},
+			ContextWindow: 256000, MaxTokens: 16384},
+		// minimax-M2 — previous reasoning model, retained for explicit selection.
 		{ID: "minimax-M2", Family: "minimax-M2", Reasoning: true,
 			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE},
 			ContextWindow: 256000, MaxTokens: 16384},

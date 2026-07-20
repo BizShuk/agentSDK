@@ -13,9 +13,9 @@ type config struct {
 type Option func(*config)
 
 // defaultConfig returns the built-in defaults. model defaults to
-// minimax-M2 (current flagship).
+// MiniMax-M3 (current flagship).
 func defaultConfig() config {
-	return config{model: "minimax-M2"}
+	return config{model: "MiniMax-M3"}
 }
 
 // WithAPIKey overrides the MINIMAX_API_KEY env lookup.
@@ -37,7 +37,7 @@ func WithModel(m string) Option { return func(c *config) { c.model = m } }
 // Example with gosdk config.Default(WithAppName("myapp")):
 //
 //	// ~/.config/myapp/settings.json:
-//	// {"minimax": {"api_key": "...", "model": "minimax-M2"}}
+//	// {"minimax": {"api_key": "...", "model": "MiniMax-M3"}}
 //
 //	provider, _ := minimax.New(minimax.WithViper(viper.GetViper()))
 //

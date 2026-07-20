@@ -42,7 +42,7 @@ type Provider struct {
 
 // New returns a Provider. apiKey defaults to MINIMAX_API_KEY env.
 // baseURL defaults to https://api.minimax.io/anthropic.
-// model defaults to "minimax-M2".
+// model defaults to "MiniMax-M3".
 func New(opts ...Option) (*Provider, error) {
 	cfg := defaultConfig()
 	for _, o := range opts {
