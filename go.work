@@ -11,4 +11,5 @@ use (
 	./sample/middleware-demo
 	./sample/strategy-demo
 	./tui
+	./tools/dependency-analyzer
 )
