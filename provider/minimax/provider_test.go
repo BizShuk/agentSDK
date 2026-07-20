@@ -230,7 +230,7 @@ func TestProviderIDAndModels(t *testing.T) {
 	)
 	require.NoError(t, err)
 	assert.Equal(t, "minimax", p.ID())
-	assert.Equal(t, "minimax:minimax-M2", p.Name())
+	assert.Equal(t, "minimax:MiniMax-M3", p.Name())
 	assert.Equal(t, []string{"api_key"}, p.AuthSchemes())
 	assert.NotEmpty(t, p.Models())
 }
