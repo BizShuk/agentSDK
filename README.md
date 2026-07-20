@@ -19,7 +19,7 @@ Go Agentic Loop SDK、LLM protocol proxy 與 Log Doctor sample，提供目標導
 
 ```tree
 agentsdk/
-├── go.work                    # 11 modules：root + llm_provider/proxy siblings + tui + 7 samples
+├── go.work                    # 10 modules：root + tui + analyzer + 7 samples
 ├── go.mod                     # module github.com/bizshuk/agentsdk
 ├── main.go                    # auth-cli binary: cobra assembly (auth subcommands + proxy subcommand)
 ├── core/                      # 純狀態機 (stdlib only, 含 ObservationSource port)
@@ -126,7 +126,7 @@ effect done            ← end_turn
 ## 慣例
 
 - 常數一律 `SCREAMING_SNAKE_CASE` (含 unexported、block-scoped),與 gosdk 一致
-- `go.work` 多模組：目前 11 個 `use` entries（root、`../ai/llm_provider`、`../ai/proxy`、`tui`、7 samples）；`core/` 維持 stdlib-only，root config/app 與獨立 module 可使用應用層依賴
+- `go.work` 多模組：目前 10 個 `use` entries（root、`tui`、`tools/dependency-analyzer`、7 samples）；`core/` 維持 stdlib-only，root config/app 與獨立 module 可使用應用層依賴
 - 依賴分析工具已移至獨立 repo `~/projects/go-dependency-analysis`：`go-dependency-analysis --workspace /Users/shuk/projects/agentSDK/go.work --format text`
 - 測試:table-driven + `t.Run` + `testify`
 - 中文註解 + 英文關鍵字,遵循 `playground/CLAUDE.md` 慣例

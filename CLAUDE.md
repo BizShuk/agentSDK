@@ -4,7 +4,7 @@
 
 ## 技術基準 (Current Baseline)
 
-- 語言與 workspace：Go `1.26.0`、`go.work`，共 `11` 個 module entries（root、sibling `../ai/llm_provider`、sibling `../ai/proxy`、`tui`、7 個 sample module）。Dependency analyzer 已於 2026-07-20 移至獨立 repo `~/projects/go-dependency-analysis`，不再屬於本 workspace。`provider/*` 已於 551410d 併回 root module，不再各自帶 go.mod。2026-07-19 移除原 `cli/` + `mcp/` 兩個未對接的套件,並移除外部 `video-utils` 依賴 (`go.mod` 與 `cmd/` wiring 同步清掉)。同日落地 harness/UX skeleton：`hook`、`permission`、`session`、`contextfile`、`skill`、`subagent`、`wire` 七個 core-only package + `tui` 獨立 module + runtime steering/follow-up queue，計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md)、來源調查見 [`docs/memory/2026-07-19-agent-client-feature-catalog.md`](docs/memory/2026-07-19-agent-client-feature-catalog.md)。
+- 語言與 workspace：Go `1.26.0`、`go.work`，共 `10` 個 module entries（root、`tui`、`tools/dependency-analyzer`、7 個 sample module）。`proxy` 與 `llm_provider` 均為外部 module dependency，不再列入本 workspace。Standalone dependency analyzer repo 仍位於 `~/projects/go-dependency-analysis`；本 workspace 同時保留已合併的 in-tree prototype。`provider/*` 已於 551410d 併回 root module，不再各自帶 go.mod。2026-07-19 移除原 `cli/` + `mcp/` 兩個未對接的套件,並移除外部 `video-utils` 依賴 (`go.mod` 與 `cmd/` wiring 同步清掉)。同日落地 harness/UX skeleton：`hook`、`permission`、`session`、`contextfile`、`skill`、`subagent`、`wire` 七個 core-only package + `tui` 獨立 module + runtime steering/follow-up queue，計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md)、來源調查見 [`docs/memory/2026-07-19-agent-client-feature-catalog.md`](docs/memory/2026-07-19-agent-client-feature-catalog.md)。
 - root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/planning/action/tool/memory/middleware/runtime）、harness 群（hook/permission/session/contextfile/skill/subagent/wire，全部只依賴 core）與組合層（app/config）。`core/` 保持標準函式庫 only；`auth` 是 production Git submodule 且獨立 module，`proxy` 也是獨立 module；依賴方向固定 `main.go → proxy → auth`，SDK 核心群不依賴兩者。
 - 目前 proxy 架構：`protocol → route → transform → upstream`，三種 client wire format 的 `3×3` directed pair 已接上 handler。
 - 來源與規格：現行 pairwise 決策見 [`proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md`](proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md)；四個來源的 wire-format 盤點見 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md)。
@@ -79,7 +79,7 @@ agentsdk/
 
 | 類別                      | 技術                                                | 現況                                                                            |
 | ------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Language                  | Go `1.26.0`                                         | `go.work` 管理 11 個 module entries                                              |
+| Language                  | Go `1.26.0`                                         | `go.work` 管理 10 個 module entries                                              |
 | Root runtime              | Go stdlib、`github.com/bizshuk/gosdk v1.1.0`        | config/log/notify 等組合點在 root 或 sample                                     |
 | Auth module               | `viper` + stdlib                                    | Git submodule + 獨立 module；credential 機制、Resolver、active.json             |
 | HTTP proxy                | `gin-gonic/gin v1.11.0`、`gosdk/mw`、`gosdk/router` | 獨立 module；`/v1` API、health/ping、localhost CORS、API key、per-IP rate limit |
