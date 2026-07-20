@@ -21,7 +21,8 @@ Go Agentic Loop SDK、LLM protocol proxy 與 Log Doctor sample，提供目標導
 agentsdk/
 ├── go.work                    # 10 modules：root + tui + analyzer + 7 samples
 ├── go.mod                     # module github.com/bizshuk/agentsdk
-├── main.go                    # auth-cli binary: cobra assembly (auth subcommands + proxy subcommand)
+├── main.go                    # cobra root binary;掛載 `provider` smoke-test 子指令
+├── cmd/                       # root subcommands (provider: 直接打 core.Provider 的 smoke-test CLI)
 ├── core/                      # 純狀態機 (stdlib only, 含 ObservationSource port)
 ├── memory/                    # 支柱 2 (M2)
 ├── planning/                  # 6 thinking patterns
@@ -54,7 +55,7 @@ agentsdk/
 └── sample/logdoctor/          # 驗證 sample (cobra CLI + 兩個 tool)
 ```
 
-`auth` 是 production Git submodule（`https://github.com/BizShuk/auth.git`），`auth` 與 `proxy` 都是獨立 Go module；二者各自攜帶自己的 CLI surface：`auth/cmd.Install` 掛載憑證指令集（login/list/verify/refresh/logout/use）、`proxy/cmd.NewCommand()` 提供 `proxy` 指令。`main.go` 直接組出 cobra root，把二者組合成 `auth-cli`；任何 cobra root 都能單獨掛載其中一組。`auth` 與 `proxy` module root 另有 `main.go`（auth 函式庫位於 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫位於 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`），可各自 build 出獨立同名 binary，與 `auth-cli` 共用設定與憑證目錄。`auth` 依賴 viper/cobra + stdlib；`proxy` 依賴 `auth` 與 gin/gosdk；SDK 核心群（core/runtime/...）不依賴任一。依賴方向固定為 `binary(main.go) → proxy → auth`。
+`auth` 是 production Git submodule（`https://github.com/BizShuk/auth.git`），`auth` 與 `proxy` 都是獨立 Go module，各自攜帶自己的 `main.go`：`auth/cmd.Install` 掛載憑證指令集（login/list/verify/refresh/logout/use）、`proxy/cmd.NewCommand()` 提供 `proxy` 指令。**Root `main.go` 不再掛載 auth/proxy 子指令**——僅掛載 root module 內部的 `cmd/provider.go` 提供的 `provider` smoke-test 子指令（直接呼叫 `core.Provider.Generate/Stream`，不走 Agent/Engine/harness）；auth CLI 與 proxy CLI 都從各自 module root 直接 `go build .` 建出獨立 binary，與 root binary 共用設定與憑證目錄。`auth` 函式庫位於 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫位於 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`。`auth` 依賴 viper/cobra + stdlib；`proxy` 依賴 `auth` 與 gin/gosdk；SDK 核心群（core/runtime/...）不依賴任一。Root module 的 `config/` 仍直接 import `auth/utils`、`auth/model`、`auth/svc`（`RefreshingProvider` + `AppConfig.AuthStore`），所以 `auth` 仍是 root 的 direct require；`proxy` 已從 root `go.mod` 移除。
 
 ## Proxy protocol bridge
 

@@ -3,6 +3,14 @@
 - [ ] credential key should be just placeholder, and replace by env and .env
 - [x] DefaultEnvironmentNames add ollama and llmbox
 
+## Provider CLI (root cobra subcommand, 2026-07-20)
+
+- [x] `cmd/provider.go`：`NewProviderCommand()` — root cobra `provider` 子指令（旗標 `--provider`/`--model`/`--api-key`/`--base-url`/`--system`/`--max-tokens`/`--stream`/`--json`/`--list-models`/`--list-providers`）；prompt 接 positional args
+- [x] 不走 Engine/harness,直接 `core.Provider.Generate` / `Stream`;registry map 收 minimax + anthropic adapter
+- [x] `main.go` 改為掛載 `cmd.NewProviderCommand()`,長敘述列出 `provider` 為唯一 subcommand
+- [x] `CLAUDE.md`：project tree 加 `cmd/`、module mapping 加 `root CLI subcommands` 列、`Development and Verification` 加 provider smoke-test 區塊
+- [ ] 視需要再加 `ollama` / `google` / `codex` adapter 進 registry（目前 registry 只收 minimax + anthropic）
+
 ## Harness/UX（2026-07-19 skeleton 落地，細節待補）
 
 - [x] `sample/code-agent`：組合 tui + wire + harness 全套的互動 CLI（tui 的第一個 caller）— 2026-07-19 落地：互動 TUI / `-p` print / `--json` wire、session flags（`-c`/`-r`/`--fork`/`--sessions`）、`--fake` scripted provider、`.agentsdk/` skills/commands/agents 探索

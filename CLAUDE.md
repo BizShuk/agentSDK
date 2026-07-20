@@ -5,7 +5,7 @@
 ## 技術基準 (Current Baseline)
 
 - 語言與 workspace：Go `1.26.0`、`go.work`，共 `10` 個 module entries（root、`tui`、`tools/dependency-analyzer`、7 個 sample module）。`proxy` 與 `llm_provider` 均為外部 module dependency，不再列入本 workspace。Standalone dependency analyzer repo 仍位於 `~/projects/go-dependency-analysis`；本 workspace 同時保留已合併的 in-tree prototype。`provider/*` 已於 551410d 併回 root module，不再各自帶 go.mod。2026-07-19 移除原 `cli/` + `mcp/` 兩個未對接的套件,並移除外部 `video-utils` 依賴 (`go.mod` 與 `cmd/` wiring 同步清掉)。同日落地 harness/UX skeleton：`hook`、`permission`、`session`、`contextfile`、`skill`、`subagent`、`wire` 七個 core-only package + `tui` 獨立 module + runtime steering/follow-up queue，計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md)、來源調查見 [`docs/memory/2026-07-19-agent-client-feature-catalog.md`](docs/memory/2026-07-19-agent-client-feature-catalog.md)。
-- root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/planning/action/tool/memory/middleware/runtime）、harness 群（hook/permission/session/contextfile/skill/subagent/wire，全部只依賴 core）與組合層（app/config）。`core/` 保持標準函式庫 only；`auth` 是 production Git submodule 且獨立 module，`proxy` 也是獨立 module；依賴方向固定 `main.go → proxy → auth`，SDK 核心群不依賴兩者。
+- root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/planning/action/tool/memory/middleware/runtime）、harness 群（hook/permission/session/contextfile/skill/subagent/wire，全部只依賴 core）與組合層（app/config）+ root CLI 子指令（`cmd/provider.go` 的 `provider` smoke-test 子指令,直接呼叫 `core.Provider.Generate/Stream`，不走 Agent/Engine/harness）。`core/` 保持標準函式庫 only；`auth` 是 production Git submodule 且獨立 module，`proxy` 也是獨立 module；二者各有自己的 `main.go` 並可單獨 build 出獨立 binary。root `main.go` 只掛載 `cmd.NewProviderCommand()`，不再掛載 auth/proxy 指令集；root module 仍透過 `config/` 直接 import `auth/model`、`auth/svc`、`auth/utils`，因此 `auth` 仍是 root 的 direct require，`proxy` 已從 root `go.mod` 移除。SDK 核心群不依賴兩者。
 - 目前 proxy 架構：`protocol → route → transform → upstream`，三種 client wire format 的 `3×3` directed pair 已接上 handler。
 - 來源與規格：現行 pairwise 決策見 [`proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md`](proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md)；四個來源的 wire-format 盤點見 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md)。
 - Git submodule：`auth` 是 production auth module（`https://github.com/BizShuk/auth.git`）；`tmp/auth2api` 與 `tmp/cliproxyapi` 僅供格式研究與規格追溯，不是 agentsdk 的 runtime dependency。
@@ -18,7 +18,8 @@ agentsdk/
 ├── CLAUDE.md                         # 技術脈絡與架構決策（本檔）
 ├── go.work                           # root + llm_provider/proxy siblings + tui + analyzer + sample/*
 ├── go.mod                            # github.com/bizshuk/agentsdk
-├── main.go                           # auth-cli binary entry (cobra assembly + error exit)
+├── main.go                           # cobra root binary；掛載 `provider` smoke-test 子指令（cmd/provider.go）
+├── cmd/                              # root cobra subcommands（`provider` 打 core.Provider 不走 Engine）
 ├── app/                              # CLI agent composition/lifecycle（Agent、preflight、panic recovery）
 ├── config/                           # AppConfig、middleware presets、RefreshingProvider
 ├── core/                             # 純狀態機、Message/Part、Event、Instruction、ports（含 ObservationSource）
@@ -37,6 +38,7 @@ agentsdk/
 ├── middleware/                       # chain、retry/timeout/budget/loopguard、安全與 OTel tracing
 ├── memory/                           # context window、compactor、checkpoint、JSON state/WAL
 ├── runtime/                          # Engine：dispatch Instruction、fold Event、Run/Resume/HITL
+├── cmd/                              # root CLI 子指令；目前只有 `provider` smoke-test（Cobra 註冊進 main.go）
 ├── cli/                              # (已刪除) 9 種 JSONL Envelope 與 codec —— 無 production caller
 ├── auth/                             # Git submodule + 獨立 module；main.go 可 build 出獨立 `auth` binary
 │   ├── model/                        # Credential、options 與 credential metadata
@@ -61,7 +63,7 @@ agentsdk/
 │   ├── anthropic/                    # 獨立 module：anthropic-sdk-go adapter
 │   ├── google/                       # 獨立 module：google.golang.org/genai adapter
 │   └── openaicompat/                 # 獨立 module：stdlib OpenAI-compatible HTTP/SSE adapter
-├── video-utils 外部依賴              # (已移除 2026-07-19) 原 `github.com/bizshuk/video-utils`：audio、frames、subtitles/ffmpeg utilities + video CLI command。root module 不再依賴,`cmd/` 不再掛載 video 子指令;若日後重啟,改以獨立 git repo clone 後 add 為 workspace module
+├── video-utils 外部依賴              # (已移除 2026-07-19) 原 `github.com/bizshuk/video-utils`：audio、frames、subtitles/ffmpeg utilities + video CLI command。root module 不再依賴;若日後重啟,改以獨立 git repo clone 後 add 為 workspace module
 ├── sample/
 │   ├── code-agent/                   # 全 harness 組合 CLI：tui 互動 / -p print / --json（wire）+ session flags
 │   ├── file-agent/                   # 6 內建工具的檔案操作 agent
@@ -83,7 +85,7 @@ agentsdk/
 | Root runtime              | Go stdlib、`github.com/bizshuk/gosdk v1.1.0`        | config/log/notify 等組合點在 root 或 sample                                     |
 | Auth module               | `viper` + stdlib                                    | Git submodule + 獨立 module；credential 機制、Resolver、active.json             |
 | HTTP proxy                | `gin-gonic/gin v1.11.0`、`gosdk/mw`、`gosdk/router` | 獨立 module；`/v1` API、health/ping、localhost CORS、API key、per-IP rate limit |
-| CLI/config                | `spf13/cobra v1.10.2`、`spf13/viper v1.20.1`        | auth-cli、proxy、samples 與 layered settings                                    |
+| CLI/config                | `spf13/cobra v1.10.2`、`spf13/viper v1.20.1`        | auth/proxy module CLI、samples、root `provider` 子指令                       |
 | State/schema              | `testify v1.11.1`、`invopop/jsonschema v0.14.0`     | table-driven tests、TypedTool JSON Schema                                       |
 | IDs/telemetry             | `google/uuid v1.6.0`、OpenTelemetry `v1.44.0`       | request ID、transform warning/loss metrics                                      |
 | Anthropic adapter         | `anthropics/anthropic-sdk-go v1.50.2`               | 只在 `provider/anthropic` module 引入                                           |
@@ -182,7 +184,7 @@ openai-responses
 
 ## CLI、設定與持久化 (CLI, Config, Persistence)
 
-`main.go` 直接建立 Cobra root（binary 名稱 `auth-cli`，版本 `0.1.0`），目前指令包含 `login`、`list`、`verify`、`refresh`、`logout`、`use`、`proxy`。root 端以 `auth/cmd.Install(root, APP_NAME)` 掛載憑證指令集（含 `auth-dir`/`no-browser` 共用旗標與 stdlib 的 `~/.config/<app>/data/auth` 目錄解析），並 `root.AddCommand(proxycmd.NewCommand())` 加入 proxy 指令；兩個指令集都可被任何 cobra root 單獨掛載使用。`auth` 與 `proxy` module root 各有 `main.go`（auth 函式庫在 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫在 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`），`cd auth && go build .` / `cd proxy && go build .` 即得同名獨立 binary，與 `auth-cli` 共用相同設定與憑證目錄。`config.OpenForCLI(appName, level)` 為 sample 建立：
+`main.go` 直接建立 Cobra root（binary 名稱 `agentsdk`，版本 `0.1.0`），目前只掛載 `cmd.NewProviderCommand()` 提供的 `provider` 子指令：直接呼叫 `core.Provider.Generate`/`Stream`，不走 Agent/Engine/harness，用於 provider adapter 的 wire-format smoke test。Root 不再掛載 `auth/cmd.Install` 或 `proxycmd.NewCommand()`——auth CLI 與 proxy CLI 都從各自 module root 各自 `go build .` 建出獨立 binary，與 root binary 共用相同設定與憑證目錄。auth 函式庫在 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫在 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`。`config.OpenForCLI(appName, level)` 為 sample 建立：
 
 ```text
 ~/.config/<appName>/
@@ -219,6 +221,7 @@ JSONL 對外 envelope (`cli/`) 於 2026-07-19 移除：原 9 種 type (`observat
 | dependency graph  | external CLI `github.com/bizshuk/go-dependency-analysis`：Go tooling facts + JSON policy heuristics；不加入本 workspace、不被本 repo import                                                                                                        |
 | middleware        | `agentsdk/middleware`、`harness`、`loopguard`、`security`、`observability`                                                                                                                                                                       |
 | app/config        | `agentsdk/app`、`agentsdk/config`：`app.Run`、`OpenForCLI`、`SecureMiddleware`、`NewRefreshingProvider`                                                                                                                                          |
+| root CLI subcommands | `agentsdk/cmd`：`NewProviderCommand`（root cobra `provider` smoke-test CLI；打 `core.Provider.Generate`/`Stream` 不走 Engine；只掛 minimax + anthropic adapter）                                                                       |
 | authentication    | `github.com/bizshuk/auth/{model,svc,utils,provider}`（Git submodule + 獨立 module，root 有 `auth` binary main）：`Login`、`For`、`FileStore`、`NewResolver`                                                                                      |
 | proxy             | `agentsdk/proxy/handlers`、`agentsdk/proxy/config`、`agentsdk/proxy/model`、`agentsdk/proxy/svc/{route,transform,upstream}`（獨立 module，root 有 `proxy` binary main）：`handlers.New`、`config.LoadConfig`、`model.Format`、`svc/route.Router` |
 | JSONL             | (已移除 2026-07-19) 原 `agentsdk/cli`：`Envelope`、`JSONLCodec`                                                                                                                                                                                  |
@@ -255,14 +258,34 @@ for mod in auth proxy provider/anthropic provider/google provider/openaicompat \
 done
 ```
 
+`provider` 子指令 smoke-test（不打 Agent，直接打 core.Provider）：
+
+```bash
+cd /Users/shuk/projects/agentSDK
+go run . provider --list-providers
+go run . provider --list-models --provider minimax
+go run . provider "ping" --provider minimax
+go run . provider --stream "say hi in one word" --provider minimax
+go run . provider "summarize this repo" --provider anthropic --model claude-sonnet-5
+go run . provider "ping" --provider minimax --json | jq
+```
+
 常用本地流程：
 
 ```bash
-go run . login --provider anthropic
-go run . login --provider anthropic_oauth --no-browser
-go run . list
-go run . verify --all
-go run . proxy
+# Root binary (go run .) 只掛載 `provider` smoke-test 子指令
+go run . provider --list-providers                          # 列出已註冊 provider
+go run . provider --list-models --provider minimax          # 列出 provider catalog
+go run . provider "ping" --provider minimax                  # 單輪 prompt,直接打 core.Provider
+go run . provider --stream "stream me a haiku" --provider anthropic
+go run . provider "summarize X" --provider anthropic --model claude-sonnet-5
+
+# auth 與 proxy CLI 從各自 module root 啟動
+cd auth && go run . login --provider anthropic
+cd auth && go run . login --provider anthropic_oauth --no-browser
+cd auth && go run . list
+cd auth && go run . verify --all
+cd proxy && go run .                         # 啟動 LLM protocol proxy server
 
 cd sample/logdoctor
 go run . --fake --max-turns=10 run --once --fixture testdata/error.log
