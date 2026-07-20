@@ -60,8 +60,8 @@ func TestOpenForCLISetsAppName(t *testing.T) {
 	if !strings.HasSuffix(cfg.DataDir, "/data") {
 		t.Errorf("DataDir %q should end with /data", cfg.DataDir)
 	}
-	if !strings.HasSuffix(cfg.LogDir, "/log") {
-		t.Errorf("LogDir %q should end with /log", cfg.LogDir)
+	if !strings.HasSuffix(cfg.LogDir, "/logs") {
+		t.Errorf("LogDir %q should end with /logs", cfg.LogDir)
 	}
 }
 

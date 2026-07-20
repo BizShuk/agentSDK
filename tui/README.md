@@ -1,6 +1,6 @@
-# tui — terminal UI library（獨立 module）
+# tui — terminal UI library（root sub-package, zero-dep）
 
-`github.com/bizshuk/agentsdk/tui` 是 pi-tui 式的 terminal presentation library：differential rendering、不用 alternate screen（保留 scrollback）、CSI 2026 synchronized output。zero dependency（純 stdlib），且不 import agentsdk 任何 package —— caller 把 engine 的 `core.StreamEvent` 轉成 component 更新。第一個真 caller 是 [`sample/code-agent`](../sample/code-agent/)（interactive 模式的 transcript 區域即本 module 渲染）。
+`github.com/bizshuk/agentsdk/tui` 是 pi-tui 式的 terminal presentation library：differential rendering、不用 alternate screen（保留 scrollback）、CSI 2026 synchronized output。zero dependency（純 stdlib），且不 import agentsdk 任何 package —— caller 把 engine 的 `core.StreamEvent` 轉成 component 更新。第一個真 caller 是 [`sample/code-agent`](../sample/code-agent/)（interactive 模式的 transcript 區域即本 package 渲染）。
 
 ## 現有能力（skeleton）
 
@@ -18,5 +18,6 @@
 ## 測試
 
 ```bash
-cd tui && go test ./... -count=1
+# 從 root module 跑（tui 已是 root sub-package）
+go test ./tui/... -count=1
 ```

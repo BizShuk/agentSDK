@@ -9,7 +9,7 @@ require (
 )
 
 require (
-	github.com/bizshuk/gosdk v1.1.0 // indirect
+	github.com/bizshuk/gosdk v1.2.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/gocarina/gocsv v0.0.0-20260523204920-c264028e67ea // indirect

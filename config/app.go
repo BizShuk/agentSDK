@@ -1,6 +1,10 @@
 // Package config provides the one-stop AppConfig for CLI samples.
 // It wraps gosdk/config initialization, log file setup, and filestore-backed
 // StateStore + WriteAheadLog wiring in a single OpenForCLI call.
+//
+// Note: gosdk v1.2.0+ renamed GetAppLogDir to GetAppLogsDir and the default
+// on-disk directory from "log/" to "logs/" (this package follows gosdk's
+// choice — see github.com/bizshuk/gosdk/config.GetAppLogsDir).
 package config
 
 import (
@@ -59,7 +63,7 @@ func OpenForCLI(appName string, level slog.Level) (*AppConfig, error) {
 	}
 
 	dataDir := gosdkconfig.GetAppDataDir()
-	logDir := gosdkconfig.GetAppLogDir()
+	logDir := gosdkconfig.GetAppLogsDir()
 	statesDir := filepath.Join(dataDir, "states")
 	walDir := filepath.Join(dataDir, "wal")
 	for _, d := range []string{statesDir, walDir, logDir} {

@@ -13,7 +13,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.50.2 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/bizshuk/auth v0.0.0-20260718180648-a05ed97812a8 // indirect
-	github.com/bizshuk/gosdk v1.1.0 // indirect
+	github.com/bizshuk/gosdk v1.2.1 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect

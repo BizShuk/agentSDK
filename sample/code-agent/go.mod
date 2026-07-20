@@ -4,11 +4,8 @@ go 1.26.0
 
 replace github.com/bizshuk/agentsdk => ../../
 
-replace github.com/bizshuk/agentsdk/tui => ../../tui
-
 require (
 	github.com/bizshuk/agentsdk v0.0.0
-	github.com/bizshuk/agentsdk/tui v0.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 )
@@ -17,7 +14,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.50.2 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/bizshuk/auth v0.0.0-20260718180648-a05ed97812a8 // indirect
-	github.com/bizshuk/gosdk v1.1.0 // indirect
+	github.com/bizshuk/gosdk v1.2.1 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect

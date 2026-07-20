@@ -19,7 +19,9 @@ import (
 	grokprovider "github.com/bizshuk/agentsdk/provider/grok"
 	minimaxprovider "github.com/bizshuk/agentsdk/provider/minimax"
 	ollamaprovider "github.com/bizshuk/agentsdk/provider/ollama"
+	gosdkconfig "github.com/bizshuk/gosdk/config"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // NewProviderCommand returns the cobra subcommand:
@@ -72,6 +74,14 @@ Examples:
 			out := cmd.OutOrStdout()
 			errOut := cmd.ErrOrStderr()
 
+			// Boot gosdk/config once per invocation so .env / config.yaml /
+			// settings.json (in cwd, ./conf, ~/.config/agentsdk/) participate
+			// in credential resolution. Failures degrade gracefully — flag
+			// + OS env still work without gosdk.
+			if err := bootGosdkConfig(); err != nil {
+				fmt.Fprintf(errOut, "[provider] gosdk/config: %v (continuing with OS env only)\n", err)
+			}
+
 			if listProviders, _ := cmd.Flags().GetBool("list-providers"); listProviders {
 				fmt.Fprintln(out, strings.Join(registeredProviders(), ", "))
 				return nil
@@ -119,11 +129,14 @@ Examples:
 		"Model id (alias -m); empty = adapter flagship default. "+
 			"Use --list-models to see the provider's catalog.")
 	flags.StringVar(&apiKey, "api-key", "",
-		"API key override; empty = adapter reads its own env "+
-			"(MINIMAX_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY / XAI_API_KEY / OPENAI_API_KEY; "+
-			"ollama is keyless by default).")
+		"API key override; empty = resolved from .env / "+
+			"~/.config/agentsdk/.env / shell env "+
+			"(MINIMAX_API_KEY / ANTHROPIC_OAUTH_TOKEN+ANTHROPIC_API_KEY / "+
+			"GOOGLE_API_KEY / XAI_API_KEY / OPENAI_API_KEY). "+
+			"Precedence: --api-key > .env > OS env.")
 	flags.StringVar(&baseURL, "base-url", "",
-		"Base URL override; empty = adapter reads its own env / default.")
+		"Base URL override; empty = resolved from .env / shell env / "+
+			"adapter default. Same precedence as --api-key.")
 	flags.StringVar(&system, "system", "",
 		"Optional system message prepended to the prompt.")
 	flags.IntVar(&maxTokens, "max-tokens", 0,
@@ -158,10 +171,65 @@ type factoryOptions struct {
 // anthropic reads ANTHROPIC_API_KEY).
 type factory func(o factoryOptions) (core.Provider, error)
 
+// ---------------------------------------------------------------------------
+// gosdk config wiring
+// ---------------------------------------------------------------------------
+
+// bootGosdkConfig wires viper from gosdk's standard search paths
+// (`.`, `./conf`, `~/.config/agentsdk/`) for filenames `.env`,
+// `.env.local`, `config.yaml`, `config.local.yaml`, `settings.json`,
+// `settings.local.json`. It also binds every provider env key to viper
+// so envLookup falls through to OS env when no .env override exists.
+//
+// We deliberately do NOT enable gosdkconfig.WithWatch — provider is a
+// one-shot CLI, the process exits after one Generate.
+func bootGosdkConfig() error {
+	gosdkconfig.Default(gosdkconfig.WithAppName("agentsdk"))
+	if gosdkconfig.GetAppName() == "" {
+		return fmt.Errorf("gosdk/config: appName not bound")
+	}
+	return nil
+}
+
+// envLookup returns the merged viper value for `key`, which transparently
+// fans out through: .env / config files (loaded by bootGosdkConfig) →
+// OS env (via BindEnv above). Empty when none are set; callers propagate
+// that to the adapter which then applies its own default.
+//
+// Viper normalizes config-file keys to lowercase, so we look up the
+// lower-cased form while still using uppercase env-var names in BindEnv
+// (those ARE the literal env-var names, so they must stay upper-case).
+func envLookup(key string) string { return viper.GetString(strings.ToLower(key)) }
+
+// firstNonEmpty returns the first non-empty string in vals, or "" if all
+// are empty. Used by anthropic to express its OAuth > API-key precedence.
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// resolveCreds hydrates the empty fields of factoryOptions from envLookup.
+// Empty keys are skipped (anthropic has no BaseURLEnvVar; ollama API key
+// is optional and frequently absent).
+func (o factoryOptions) resolveCreds(apiKeyEnv, baseURLEnv string) factoryOptions {
+	if o.APIKey == "" && apiKeyEnv != "" {
+		o.APIKey = envLookup(apiKeyEnv)
+	}
+	if o.BaseURL == "" && baseURLEnv != "" {
+		o.BaseURL = envLookup(baseURLEnv)
+	}
+	return o
+}
+
 // registry maps the --provider flag value to its adapter. Names are
 // case-insensitive at the boundary (see resolveProvider).
 var registry = map[string]factory{
 	"minimax": func(o factoryOptions) (core.Provider, error) {
+		o = o.resolveCreds("MINIMAX_API_KEY", "MINIMAX_BASE_URL")
 		opts := []minimaxprovider.Option{}
 		if o.Model != "" {
 			opts = append(opts, minimaxprovider.WithModel(o.Model))
@@ -175,6 +243,15 @@ var registry = map[string]factory{
 		return minimaxprovider.New(opts...)
 	},
 	"anthropic": func(o factoryOptions) (core.Provider, error) {
+		// Anthropic has no BaseURLEnvVar (only --base-url flag), and
+		// prefers ANTHROPIC_OAUTH_TOKEN over ANTHROPIC_API_KEY — both
+		// resolved through envLookup so .env participates.
+		if o.APIKey == "" {
+			o.APIKey = firstNonEmpty(
+				envLookup("ANTHROPIC_OAUTH_TOKEN"),
+				envLookup("ANTHROPIC_API_KEY"),
+			)
+		}
 		opts := []anthropicprovider.Option{}
 		if o.Model != "" {
 			opts = append(opts, anthropicprovider.WithModel(o.Model))
@@ -188,6 +265,7 @@ var registry = map[string]factory{
 		return anthropicprovider.New(opts...)
 	},
 	"google": func(o factoryOptions) (core.Provider, error) {
+		o = o.resolveCreds("GOOGLE_API_KEY", "GOOGLE_BASE_URL")
 		opts := []googleprovider.Option{}
 		if o.Model != "" {
 			opts = append(opts, googleprovider.WithModel(o.Model))
@@ -201,6 +279,7 @@ var registry = map[string]factory{
 		return googleprovider.New(opts...)
 	},
 	"grok": func(o factoryOptions) (core.Provider, error) {
+		o = o.resolveCreds("XAI_API_KEY", "XAI_BASE_URL")
 		opts := []grokprovider.Option{}
 		if o.Model != "" {
 			opts = append(opts, grokprovider.WithModel(o.Model))
@@ -214,6 +293,7 @@ var registry = map[string]factory{
 		return grokprovider.New(opts...)
 	},
 	"ollama": func(o factoryOptions) (core.Provider, error) {
+		o = o.resolveCreds("OPENAI_API_KEY", "OPENAI_BASE_URL")
 		opts := []ollamaprovider.Option{}
 		if o.Model != "" {
 			opts = append(opts, ollamaprovider.WithModel(o.Model))
@@ -288,7 +368,8 @@ func buildRequest(prompt, system string, maxTokens int) core.ModelRequest {
 // ---------------------------------------------------------------------------
 
 func runGenerate(ctx context.Context, prov core.Provider, req core.ModelRequest,
-	out io.Writer, asJSON bool) error {
+	out io.Writer, asJSON bool,
+) error {
 	res, err := prov.Generate(ctx, req)
 	if err != nil {
 		return fmt.Errorf("generate: %w", err)
@@ -310,7 +391,8 @@ func runGenerate(ctx context.Context, prov core.Provider, req core.ModelRequest,
 }
 
 func runStream(ctx context.Context, prov core.Provider, req core.ModelRequest,
-	out io.Writer, asJSON bool) error {
+	out io.Writer, asJSON bool,
+) error {
 	ch, err := prov.Stream(ctx, req)
 	if err != nil {
 		return fmt.Errorf("stream: %w", err)

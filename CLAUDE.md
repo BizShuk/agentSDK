@@ -4,7 +4,7 @@
 
 ## 技術基準 (Current Baseline)
 
-- 語言與 workspace：Go `1.26.0`、`go.work`，共 `10` 個 module entries（root、`tui`、`tools/dependency-analyzer`、7 個 sample module）。`proxy` 與 `llm_provider` 均為外部 module dependency，不再列入本 workspace。Standalone dependency analyzer repo 仍位於 `~/projects/go-dependency-analysis`；本 workspace 同時保留已合併的 in-tree prototype。`provider/*` 已於 551410d 併回 root module，不再各自帶 go.mod。2026-07-19 移除原 `cli/` + `mcp/` 兩個未對接的套件,並移除外部 `video-utils` 依賴 (`go.mod` 與 `cmd/` wiring 同步清掉)。同日落地 harness/UX skeleton：`hook`、`permission`、`session`、`contextfile`、`skill`、`subagent`、`wire` 七個 core-only package + `tui` 獨立 module + runtime steering/follow-up queue，計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md)、來源調查見 [`docs/memory/2026-07-19-agent-client-feature-catalog.md`](docs/memory/2026-07-19-agent-client-feature-catalog.md)。
+- 語言與 workspace：Go `1.26.0`、`go.work`，共 `9` 個 module entries（root、`tools/dependency-analyzer`、7 個 sample module）。`proxy` 與 `llm_provider` 均為外部 module dependency，不再列入本 workspace。Standalone dependency analyzer repo 仍位於 `~/projects/go-dependency-analysis`；本 workspace 同時保留已合併的 in-tree prototype。`provider/*` 已於 `551410d` 併回 root module；`tui/` 於 2026-07-21 併回，不再各自帶 `go.mod`。2026-07-19 移除原 `cli/` + `mcp/` 兩個未對接的套件,並移除外部 `video-utils` 依賴 (`go.mod` 與 `cmd/` wiring 同步清掉)。同日落地 harness/UX skeleton：`hook`、`permission`、`session`、`contextfile`、`skill`、`subagent`、`wire` 七個 core-only package + `tui` sub-package（zero-dep） + runtime steering/follow-up queue，計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md)、來源調查見 [`docs/memory/2026-07-19-agent-client-feature-catalog.md`](docs/memory/2026-07-19-agent-client-feature-catalog.md)。
 - root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/planning/action/tool/memory/middleware/runtime）、harness 群（hook/permission/session/contextfile/skill/subagent/wire，全部只依賴 core）與組合層（app/config）+ root CLI 子指令（`cmd/provider.go` 的 `provider` smoke-test 子指令,直接呼叫 `core.Provider.Generate/Stream`，不走 Agent/Engine/harness）。`core/` 保持標準函式庫 only；`auth` 是 production Git submodule 且獨立 module，`proxy` 也是獨立 module；二者各有自己的 `main.go` 並可單獨 build 出獨立 binary。root `main.go` 只掛載 `cmd.NewProviderCommand()`，不再掛載 auth/proxy 指令集；root module 仍透過 `config/` 直接 import `auth/model`、`auth/svc`、`auth/utils`，因此 `auth` 仍是 root 的 direct require，`proxy` 已從 root `go.mod` 移除。SDK 核心群不依賴兩者。
 - 目前 proxy 架構：`protocol → route → transform → upstream`，三種 client wire format 的 `3×3` directed pair 已接上 handler。
 - 來源與規格：現行 pairwise 決策見 [`proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md`](proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md)；四個來源的 wire-format 盤點見 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md)。
@@ -16,7 +16,7 @@
 agentsdk/
 ├── README.md                         # 業務範疇與使用者導覽
 ├── CLAUDE.md                         # 技術脈絡與架構決策（本檔）
-├── go.work                           # root + llm_provider/proxy siblings + tui + analyzer + sample/*
+├── go.work                           # root + analyzer + 7 sample modules (tui 已併回 root)
 ├── go.mod                            # github.com/bizshuk/agentsdk
 ├── main.go                           # cobra root binary；掛載 `provider` smoke-test 子指令（cmd/provider.go）
 ├── cmd/                              # root cobra subcommands（`provider` 打 core.Provider 不走 Engine）
@@ -35,7 +35,7 @@ agentsdk/
 ├── wire/                             # headless envelope：stream-json/RPC/print（core.EventSink adapter）
 ├── internal/frontmatter/             # skill/subagent 共用的 "---" key:value 解析器
 ├── internal/modelsapi/               # provider adapter 共用的 live model catalog helper（Fetch/DecodeIDList/Merge）
-├── tui/                              # 獨立 module：differential renderer、ANSI 工具、Component/Terminal 抽象
+├── tui/                              # sub-package（zero-dep）：differential renderer、ANSI 工具、Component/Terminal 抽象
 ├── middleware/                       # chain、retry/timeout/budget/loopguard、安全與 OTel tracing
 ├── memory/                           # context window、compactor、checkpoint、JSON state/WAL
 ├── runtime/                          # Engine：dispatch Instruction、fold Event、Run/Resume/HITL
@@ -83,7 +83,7 @@ agentsdk/
 | 類別                      | 技術                                                | 現況                                                                            |
 | ------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------- |
 | Language                  | Go `1.26.0`                                         | `go.work` 管理 10 個 module entries                                              |
-| Root runtime              | Go stdlib、`github.com/bizshuk/gosdk v1.1.0`        | config/log/notify 等組合點在 root 或 sample                                     |
+| Root runtime              | Go stdlib、`github.com/bizshuk/gosdk v1.2.1`        | config/log/notify 等組合點在 root 或 sample                                     |
 | Auth module               | `viper` + stdlib                                    | Git submodule + 獨立 module；credential 機制、Resolver、active.json             |
 | HTTP proxy                | `gin-gonic/gin v1.11.0`、`gosdk/mw`、`gosdk/router` | 獨立 module；`/v1` API、health/ping、localhost CORS、API key、per-IP rate limit |
 | CLI/config                | `spf13/cobra v1.10.2`、`spf13/viper v1.20.1`        | auth/proxy module CLI、samples、root `provider` 子指令                       |
@@ -93,7 +93,7 @@ agentsdk/
 | Google adapter            | `google.golang.org/genai v1.62.0`                   | 只在 `provider/google` module 引入                                              |
 | OpenAI-compatible adapter | `net/http` + JSON + SSE                             | `provider/openaicompat` 不依賴 vendor SDK                                       |
 | MCP                       | `modelcontextprotocol/go-sdk v1.6.1`                | `mcp` 獨立 module，轉成 `action.ToolSource`                                     |
-| Terminal UI               | Go stdlib only                                      | `tui` 獨立 module；differential rendering、CSI 2026、不用 alternate screen      |
+| Terminal UI               | Go stdlib only                                      | `tui` sub-package（zero-dep）；differential rendering、CSI 2026、不用 alternate screen      |
 
 `core/` 不 import `gosdk`、Gin、任何 provider SDK；auth、proxy、provider 與 MCP 的重依賴藉由獨立 `go.mod` 隔離。root module 的直接外部依賴縮減為 `gosdk`、OTel(trace)、`cobra`/`viper`、`jsonschema`、`uuid` 已隨 proxy 遷出；root 仍非 stdlib-only（組合層在此）。
 
@@ -113,7 +113,7 @@ agentsdk/
 - Steering / follow-up queue（pi 式）：`Engine.Steer` 在下一次 Decide 前插入 user message；`Engine.FollowUp` 把「本應完成」轉為續跑（每次一則）。follow-up 續跑會清掉 `think_then_act.phase` 讓 FSM 回到 reason（與 loop 既有 pending_call seeding 同一 seam）；其他五個 rule 的通用 reset 慣例待補。
 - `session.Manager` 只加 lineage（meta sidecar：`ID`/`Parent`/`Title`/`Cwd`）與 fork（複製 state+WAL、改 RunID）；transcript 真相仍是 WAL JSONL。
 - `wire` 是 `cli/` 的復活但有真 caller path：`runtime → core.EventSink → wire.Sink → JSONL`；Envelope 欄位是對外 API，需維持 JSON round-trip 穩定。
-- `tui` 獨立 module 零依賴且不 import agentsdk：caller 把 `core.StreamEvent` 轉成 component 更新；不用 alternate screen、CSI 2026 synchronized output、frame 未變零輸出。
+- `tui` sub-package（zero-dep）且不 import agentsdk：caller 把 `core.StreamEvent` 轉成 component 更新；不用 alternate screen、CSI 2026 synchronized output、frame 未變零輸出。
 
 ## 認證與 provider 決策 (Auth and Providers)
 
@@ -193,7 +193,7 @@ openai-responses
 │   ├── states/<runID>.json
 │   ├── wal/<runID>.jsonl
 │   └── auth/*.json
-└── log/<runID>.log
+└── logs/<runID>.log
 ```
 
 `app.Run` 是 CLI agent 的共同 lifecycle：config → optional preflight → wall-clock deadline → Bootstrap → panic-safe Engine.Run → optional OnComplete。`app.Main` 只負責 signal binding 與 exit code。
@@ -218,7 +218,7 @@ JSONL 對外 envelope (`cli/`) 於 2026-07-19 移除：原 9 種 type (`observat
 | skills/commands   | `agentsdk/skill`：`NewRegistry`、`DiscoverSkills`、`Body`、`ExpandCommand`、`RenderTemplate`                                                                                                                                                     |
 | subagents         | `agentsdk/subagent`：`ParseDef`、`DiscoverDefs`、`NewSpawner`（`task` tool）、`Depth`                                                                                                                                                            |
 | headless wire     | `agentsdk/wire`：`Envelope`、`NewEncoder`/`NewDecoder`、`NewSink`、`ReadRequest`/`WriteResponse`、`FormatStream`                                                                                                                                 |
-| terminal UI       | `agentsdk/tui`（獨立 module）：`Renderer`、`Component`、`Terminal`、`VisibleWidth`/`WrapText`                                                                                                                                                    |
+| terminal UI       | `agentsdk/tui`（sub-package, zero-dep）：`Renderer`、`Component`、`Terminal`、`VisibleWidth`/`WrapText`                                                                                                                                                    |
 | dependency graph  | external CLI `github.com/bizshuk/go-dependency-analysis`：Go tooling facts + JSON policy heuristics；不加入本 workspace、不被本 repo import                                                                                                        |
 | middleware        | `agentsdk/middleware`、`harness`、`loopguard`、`security`、`observability`                                                                                                                                                                       |
 | app/config        | `agentsdk/app`、`agentsdk/config`：`app.Run`、`OpenForCLI`、`SecureMiddleware`、`NewRefreshingProvider`                                                                                                                                          |
@@ -294,7 +294,7 @@ go run . --fake --max-turns=10 run --once --fixture testdata/error.log
 cd sample/code-agent
 go run . --fake -p "看看這個專案"        # print 模式（進度走 stderr）
 go run . --fake --json -p "test"        # stream-json envelope（wire）
-go run . --fake                          # 互動 TUI（tui module；執行中輸入 = Steer）
+go run . --fake                          # 互動 TUI（tui sub-package；執行中輸入 = Steer）
 go run . --fake --sessions               # 列出本目錄 sessions；-c / -r / --fork 續跑
 
 # 真實 provider：--provider 選 adapter，各自讀自己的 env（--fake 拿掉）
@@ -321,7 +321,7 @@ go run . --provider anthropic -p "..."    # 改讀 ANTHROPIC_API_KEY（含 minim
 | Proxy 3×3 pairwise cutover 與安全 hardening                                                                                | 完成（現行 branch）                                                                                                                                          |
 | 四來源 37 entity wire-format catalog                                                                                       | 完成，見 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md)                                                                            |
 | module 拆分：`auth`、`proxy` 獨立 module；`config` 解體；`perception/` 刪除                                                | 完成，見 [`plans/2026-07-18-architecture-module-split-roadmap.md`](plans/2026-07-18-architecture-module-split-roadmap.md)                                    |
-| Harness/UX skeleton：`hook`/`permission`/`session`/`contextfile`/`skill`/`subagent`/`wire` + `tui` module + steering queue | skeleton 完成（全部含測試），細節項見 `README.todo`；計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md) |
+| Harness/UX skeleton：`hook`/`permission`/`session`/`contextfile`/`skill`/`subagent`/`wire` + `tui` sub-package + steering queue | skeleton 完成（全部含測試），細節項見 `README.todo`；計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md) |
 
 目前明確未完成或刻意保留：
 

@@ -194,3 +194,25 @@ func TestProviderJSON(t *testing.T) {
 	assert.Equal(t, 11, got.Usage.PromptTokens)
 	assert.Equal(t, 7, got.Usage.CompletionTokens)
 }
+
+// TestProviderCredentialsFromEnv verifies that when --api-key is omitted,
+// credentials flow from viper (bound to OS env by bootGosdkConfig) into
+// the request's x-api-key header. Mirrors the t.Setenv patterns in
+// provider/<name>/provider_test.go.
+func TestProviderCredentialsFromEnv(t *testing.T) {
+	// Clear any leftover key from the test environment first so the
+	// resolution path is deterministic across local dev shells.
+	t.Setenv("MINIMAX_API_KEY", "sk-from-env")
+
+	srv, sawKey := newFakeMessagesServer(t, "minimax-M2")
+	stdout, _, err := runCLI(t,
+		"--provider", "minimax",
+		"--model", "minimax-M2",
+		"--base-url", srv.URL,
+		// no --api-key; expect OS-env resolution
+		"ping",
+	)
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "pong from fake")
+	assert.Equal(t, "sk-from-env", *sawKey)
+}

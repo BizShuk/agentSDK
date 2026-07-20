@@ -9,6 +9,5 @@ use (
 	./sample/memory-demo
 	./sample/middleware-demo
 	./sample/strategy-demo
-	./tui
 	./tools/dependency-analyzer
 )

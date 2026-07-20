@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/anthropics/anthropic-sdk-go v1.50.2
 	github.com/bizshuk/auth v0.0.0-20260718180648-a05ed97812a8
-	github.com/bizshuk/gosdk v1.1.0
+	github.com/bizshuk/gosdk v1.2.1
 	github.com/invopop/jsonschema v0.14.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.20.1
@@ -47,5 +47,6 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
