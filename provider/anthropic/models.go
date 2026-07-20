@@ -4,7 +4,15 @@ package anthropic
 // so picker UIs and budget middleware can plan across providers without
 // reaching into Anthropic-specific types.
 
-import "github.com/bizshuk/agentsdk/core"
+import (
+	"context"
+	"fmt"
+	"maps"
+	"strings"
+
+	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/internal/modelsapi"
+)
 
 // DefaultCatalog returns the bundled Anthropic model catalog.
 //
@@ -28,3 +36,49 @@ func DefaultCatalog() []core.ModelSpec {
 			ContextWindow: 200000, MaxTokens: 8192},
 	}
 }
+
+// ---------------------------------------------------------------------------
+// live catalog — GET {base}/v1/models
+// ---------------------------------------------------------------------------
+
+// ListModels implements core.ModelLister against Anthropic's catalog
+// endpoint. The endpoint reports ids and display names only, so context
+// windows and reasoning flags are merged in from DefaultCatalog; ids
+// Anthropic has published since this binary was built come back with the
+// id alone rather than being hidden.
+//
+// The same call works against an Anthropic-compatible gateway, since the
+// URL is derived from the configured endpoint rather than hard-coded.
+func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
+	raw, err := modelsapi.Fetch(ctx, p.httpDoer, p.modelsEndpoint(), p.catalogHeaders())
+	if err != nil {
+		return nil, fmt.Errorf("anthropic: list models: %w", err)
+	}
+	ids, err := modelsapi.DecodeIDList(raw)
+	if err != nil {
+		return nil, fmt.Errorf("anthropic: %w", err)
+	}
+	return modelsapi.Merge(ids, DefaultCatalog()), nil
+}
+
+// modelsEndpoint swaps the /messages path for /models on whatever base the
+// provider was constructed with, so a gateway override carries over.
+func (p *Provider) modelsEndpoint() string {
+	return strings.TrimSuffix(p.endpoint, "/messages") + "/models"
+}
+
+// catalogHeaders assembles the auth + version headers the catalog endpoint
+// requires. Mirrors applyAuthHeaders, but as a map for modelsapi.Fetch.
+func (p *Provider) catalogHeaders() map[string]string {
+	h := map[string]string{"anthropic-version": p.apiVer}
+	if p.auth.Bearer != "" {
+		h["Authorization"] = "Bearer " + p.auth.Bearer
+	} else if p.auth.APIKey != "" {
+		h["x-api-key"] = p.auth.APIKey
+	}
+	maps.Copy(h, p.auth.Headers)
+	return h
+}
+
+// Compile-time: ensure Provider satisfies the optional live-catalog port.
+var _ core.ModelLister = (*Provider)(nil)

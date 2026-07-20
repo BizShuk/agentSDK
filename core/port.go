@@ -30,8 +30,10 @@ type Provider interface {
 	// NOT carry a model id — Models() enumerates those.
 	ID() string
 
-	// Models enumerates the provider's static catalog. Dynamic catalog
-	// providers may return the last-known snapshot.
+	// Models enumerates the provider's bundled catalog without any I/O.
+	// It is the offline answer — a compiled-in snapshot that is correct
+	// on the day it ships and drifts afterwards. Prefer ModelLister when
+	// the provider implements it; see ListModels below.
 	Models() []ModelSpec
 
 	// AuthSchemes advertises which auth flavors the provider accepts.
@@ -53,6 +55,34 @@ type Provider interface {
 	// CountTokens returns an approximate token count for a transcript.
 	// Implementations may use a heuristic — accuracy is not guaranteed.
 	CountTokens(ctx context.Context, msgs []Message) (int, error)
+}
+
+// ModelLister is the optional live-catalog half of Provider. Adapters whose
+// upstream publishes a catalog endpoint (GET /models and friends) implement
+// it so callers see the models that exist right now rather than the set that
+// existed when the binary was built.
+//
+// It is deliberately NOT part of Provider: some upstreams (OAuth-gated
+// backends, private gateways) expose no catalog endpoint at all, and forcing
+// them to implement a method that can only ever fail would push that failure
+// into every caller. Type-assert instead:
+//
+//	specs := prov.Models()
+//	if l, ok := prov.(core.ModelLister); ok {
+//	    if live, err := l.ListModels(ctx); err == nil {
+//	        specs = live
+//	    }
+//	}
+//
+// Implementations must fall back to Models() semantics on their own only
+// when that is meaningful; otherwise return the error and let the caller
+// decide whether a stale catalog beats no catalog.
+type ModelLister interface {
+	// ListModels queries the provider's upstream catalog endpoint. The
+	// returned specs carry live model ids; metadata the endpoint does not
+	// report (reasoning flag, context window) is filled in from the
+	// bundled catalog where the id is recognized.
+	ListModels(ctx context.Context) ([]ModelSpec, error)
 }
 
 // ModelSpec is one entry in a provider's catalog. It mirrors pi/ai's Model

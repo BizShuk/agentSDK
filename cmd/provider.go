@@ -16,7 +16,9 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 	anthropicprovider "github.com/bizshuk/agentsdk/provider/anthropic"
 	googleprovider "github.com/bizshuk/agentsdk/provider/google"
+	grokprovider "github.com/bizshuk/agentsdk/provider/grok"
 	minimaxprovider "github.com/bizshuk/agentsdk/provider/minimax"
+	ollamaprovider "github.com/bizshuk/agentsdk/provider/ollama"
 	"github.com/spf13/cobra"
 )
 
@@ -57,8 +59,11 @@ Examples:
   provider "summarize X" --provider anthropic --model claude-sonnet-5
   provider "summarize X" -m claude-sonnet-5 --provider anthropic     # -m 是 --model 短名
   provider "summarize X" --provider google --model gemini-3-flash-preview
+  provider "hello" --provider grok --model grok-4
+  provider "hello" --provider ollama --base-url http://localhost:11434/v1
   provider --stream "stream me a haiku" --provider anthropic
   provider --list-models --provider google
+  provider --list-models --provider ollama    # lists the models your server actually pulled
   provider --list-providers
 `),
 		SilenceUsage:  true,
@@ -87,7 +92,7 @@ Examples:
 			}
 
 			if listModels {
-				return dumpCatalog(out, prov, label)
+				return dumpCatalog(cmd.Context(), errOut, out, prov, label)
 			}
 
 			prompt := strings.TrimSpace(strings.Join(args, " "))
@@ -109,12 +114,14 @@ Examples:
 
 	flags := cmd.Flags()
 	flags.StringVar(&providerName, "provider", "minimax",
-		"Provider family (minimax | anthropic | google; case-insensitive).")
+		"Provider family (minimax | anthropic | google | grok | ollama; case-insensitive).")
 	flags.StringVarP(&model, "model", "m", "",
 		"Model id (alias -m); empty = adapter flagship default. "+
 			"Use --list-models to see the provider's catalog.")
 	flags.StringVar(&apiKey, "api-key", "",
-		"API key override; empty = adapter reads its own env (MINIMAX_API_KEY / ANTHROPIC_API_KEY).")
+		"API key override; empty = adapter reads its own env "+
+			"(MINIMAX_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY / XAI_API_KEY / OPENAI_API_KEY; "+
+			"ollama is keyless by default).")
 	flags.StringVar(&baseURL, "base-url", "",
 		"Base URL override; empty = adapter reads its own env / default.")
 	flags.StringVar(&system, "system", "",
@@ -192,6 +199,32 @@ var registry = map[string]factory{
 			opts = append(opts, googleprovider.WithBaseURL(o.BaseURL))
 		}
 		return googleprovider.New(opts...)
+	},
+	"grok": func(o factoryOptions) (core.Provider, error) {
+		opts := []grokprovider.Option{}
+		if o.Model != "" {
+			opts = append(opts, grokprovider.WithModel(o.Model))
+		}
+		if o.APIKey != "" {
+			opts = append(opts, grokprovider.WithAPIKey(o.APIKey))
+		}
+		if o.BaseURL != "" {
+			opts = append(opts, grokprovider.WithBaseURL(o.BaseURL))
+		}
+		return grokprovider.New(opts...)
+	},
+	"ollama": func(o factoryOptions) (core.Provider, error) {
+		opts := []ollamaprovider.Option{}
+		if o.Model != "" {
+			opts = append(opts, ollamaprovider.WithModel(o.Model))
+		}
+		if o.APIKey != "" {
+			opts = append(opts, ollamaprovider.WithAPIKey(o.APIKey))
+		}
+		if o.BaseURL != "" {
+			opts = append(opts, ollamaprovider.WithBaseURL(o.BaseURL))
+		}
+		return ollamaprovider.New(opts...)
 	},
 }
 
@@ -305,14 +338,27 @@ func runStream(ctx context.Context, prov core.Provider, req core.ModelRequest,
 	return nil
 }
 
-// dumpCatalog prints the provider's static ModelSpec list.
-func dumpCatalog(out io.Writer, prov core.Provider, label string) error {
+// dumpCatalog prints the provider's ModelSpec list. It prefers the live
+// upstream catalog (core.ModelLister) and falls back to the bundled static
+// catalog when the provider does not implement the live port or the live
+// call fails (offline, bad key). The source is reported on stderr so the
+// stdout list stays clean for piping.
+func dumpCatalog(ctx context.Context, errOut, out io.Writer, prov core.Provider, label string) error {
 	specs := prov.Models()
+	source := "static"
+	if lister, ok := prov.(core.ModelLister); ok {
+		if live, err := lister.ListModels(ctx); err != nil {
+			fmt.Fprintf(errOut, "[provider] %s: live catalog unavailable, using static (%v)\n", label, err)
+		} else {
+			specs = live
+			source = "live"
+		}
+	}
 	if len(specs) == 0 {
 		fmt.Fprintf(out, "%s: (empty catalog)\n", label)
 		return nil
 	}
-	fmt.Fprintf(out, "%s catalog (%d models):\n", label, len(specs))
+	fmt.Fprintf(out, "%s catalog (%d models, %s):\n", label, len(specs), source)
 	for _, s := range specs {
 		fmt.Fprintf(out, "  %-40s family=%-18s reasoning=%v ctx=%d max=%d\n",
 			s.ID, s.Family, s.Reasoning, s.ContextWindow, s.MaxTokens)

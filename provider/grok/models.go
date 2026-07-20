@@ -4,7 +4,13 @@
 
 package grok
 
-import "github.com/bizshuk/agentsdk/core"
+import (
+	"context"
+	"fmt"
+
+	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/internal/modelsapi"
+)
 
 // DefaultCatalog returns the bundled xAI Grok model catalog as of
 // 2026-07.
@@ -51,3 +57,27 @@ func DefaultCatalog() []core.ModelSpec {
 		},
 	}
 }
+
+// ---------------------------------------------------------------------------
+// live catalog — GET {base}/models
+// ---------------------------------------------------------------------------
+
+// ListModels implements core.ModelLister against xAI's OpenAI-compatible
+// catalog endpoint. The response carries ids only; metadata is merged in
+// from DefaultCatalog where the id is recognized.
+func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
+	raw, err := modelsapi.Fetch(ctx, p.client, p.baseURL+"/models", map[string]string{
+		"Authorization": p.authHeader(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("grok: list models: %w", err)
+	}
+	ids, err := modelsapi.DecodeIDList(raw)
+	if err != nil {
+		return nil, fmt.Errorf("grok: %w", err)
+	}
+	return modelsapi.Merge(ids, DefaultCatalog()), nil
+}
+
+// Compile-time: ensure Provider satisfies the optional live-catalog port.
+var _ core.ModelLister = (*Provider)(nil)

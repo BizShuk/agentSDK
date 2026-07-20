@@ -23,6 +23,11 @@ func newFakeMessagesServer(t *testing.T, expectModel string) (*httptest.Server, 
 	sawKey := ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sawKey = r.Header.Get("x-api-key")
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/models" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"id":"MiniMax-M2"},{"id":"MiniMax-M3"}]}`))
+			return
+		}
 		if r.URL.Path != "/v1/messages" {
 			http.NotFound(w, r)
 			return
@@ -91,16 +96,39 @@ func TestProviderGenerateRoundTrip(t *testing.T) {
 		"x-api-key header must carry the API key verbatim")
 }
 
-// TestProviderListModels dumps the static catalog without making any HTTP
-// call — the catalog is in-memory, so the fake server is irrelevant.
+// TestProviderListModels drives --list-models against a fake /v1/models
+// endpoint and asserts the CLI prints the LIVE catalog (source=live) with
+// the ids the upstream reported, not the compiled-in static list.
 func TestProviderListModels(t *testing.T) {
-	stdout, _, err := runCLI(t,
+	srv, _ := newFakeMessagesServer(t, "unused")
+	stdout, stderr, err := runCLI(t,
 		"--provider", "minimax",
+		"--base-url", srv.URL,
+		"--api-key", "sk-test",
 		"--list-models",
 	)
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "minimax catalog")
-	assert.Contains(t, stdout, "minimax-M2")
+	assert.Contains(t, stdout, "live", "should report the live source, not static")
+	assert.Contains(t, stdout, "MiniMax-M2")
+	assert.Contains(t, stdout, "MiniMax-M3")
+	assert.NotContains(t, stderr, "live catalog unavailable")
+}
+
+// TestProviderListModelsFallback proves the CLI degrades to the static
+// catalog when the live call fails (here: an unroutable base URL), and
+// reports the fallback on stderr while keeping stdout a usable list.
+func TestProviderListModelsFallback(t *testing.T) {
+	stdout, stderr, err := runCLI(t,
+		"--provider", "minimax",
+		"--base-url", "http://127.0.0.1:1",
+		"--api-key", "sk-test",
+		"--list-models",
+	)
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "minimax catalog")
+	assert.Contains(t, stdout, "static")
+	assert.Contains(t, stderr, "live catalog unavailable")
 }
 
 // TestProviderListProviders prints the registered adapter names.

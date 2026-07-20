@@ -1,6 +1,12 @@
 package minimax
 
-import "github.com/bizshuk/agentsdk/core"
+import (
+	"context"
+	"fmt"
+
+	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/internal/modelsapi"
+)
 
 // DefaultCatalog returns the bundled minimax model catalog.
 //
@@ -30,3 +36,28 @@ func DefaultCatalog() []core.ModelSpec {
 			ContextWindow: 128000, MaxTokens: 8192},
 	}
 }
+
+// ---------------------------------------------------------------------------
+// live catalog — GET {base}/v1/models
+// ---------------------------------------------------------------------------
+
+// ListModels implements core.ModelLister. minimax mirrors Anthropic's
+// catalog shape on its Anthropic-compat surface, so the response is an
+// id list; context windows and reasoning flags are merged in from
+// DefaultCatalog for ids we ship metadata for.
+func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
+	raw, err := modelsapi.Fetch(ctx, p.client, p.baseURL+"/v1/models", map[string]string{
+		"X-Api-Key": p.apiKey,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("minimax: list models: %w", err)
+	}
+	ids, err := modelsapi.DecodeIDList(raw)
+	if err != nil {
+		return nil, fmt.Errorf("minimax: %w", err)
+	}
+	return modelsapi.Merge(ids, DefaultCatalog()), nil
+}
+
+// Compile-time: ensure Provider satisfies the optional live-catalog port.
+var _ core.ModelLister = (*Provider)(nil)

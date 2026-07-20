@@ -34,6 +34,7 @@ agentsdk/
 ├── subagent/                         # 定義解析 + task tool（RunFunc closure DI、depth guard）
 ├── wire/                             # headless envelope：stream-json/RPC/print（core.EventSink adapter）
 ├── internal/frontmatter/             # skill/subagent 共用的 "---" key:value 解析器
+├── internal/modelsapi/               # provider adapter 共用的 live model catalog helper（Fetch/DecodeIDList/Merge）
 ├── tui/                              # 獨立 module：differential renderer、ANSI 工具、Component/Terminal 抽象
 ├── middleware/                       # chain、retry/timeout/budget/loopguard、安全與 OTel tracing
 ├── memory/                           # context window、compactor、checkpoint、JSON state/WAL
@@ -221,12 +222,12 @@ JSONL 對外 envelope (`cli/`) 於 2026-07-19 移除：原 9 種 type (`observat
 | dependency graph  | external CLI `github.com/bizshuk/go-dependency-analysis`：Go tooling facts + JSON policy heuristics；不加入本 workspace、不被本 repo import                                                                                                        |
 | middleware        | `agentsdk/middleware`、`harness`、`loopguard`、`security`、`observability`                                                                                                                                                                       |
 | app/config        | `agentsdk/app`、`agentsdk/config`：`app.Run`、`OpenForCLI`、`SecureMiddleware`、`NewRefreshingProvider`                                                                                                                                          |
-| root CLI subcommands | `agentsdk/cmd`：`NewProviderCommand`（root cobra `provider` smoke-test CLI；打 `core.Provider.Generate`/`Stream` 不走 Engine；只掛 minimax + anthropic adapter）                                                                       |
+| root CLI subcommands | `agentsdk/cmd`：`NewProviderCommand`（root cobra `provider` smoke-test CLI；打 `core.Provider.Generate`/`Stream` 不走 Engine；registry 掛 minimax/anthropic/google/grok/ollama;`--list-models` 優先打 live `core.ModelLister`,失敗 fallback static）                                                       |
 | authentication    | `github.com/bizshuk/auth/{model,svc,utils,provider}`（Git submodule + 獨立 module，root 有 `auth` binary main）：`Login`、`For`、`FileStore`、`NewResolver`                                                                                      |
 | proxy             | `agentsdk/proxy/handlers`、`agentsdk/proxy/config`、`agentsdk/proxy/model`、`agentsdk/proxy/svc/{route,transform,upstream}`（獨立 module，root 有 `proxy` binary main）：`handlers.New`、`config.LoadConfig`、`model.Format`、`svc/route.Router` |
 | JSONL             | (已移除 2026-07-19) 原 `agentsdk/cli`：`Envelope`、`JSONLCodec`                                                                                                                                                                                  |
 | MCP               | (已移除 2026-07-19) 原 `agentsdk/mcp` 獨立 module：`mcp.NewClient` 實作 `action.ToolSource`，目前無 caller；若日後需要 MCP，重新以獨立 module 落地並補上 wiring                                                                                  |
-| provider adapters | `agentsdk/provider/anthropic`、`google`、`openaicompat`（各自獨立 module）                                                                                                                                                                       |
+| provider adapters | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity}`：各實作 `core.Provider`；除 codex/antigravity 外皆另實作 `core.ModelLister`（live `GET /models`），失敗時 caller fallback 回 `DefaultCatalog()` static list |
 | video utilities   | (已移除 2026-07-19) 原 `github.com/bizshuk/video-utils`（外部 module，獨立 git repo）：`audio`、`frames`、`subtitles`、`ffmpegutil`、`cmd.NewCommand`。root 不再依賴,不再列入模組對應表                                                          |
 
 ## 開發與驗證 (Development and Verification)

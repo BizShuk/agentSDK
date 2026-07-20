@@ -1,6 +1,12 @@
 package ollama
 
-import "github.com/bizshuk/agentsdk/core"
+import (
+	"context"
+	"fmt"
+
+	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/internal/modelsapi"
+)
 
 // DefaultCatalog lists common Ollama / OpenAI-compatible model ids.
 //
@@ -31,3 +37,34 @@ func DefaultCatalog() []core.ModelSpec {
 			ContextWindow: 32000, MaxTokens: 4096},
 	}
 }
+
+// ---------------------------------------------------------------------------
+// live catalog — GET {base}/models
+// ---------------------------------------------------------------------------
+
+// ListModels implements core.ModelLister. This adapter fronts whatever
+// OpenAI-compatible server the base URL points at, so the live call is
+// especially valuable here: the models a local Ollama has actually pulled
+// are a per-machine fact no bundled catalog can know.
+//
+// The Authorization header is omitted entirely when no key is configured —
+// local Ollama is keyless and rejects nothing, but LM Studio and vLLM
+// deployments behind auth need the Bearer.
+func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
+	headers := map[string]string{}
+	if p.apiKey != "" {
+		headers["Authorization"] = "Bearer " + p.apiKey
+	}
+	raw, err := modelsapi.Fetch(ctx, p.client, p.baseURL+"/models", headers)
+	if err != nil {
+		return nil, fmt.Errorf("ollama: list models: %w", err)
+	}
+	ids, err := modelsapi.DecodeIDList(raw)
+	if err != nil {
+		return nil, fmt.Errorf("ollama: %w", err)
+	}
+	return modelsapi.Merge(ids, DefaultCatalog()), nil
+}
+
+// Compile-time: ensure Provider satisfies the optional live-catalog port.
+var _ core.ModelLister = (*Provider)(nil)
