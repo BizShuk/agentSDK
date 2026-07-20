@@ -170,19 +170,39 @@ func TestProviderModelsCatalog(t *testing.T) {
 	for _, m := range catalog {
 		ids = append(ids, m.ID)
 	}
-	// All 10 catalogued models must be present.
+	// Representative slice of the 39-entry live snapshot (2026-07-20).
+	// Embedding and Imagen models are intentionally absent — the live
+	// lister filters them out, so they don't belong in the chat catalog.
 	want := []string{
+		// Gemma 4 (open chat)
 		"gemma-4-31b-it",
 		"gemma-4-26b-a4b-it",
-		"gemini-embedding-2",
-		"gemini-embedding-2-preview",
-		"gemini-3.1-flash-lite",
-		"gemini-embedding-001",
-		"gemini-3.5-flash",
-		"imagen-4.0-fast-generate-001",
-		"imagen-4.0-generate-001",
-		"imagen-4.0-ultra-generate-001",
+		// Gemini 2.x chat
+		"gemini-2.5-flash",
+		"gemini-2.5-pro",
+		"gemini-2.5-flash-lite",
+		"gemini-2.0-flash",
+		// Gemini 2.x TTS
+		"gemini-2.5-flash-preview-tts",
+		// Gemini "latest" aliases
+		"gemini-flash-latest",
+		"gemini-pro-latest",
+		// Gemini 3.x chat
+		"gemini-3-pro-preview",
 		"gemini-3-flash-preview",
+		"gemini-3.1-flash-lite",
+		"gemini-3.5-flash",
+		// Gemini 3.x image
+		"gemini-3-pro-image",
+		"gemini-3.1-flash-image",
+		// Lyria (music)
+		"lyria-3-pro-preview",
+		// Nano-banana
+		"nano-banana-pro-preview",
+		// Antigravity
+		"antigravity-preview-05-2026",
+		// Deep research
+		"deep-research-pro-preview-12-2025",
 	}
 	for _, id := range want {
 		assert.Contains(t, ids, id)

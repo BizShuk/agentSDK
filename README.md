@@ -6,12 +6,12 @@ Go Agentic Loop SDK、LLM protocol proxy 與 Log Doctor sample，提供目標導
 
 四大支柱對應到頂層 package,架構即文件:
 
-| 支柱        | 套件                       | 角色                                                                                          |
-| ----------- | -------------------------- | --------------------------------------------------------------------------------------------- |
-| 1. 認知架構 | `core` (ObservationSource) | 觀察來源 port (Percepts channel);原 `perception/` 套件無 consumer 已移除                      |
-| 2. 系統韌性 | `memory/`                  | Window / Compactor / Checkpoint (M2)                                                          |
-| 3. 工具生態 | `action/`                  | TypedTool / Registry / Sandbox / ApprovalPolicy                                               |
-| 4. 規劃     | `planning/`                | 6 種 ThinkingPattern (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router)  |
+| 支柱        | 套件                       | 角色                                                                                         |
+| ----------- | -------------------------- | -------------------------------------------------------------------------------------------- |
+| 1. 認知架構 | `core` (ObservationSource) | 觀察來源 port (Percepts channel);原 `perception/` 套件無 consumer 已移除                     |
+| 2. 系統韌性 | `memory/`                  | Window / Compactor / Checkpoint (M2)                                                         |
+| 3. 工具生態 | `action/`                  | TypedTool / Registry / Sandbox / ApprovalPolicy                                              |
+| 4. 規劃     | `planning/`                | 6 種 ThinkingPattern (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router) |
 
 `core/` 是純狀態機 (state + event + instruction + step),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
 
@@ -101,16 +101,16 @@ effect done            ← end_turn
 
 ## 開發狀態 (Milestones)
 
-| Milestone | 範疇                                                                             | 狀態    |
-| --------- | -------------------------------------------------------------------------------- | ------- |
-| M1        | 核心範式 + sample 骨架 (無 provider / 無 middleware / 無 dedupe)                 | ✅ 完成 |
-| M2        | 系統韌性 + 循環防禦 (memory / checkpoint / WAL / loopguard / retry)              | ✅ 完成 |
-| M3        | 工具生態 + 執行期安全 (schema / sandbox / spotlight / sanitizer / MCP / tracing) | ✅ 完成 |
-| M4        | 架構解耦 + HITL 完整 + 三個 LLM provider (anthropic / openaicompat / google)     | ✅ 完成 |
-| M5        | built-in tools、sample wiring、`app` lifecycle                                | ✅ 完成 |
-| M6        | auth mechanism、9 provider ids、auth CLI                                      | ✅ 完成 |
-| Proxy     | 3×3 pairwise protocol transform、provider profile routing、SSE hardening        | ✅ 完成 |
-| Format    | 四來源 `37` 個 client/provider wire-format entity catalog                       | ✅ 完成 |
+| Milestone | 範疇                                                                                                 | 狀態        |
+| --------- | ---------------------------------------------------------------------------------------------------- | ----------- |
+| M1        | 核心範式 + sample 骨架 (無 provider / 無 middleware / 無 dedupe)                                     | ✅ 完成     |
+| M2        | 系統韌性 + 循環防禦 (memory / checkpoint / WAL / loopguard / retry)                                  | ✅ 完成     |
+| M3        | 工具生態 + 執行期安全 (schema / sandbox / spotlight / sanitizer / MCP / tracing)                     | ✅ 完成     |
+| M4        | 架構解耦 + HITL 完整 + 三個 LLM provider (anthropic / openaicompat / google)                         | ✅ 完成     |
+| M5        | built-in tools、sample wiring、`app` lifecycle                                                       | ✅ 完成     |
+| M6        | auth mechanism、9 provider ids、auth CLI                                                             | ✅ 完成     |
+| Proxy     | 3×3 pairwise protocol transform、provider profile routing、SSE hardening                             | ✅ 完成     |
+| Format    | 四來源 `37` 個 client/provider wire-format entity catalog                                            | ✅ 完成     |
 | Harness   | hooks / permission / session / contextfile / skill / subagent / wire / tui skeleton + steering queue | 🚧 skeleton |
 
 詳細規格見 `docs/specs/`、`proxy/docs/specs/` 與 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md),root milestone 實作完成後會轉為 `docs/specs/YYYY-MM-DD-<feature>.md`:
