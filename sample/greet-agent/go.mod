@@ -2,10 +2,8 @@ module github.com/bizshuk/agentsdk/sample/greet-agent
 
 go 1.26.0
 
-replace github.com/bizshuk/agentsdk => ../../
-
 require (
-	github.com/bizshuk/agentsdk v0.0.0
+	github.com/bizshuk/agentsdk v0.0.1
 	github.com/spf13/cobra v1.10.2
 )
 
