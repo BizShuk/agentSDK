@@ -1,0 +1,107 @@
+#!/bin/bash
+#
+# pre-push: 自動建立並推送 release tag。
+#
+# 版本的單一事實來源是 git tag。每次把新 commit 推上 release branch，就取
+# 目前最高的 v<major>.<minor>.<patch> tag、把 patch +1，打在即將送出的
+# commit 上，並直接推到 remote。不讀也不寫 .claude-plugin/plugin.json。
+#
+# 兩個違反直覺但實測驗證過的設計：
+#
+#   1. tag 由本 hook 自己 push。
+#      git 在呼叫 pre-push 之前就決定好這次要傳哪些 ref，所以 hook 當下
+#      建立的 tag 不會被同一次 push 帶走 —— 即使設了 push.followTags 也
+#      一樣，它會等到「下一次」push 才送出。hook 自行執行
+#      `git push <remote> refs/tags/<tag>` 才會即時同步。
+#
+#   2. 一定要 annotated tag（git tag -a）。
+#      `git push --follow-tags` 只推 annotated tag，lightweight 的會被
+#      靜默忽略。
+#
+# 遞迴防護：hook 自己那次 tag push 會再次觸發本 hook，但 local_ref 是
+# refs/tags/* 而非 refs/heads/*，會在第一個 case 就被跳過。
+#
+# 契約：git 從 stdin 餵 <local_ref> <local_sha> <remote_ref> <remote_sha>，
+#       一行一個 ref；args 是 <remote-name> <remote-url>。
+#       本 hook 永遠 exit 0，不 reject push。
+
+set -uo pipefail
+
+readonly TAG_PREFIX="v"
+readonly TAG_GLOB="v[0-9]*"
+
+# 只有推這個 branch 才打 release tag。feature branch 不該產生 release tag，
+# 尤其這個 tag 會被立刻推上公開 remote。
+readonly RELEASE_BRANCH="master"
+
+note() { echo "pre-push: $1" >&2; }
+
+# next_patch_tag 取「現存最高」的版本 tag，回傳 patch +1 後的名稱。
+#
+# 用最高版本而非 git describe 的「最近可達 tag」，是為了避免在分支情境下
+# 產生一個比既有 tag 還低、或直接撞名的版本號。
+next_patch_tag() {
+	local latest major minor patch
+	latest="$(git tag -l "$TAG_GLOB" | sort -V | tail -1)"
+	[[ -n "$latest" ]] || latest="${TAG_PREFIX}0.0.0"
+
+	if [[ ! "$latest" =~ ^${TAG_PREFIX}([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+		return 1
+	fi
+	major="${BASH_REMATCH[1]}"
+	minor="${BASH_REMATCH[2]}"
+	patch="${BASH_REMATCH[3]}"
+	echo "${TAG_PREFIX}${major}.${minor}.$((patch + 1))"
+}
+
+remote="${1:-origin}"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+	# 只處理 branch push。tag push（含本 hook 自己推的那次）由此跳過，
+	# 這同時就是遞迴防護。
+	case "$local_ref" in
+	refs/heads/*) ;;
+	*) continue ;;
+	esac
+
+	if [[ "${local_ref#refs/heads/}" != "$RELEASE_BRANCH" ]]; then
+		continue
+	fi
+
+	# local 全 0 = 刪除 ref，沒有 commit 可 tag。
+	if [[ "$local_sha" =~ ^0+$ ]]; then
+		continue
+	fi
+
+	# remote 非全 0（既有 branch）時，確認這次真的帶了新 commit；
+	# remote 全 0 代表新 branch，一律視為有內容。
+	if [[ ! "$remote_sha" =~ ^0+$ ]]; then
+		if ! git rev-list "${remote_sha}..${local_sha}" | grep -q .; then
+			continue
+		fi
+	fi
+
+	if ! tag="$(next_patch_tag)"; then
+		note "現有 tag 格式無法解析，跳過 auto-tag"
+		continue
+	fi
+
+	if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+		note "tag ${tag} 已存在，跳過 auto-tag"
+		continue
+	fi
+
+	if ! git tag -a "$tag" -m "release ${tag}" "$local_sha"; then
+		note "建立 tag ${tag} 失敗，跳過"
+		continue
+	fi
+	note "建立 tag ${tag} 於 ${local_sha:0:7}"
+
+	if git push --quiet "$remote" "refs/tags/${tag}"; then
+		note "已推送 ${tag} 至 ${remote}"
+	else
+		note "推送 ${tag} 失敗；tag 留在本地，可稍後手動 git push ${remote} ${tag}"
+	fi
+done
+
+exit 0
