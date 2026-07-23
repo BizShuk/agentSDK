@@ -13,8 +13,8 @@
 //   - agent.Option closures that can fail (returned via agent.New, not MustNew)
 //
 // skeleton-demo is the case where none of that is needed: the persona
-// is the task, the input is stdin, the output is one line on stdout.
-// Three small adjustments to the wizard template make that work:
+// is the task, the input is stdin, the output is the assistant text on
+// stdout. Four small adjustments to the wizard template make that work:
 //
 //  1. stdinAgent embeds *agent.Agent and overrides Bootstrap only, so
 //     the actual main() stays short.
@@ -25,16 +25,26 @@
 //     on the terminal instead of vanishing into the same log file. A
 //     production CLI would keep the default file handler; this is a
 //     demo, so tradeoffs are explicit.
+//  4. NextRound makes it a small REPL: the first stdin line is the
+//     opening prompt, each later line is a follow-up round, and a blank
+//     line or EOF ends the session. This is the app.Interactive seam —
+//     the same method also answers approval pauses, shown here for
+//     completeness even though this config gates nothing.
 //
-// Run:
+// Run (one-shot):
 //
 //	echo "Payment page throws 500 on /checkout" \
 //	  | go run ./sample/skeleton-demo
 //
-//	→ stdout: P1|HTTP 500 on /checkout blocks paid conversions but page is reachable
+// Run (REPL — one line per round, blank line to finish):
+//
+//	printf 'first question\nfollow-up question\n\n' \
+//	  | go run ./sample/skeleton-demo
+//	# or interactively:
+//	go run ./sample/skeleton-demo
 //
 // Missing API key on the path MINIMAX_API_KEY (for the minimax provider)
-// now produces a visible error line instead of silent exit 1:
+// produces a visible error line instead of a silent exit 1:
 //
 //	export MINIMAX_API_KEY=...  # or pass --provider anthropic + ANTHROPIC_API_KEY
 //	go run ./sample/skeleton-demo < ticket.txt
@@ -45,8 +55,9 @@
 package main
 
 import (
+	"bufio"
 	"context"
-	"io"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -59,22 +70,57 @@ import (
 	"github.com/bizshuk/agentsdk/runtime"
 )
 
-// stdinAgent embeds *agent.Agent and overrides Bootstrap only. Every
-// other call delegates, so the closing main() stays close to the
-// wizard template.
+// stdinLines is fed by a single background reader (readStdin) so both
+// Bootstrap (opening prompt) and NextRound (each follow-up) pull lines
+// from one place. A single owning goroutine is deliberate: a round that
+// times out abandons its nextLine call, and one owner means there is
+// never a second Scan racing the first for the same input.
+var stdinLines = make(chan string)
+
+// readStdin owns os.Stdin and streams trimmed lines until EOF. A scan
+// error (rare on stdin) ends the stream the same as EOF — the consumer
+// treats a closed channel as "no more input" either way.
+func readStdin() {
+	sc := bufio.NewScanner(os.Stdin)
+	for sc.Scan() {
+		stdinLines <- sc.Text()
+	}
+	if err := sc.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "stdin:", err)
+	}
+	close(stdinLines)
+}
+
+// nextLine returns the next stdin line. ok is false on EOF or ctx
+// cancellation (a round deadline or SIGINT), so a blocked read never
+// pins the process open.
+func nextLine(ctx context.Context) (line string, ok bool) {
+	select {
+	case <-ctx.Done():
+		return "", false
+	case l, open := <-stdinLines:
+		if !open {
+			return "", false
+		}
+		return strings.TrimSpace(l), true
+	}
+}
+
+// stdinAgent embeds *agent.Agent and adds the two seams a REPL needs:
+// Bootstrap seeds the opening prompt, NextRound feeds follow-ups. Every
+// other call delegates, so main() stays close to the wizard template.
 type stdinAgent struct{ *agent.Agent }
 
-// Bootstrap reads stdin into the opening state's first user message.
-// If the operator forgot to pipe input, the agent runs with the persona
-// only — equivalent to the provider CLI's `provider "ask me anything"`
-// with no follow-up.
+// Bootstrap seeds the opening prompt from the first stdin line. Later
+// lines are delivered round by round through NextRound. An empty first
+// line (immediate EOF) runs with the persona only — the provider CLI's
+// `provider "ask me anything"` with no follow-up.
 func (s stdinAgent) Bootstrap(ctx context.Context, ac *appconfig.AppConfig) (*runtime.Engine, core.State, error) {
 	engine, state, err := s.Agent.Bootstrap(ctx, ac)
 	if err != nil {
 		return engine, state, err
 	}
-	text, _ := io.ReadAll(os.Stdin)
-	if prompt := strings.TrimSpace(string(text)); prompt != "" {
+	if prompt, ok := nextLine(ctx); ok && prompt != "" {
 		state.Messages = append(state.Messages, core.Message{
 			Role:  core.ROLE_USER,
 			Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: prompt}},
@@ -84,7 +130,48 @@ func (s stdinAgent) Bootstrap(ctx context.Context, ac *appconfig.AppConfig) (*ru
 	return engine, state, nil
 }
 
+// NextRound is the app.Interactive seam. A finished round offers one more
+// line of input; a blank line or EOF ends the run. The approval branch is
+// wired for completeness — this config gates nothing, so it stays dark
+// unless you add a tool and tighten autonomy — and shows that the same
+// single method answers both "approve this?" and "what next?".
+func (s stdinAgent) NextRound(ctx context.Context, p app.Pause) (app.Resume, error) {
+	if p.Reason == app.PAUSE_APPROVAL {
+		fmt.Fprintf(os.Stderr, "\n[approval] %s — approve? [y/N] ", pendingLabel(p.State))
+		line, _ := nextLine(ctx)
+		if line == "y" || line == "yes" {
+			return app.Resume{Decision: core.APPROVAL_DECISION_APPROVE, By: "operator"}, nil
+		}
+		return app.Resume{Decision: core.APPROVAL_DECISION_REJECT, By: "operator"}, nil
+	}
+	// PAUSE_ROUND_END: offer a follow-up. Blank / EOF → empty Input → stop.
+	fmt.Fprint(os.Stderr, "\n> ")
+	line, ok := nextLine(ctx)
+	if !ok {
+		return app.Resume{}, nil
+	}
+	return app.Resume{Input: line}, nil
+}
+
+// pendingLabel renders the open approval for the operator prompt.
+func pendingLabel(s core.State) string {
+	n := len(s.PendingApprovals)
+	if n == 0 {
+		return "(pending)"
+	}
+	pa := s.PendingApprovals[n-1]
+	if pa.ToolCall != nil {
+		return "tool " + pa.ToolCall.Name + " (" + pa.Reason + ")"
+	}
+	return pa.Reason
+}
+
 func main() {
+	// The opening prompt and every follow-up come from stdin; start the
+	// reader before the lifecycle so the first nextLine in Bootstrap has a
+	// source.
+	go readStdin()
+
 	// Mostly the wizard --print-go output for -t basic, with three edits:
 	//
 	//   - Persona: ""        (no system instruction — the model uses its
@@ -107,21 +194,22 @@ func main() {
 	}
 
 	// The seam the wizard template does NOT cover: who renders the reply.
-	// Without WithSink the engine's emit is nil and the verdict flows
-	// only to the file-backed slog handler. WithSink is the literal
-	// three-line wrapper that turns this into a useful CLI.
+	// Without WithSink the engine's emit is nil and the verdict flows only
+	// to the file-backed slog handler. The trailing newline keeps one
+	// round's answer from running into the next round's prompt.
 	sink := agent.SinkFunc(func(ev core.StreamEvent) {
 		if ev.Kind == core.STREAM_MESSAGE && ev.Text != "" {
-			os.Stdout.WriteString(ev.Text)
+			os.Stdout.WriteString(ev.Text + "\n")
 		}
 	})
 
-	// This is the line the tutorial and the wizard both point at.
-	// The first Option drives the engine; the second Option drives the
-	// lifecycle logger. Both are necessary for a demo to be observable
-	// in 2026 default terminals (which lack a configured slog handler).
+	// This is the line the tutorial and the wizard both point at. The
+	// first Option drives the engine; WithLogToStdout drives the lifecycle
+	// logger; WithRoundTimeout bounds how long one follow-up read may block
+	// before the REPL gives up on an idle operator.
 	app.Main(
 		stdinAgent{agent.MustNew(cfg, agent.WithSink(sink))},
 		app.WithLogToStdout(),
+		app.WithRoundTimeout(2*time.Minute),
 	)
 }

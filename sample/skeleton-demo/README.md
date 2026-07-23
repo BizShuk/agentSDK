@@ -8,7 +8,7 @@ func main() {
 }
 ```
 
-`main.go` is 108 lines: 12 for `stdinAgent` (seed opening state from stdin), 5 for the `SinkFunc` (print to stdout), and the rest docstring + literal `wizard --print-go` config.
+`main.go` seeds the opening prompt from stdin (`stdinAgent.Bootstrap`), prints assistant text to stdout (`SinkFunc`), and turns the run into a small REPL through the `app.Interactive` seam (`stdinAgent.NextRound`) — the rest is docstring + literal `wizard --print-go` config.
 
 Compare to [sample/code-agent](../code-agent), which uses cobra + `compose()` + four dispatch modes.
 That structure is what you reach for when an application needs:
@@ -22,20 +22,41 @@ That structure is what you reach for when an application needs:
 
 ## Run
 
+One-shot — a single piped line runs one round and exits:
+
 ```bash
 export MINIMAX_API_KEY=...
 echo "Payment page throws 500 on /checkout" | go run ./sample/skeleton-demo
 # → stdout:  P0|<reason>500 errors on the payment page block paid conversions.
-# → stderr:  {"level":"INFO","msg":"run_done",...,"turns":1,"status":"completed"}
+# → stderr:  {"level":"INFO","msg":"run_done",...,"turns":1,"rounds":1,"status":"completed"}
 ```
 
-Without an API key the preflight fails visibly (the `app.WithLogToStdout()` option
-swaps the default file-backed slog handler for a stdout handler) — a production CLI
-would keep the file handler; this is a demo, so observability beats hush.
+REPL — the first line is the opening prompt, each later line is a follow-up
+round, and a blank line (or EOF) ends the session. This is the
+`app.Interactive` seam: after a run completes, `app.Run` hands the finished
+state back to `NextRound`, which reads one more line and feeds it as the next
+round's input.
 
 ```bash
-go run ./sample/skeleton-demo </dev/null
-# {"level":"ERROR","msg":"preflight failed","err":"...missing MINIMAX_API_KEY..."}
+printf 'ping\nreply with one word: sky color\n\n' | go run ./sample/skeleton-demo
+# → stdout:  Pong! ... \n Blue
+# → stderr:  ...,"turns":2,"rounds":2,"status":"completed"
+# interactively, just: go run ./sample/skeleton-demo   (Ctrl-D to finish)
+```
+
+The same `NextRound` method also answers approval pauses
+(`PAUSE_APPROVAL`) — this config gates nothing, so that branch stays dark
+until you register a tool and tighten `Autonomy`.
+
+Without an API key the failure surfaces visibly on the first model call —
+this demo wires no `Preflighter`, so the error appears as a `run_failed` log
+line rather than a preflight abort. `app.WithLogToStdout()` swaps the default
+file-backed slog handler for a stdout one so the error is not buried in
+`~/.config/skeleton-demo/logs/`; a production CLI would keep the file handler.
+
+```bash
+echo ping | go run ./sample/skeleton-demo
+# {"level":"ERROR","msg":"run_failed","err":"...model generate: ...MINIMAX_API_KEY..."}
 # exit 1
 ```
 
@@ -53,13 +74,14 @@ go run . w -y --tier basic -o - --print-go
 | | skeleton-demo | code-agent |
 | --- | --- | --- |
 | flag surface | none | 11 flags |
-| modes | 1 (stdin → verdict → stdout) | 4 (sessions / -p / --json / interactive tui) |
+| modes | 1 (stdin REPL → stdout) | 4 (sessions / -p / --json / interactive tui) |
 | `agent.New` vs `MustNew` | MustNew | New (opts can fail) |
 | `*Parts` exposure | none | Sessions / Skills / Engine / Cwd |
 | `Engine.Sink` swap | WithSink(stdout) constant | per-mode (channel / wire / progress) |
 | `agent.Option` blocks | WithSink | WithHooks(blockDestructiveBash()) |
-| `app.Option` blocks | WithLogToStdout | none |
-| lines of Go (single binary) | ~108 | ~333 across 4 files |
+| `app.Option` blocks | WithLogToStdout, WithRoundTimeout | none |
+| `app.Interactive` | NextRound (stdin REPL) | tui steering loop |
+| lines of Go (single binary) | ~200 | ~333 across 4 files |
 
 ## Files
 
