@@ -30,6 +30,13 @@
 | `DecisionRule`   | (—)            | 純函式規劃 FSM，介面 `Kind() ReasoningStyle` + `NextStep(state)`；本 repo 六個內建在 `planning/`        | `core/thinking.go` |
 | `ReasoningStyle` | (—)            | 策略列舉常數（`REASON_REACT` 等），定義在 `core` 而非 `planning`，讓宣告層能不 import `planning` 而枚舉 | `core/thinking.go` |
 | `EventSink`      | (—)            | 呈現流 port；`Output.Format=json` 自動綁 `wire.NewSink`，`text`/`tui` 由前端自己接                      | `core/stream.go`   |
+| `round`          | round          | 一次 `CALL_MODEL` dispatch 及其引發的全部 tool call；使用者面的計量單位，由 `Budget.MaxRounds` 上限。`ReAct` 一個 round 約燒 3 個 `turn` | `runtime/loop.go`、`core/state.go::Budget` |
+| `turn`           | turn           | 一次 `Decide` 迭代（`State.Turn`）；內部 runaway guard，由 `Budget.MaxTurns` 上限。不等於 request/response 輪次 | `runtime/loop.go`、`core/state.go::Budget` |
+| `tool call batch`| tool call batch| 單一 `ModelResult.ToolCalls` 切片，一個 round 內的全部 operation；由 `Budget.MaxToolCalls` 限批量大小 | `core/input.go::ModelResult` |
+| `settlement`     | settlement     | batch 內每個 call 恰好對應一個 `tool_result` message，無論它執行、被 hook 擋、被 approval 暫停或被 budget skip；違反則下次 `CALL_MODEL` transcript 非法 | `runtime/harness.go::settleSkipped` |
+| `continue-gate`  | continue-gate  | `ToolCall == nil` 的 `PendingApproval`：整批工具因 `MaxToolCalls` 被 skip 後暫停，問的是「resume 整個 run」而非「跑這一個 call」 | `runtime/loop.go`、`runtime/loop.go::consumeApprovedPendingCall` |
+| `pause reason`   | pause reason   | run 停下但非終局的原因：`PAUSE_APPROVAL`（含 continue-gate）/ `PAUSE_ROUND_END`；`app.Run` 據此問 `Interactive.NextRound` | `app/agent.go::PauseReason` |
+| `Interactive`    | (—)            | 單一互動縫 `NextRound(ctx, Pause) (Resume, error)`：approval decision 與 follow-up input 同一個方法；不實作 = 退回外部 verb 語意 | `app/agent.go::Interactive` |
 
 ## 縮寫 (Abbreviations)
 

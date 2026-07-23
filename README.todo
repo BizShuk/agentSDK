@@ -26,6 +26,22 @@
 - [ ] `wizard` 尚無 `--verify`（選了才在最後跑一次 `agent.Once` 做 smoke test）
 - [ ] `agent` 尚無 settings 檔階層載入（`~/.config/<app>/agent.yaml` → 專案 `agent.yaml` 的合併），與 hook/permission 的 settings 層一起做
 
+## Round / Batch / Interactive（2026-07-24 落地）
+
+計畫見 [`plans/2026-07-24-round-batch-and-interactive-seam.md`](plans/2026-07-24-round-batch-and-interactive-seam.md)（收斂並取代兩份 approval 草案）。
+
+- [x] `Task 0` `core.Budget` 加 `MaxRounds`/`UsedRounds`/`MaxToolCalls`、`Exceeded()` 加 `round_budget`；`spec.Limits` 三欄位 + tier 預設 + validate + `build.go` 映射
+- [x] `Task 1` batch settlement（修兩個 live bug）：`ThinkThenAct` dispatch phase 一次發 `N` 個 `CALL_TOOL`、`runtime` 播種整批並 `settleSkipped`/`settleUnrun`；`planning.decodeCalls` 修 JSON round-trip 後 pending call 消失
+- [x] `Task 2` `MaxToolCalls` 超限`整批 skip + settle + 暫停 continue-gate`（approve=resume 重讀 / reject=完成）；`MaxRounds` 經 budget middleware 生效
+- [x] `Task 3` 三介面草案收斂為單一 `app.Interactive`（`NextRound`）+ `WithRoundTimeout`；`advance` 只走 `SubmitHumanDecision`（不 double-drive）
+- [x] `Task 4` `sample/skeleton-demo` 實作 `Interactive` 為 stdin REPL（單一背景 reader 餵 channel；live 驗證 `rounds:2`）
+- [x] `Task 5` `docs/terminology.md`（8 詞條）/ `CLAUDE.md`（app/config 列 + 三條核心決策）/ 本檔同步
+
+待補：
+
+- [ ] `MaxToolCalls` 目前是「人工減速帶」（超限暫停等 resume）；若某 agent 要「超限即硬失敗」需另加 `spec` 開關
+- [ ] continue-gate 的 resume 目前重讀重新規劃；「重發原批次」語意（budget 當一次性放行）尚未實作，需先解決 resume 時 bypass budget check 的迴圈風險
+
 ## Provider CLI (root cobra subcommand, 2026-07-20)
 
 - [x] `cmd/provider.go`：`NewProviderCommand()` — root cobra `provider` 子指令（旗標 `--provider`/`--model`/`--api-key`/`--base-url`/`--system`/`--max-tokens`/`--stream`/`--json`/`--list-models`/`--list-providers`）；prompt 接 positional args
@@ -43,7 +59,7 @@
 - [ ] `runtime`：follow-up phase reset 目前只認 `think_then_act.phase`，其他五個 rule 需通用 reset 慣例
 - [ ] `wire`：approval_request/human_decision 與 Engine HITL 的實際串接（目前只有 envelope 定義）
 - [ ] `session`：in-place tree branching（pi /tree 式單檔多分支）與 rewind
-- [ ] `runtime`：「round-trip-without-execution」機制 —— 拿到 model 完整 assistant 回應（含 `tool_calls`）但不真的執行；目前 short-circuit 只 cover「model 沒 tool_calls → COMPLETED」，有 tool_calls 就會 dispatch。三條可行方向：(a) 新增 `INSTRUCTION_RETURN_TOOL_DECISION` + `RUN_STATUS_AWAITING_DECISION`，(b) `Engine.DryRun()` 模式在第一個 CALL_MODEL 後強制停下並把 `ModelResult.ToolCalls` 暴露給 caller，(c) 寫一個 `RejectTools` rule 在「看到 tool_calls 時改 emit RETURN」。動工前先開 plan 並對齊 wire format（instruction kind 是否進 `core.Instruction` 的穩定區）。
+- [ ] `runtime`：「round-trip-without-execution」機制 —— 拿到 model 完整 assistant 回應（含 `tool_calls`）但不真的執行；目前 short-circuit 只 cover「model 沒 tool_calls → COMPLETED」，有 tool_calls 就會 dispatch。三條可行方向：(a) 新增 `INSTRUCTION_RETURN_TOOL_DECISION` + `RUN_STATUS_AWAITING_DECISION`，(b) `Engine.DryRun()` 模式在第一個 CALL_MODEL 後強制停下並把 `ModelResult.ToolCalls` 暴露給 caller，(c) 寫一個 `RejectTools` rule 在「看到 tool_calls 時改 emit RETURN」。動工前先開 plan 並對齊 wire format（instruction kind 是否進 `core.Instruction` 的穩定區）。部分建材已就緒（2026-07-24）：`MaxToolCalls` 的 continue-gate 已示範「整批不執行 → 暫停 → 人工決定 resume/stop」，可作方向 (b) 的暫停機制參考。
 - [x] `subagent`：RunFunc 的 engine factory 標準組裝 —— 2026-07-22 由 `agent.subagentRunner` 承擔（scoped ephemeral engine、無 store/WAL、`Def.Tools` allowlist 生效，空則沿用 parent 的工具集）
 - [ ] `contextfile`：auto-memory 寫回（MEMORY.md 索引式）
 - [ ] streaming delta：provider 原生 SSE 接進 `core.StreamEvent`（目前只有 folded events；`STREAM_MESSAGE_DELTA` 保留位）

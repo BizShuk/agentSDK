@@ -7,7 +7,7 @@
 
 `Goal`：把 `round` / `tool call batch` / `next-round input` 三件事收斂成`一條不變式`加`一個介面`，並修掉沿路發現的兩個 live bug。
 
-`狀態 2026-07-24`：Task `0`／`1`／`2`／`3` 已實作完成並全綠（root module + `8` 個 sample module）。Task `4`（skeleton-demo 落地）／`5`（docs）未開始。實作差異已回寫對應段落。
+`狀態 2026-07-24`：`全部 Task（0–5）已完成`並全綠（root module + `8` 個 sample module，skeleton-demo live 驗證 `rounds:2`）。已切 branch `feat/round-batch-interactive-seam`，skeleton 與本工作各自獨立 commit。實作差異已回寫對應段落。
 
 `Scope`：`core`、`planning`、`runtime`、`app`、`agent/spec`、`sample/skeleton-demo`、docs。
 
@@ -207,7 +207,7 @@ cd /Users/shuk/projects/ai/agentSDK
 go build ./... && go test ./core/... ./agent/... -count=1
 ```
 
-- [ ] `Step 8` commit：`feat(core,spec): add MaxRounds and MaxToolCalls budget fields`（`未執行`——master 上另有大量既有 staged 變更，待確認後再切 branch 提交）
+- [x] `Step 8` commit：Task 0-3 合併為單一 commit `f453073`（branch `feat/round-batch-interactive-seam`），與 pre-staged skeleton（`6cb327c`）分開
 
 ---
 
@@ -410,7 +410,7 @@ func TestDispatchSurvivesJSONRoundTrip(t *testing.T) {
 }
 ```
 
-- [ ] `Step 9` commit：`fix(runtime,planning): dispatch and settle every tool call in a batch`（`未執行`，同上）
+- [x] `Step 9` commit：併入 `f453073`（見 Task 0 Step 8）
 
 ---
 
@@ -472,7 +472,7 @@ func TestToolCallBudgetSkipsExcessAndSettles(t *testing.T) { ... }
 func TestRoundBudgetTripsOnCallModel(t *testing.T) { ... }
 ```
 
-- [ ] `Step 5` commit：`feat(runtime): enforce MaxToolCalls per round and MaxRounds per run`（`未執行`，待統一切 branch）
+- [x] `Step 5` commit：併入 `f453073`
 
 ---
 
@@ -738,7 +738,7 @@ go test ./app/... -count=1 -v -run 'Interactive|Pause'
 go test ./... -count=1 -timeout=120s
 ```
 
-- [ ] `Step 7` commit：`feat(app): consolidate approval and follow-up into one Interactive seam`（`未執行`，待統一切 branch）
+- [x] `Step 7` commit：併入 `f453073`
 
 ---
 
@@ -746,7 +746,7 @@ go test ./... -count=1 -timeout=120s
 
 選 `sample/skeleton-demo` 而非 `sample/logdoctor`：前者已經是 `app.Main(agent.MustNew(cfg))` 形狀，`stdinAgent` 只覆寫 `Bootstrap`，加一個 `NextRound` 就是完整可跑的示範；後者要動 `cmd/` 八個檔案的 cobra 分派，與本 plan 的縫無關。
 
-- [ ] `Step 1` `sample/skeleton-demo/main.go` 給 `stdinAgent` 加方法
+- [x] `Step 1` `sample/skeleton-demo/main.go` 給 `stdinAgent` 加方法
 
 ```go
 // NextRound makes the demo interactive: an approval pause prints the
@@ -815,11 +815,11 @@ func readLine(ctx context.Context) (string, error) {
 
 注意：`Bootstrap` 已經 `io.ReadAll(os.Stdin)` 把 stdin 吃光，所以互動模式需要在 `Bootstrap` 改成只在 stdin 是 pipe 時整份讀取（`os.Stdin.Stat()` 檢查 `ModeCharDevice`），tty 時留給 `readLine`。這一步要一併做，否則 `NextRound` 永遠讀到 EOF。
 
-- [ ] `Step 2` `app.Main` 呼叫加 `app.WithRoundTimeout(2*time.Minute)`
+- [x] `Step 2` `app.Main` 呼叫加 `app.WithRoundTimeout(2*time.Minute)`
 
-- [ ] `Step 3` 更新 `sample/skeleton-demo/README.md` 的對比表，加一列說明 `Interactive`
+- [x] `Step 3` 更新 `sample/skeleton-demo/README.md` 的對比表，加一列說明 `Interactive`
 
-- [ ] `Step 4` 驗證
+- [x] `Step 4` 驗證
 
 ```bash
 cd /Users/shuk/projects/ai/agentSDK/sample/skeleton-demo
@@ -830,24 +830,24 @@ echo "Payment page throws 500" | go run .
 go run .
 ```
 
-- [ ] `Step 5` commit：`feat(skeleton-demo): implement Interactive for approval and follow-up input`
+- [x] `Step 5` commit：done（`feat(skeleton-demo): implement app.Interactive as a stdin REPL`）
 
 ---
 
 ## 12. Task 5 — 文件同步
 
-- [ ] `Step 1` `docs/terminology.md` 的 `Core / Runtime` 表加六列：`round`、`turn`、`tool call batch`、`settlement`、`pause reason`、`Interactive`（定義照 §1 與 §3，出處填實際檔案路徑）
+- [x] `Step 1` `docs/terminology.md` 的 `Core / Runtime` 表加六列：`round`、`turn`、`tool call batch`、`settlement`、`pause reason`、`Interactive`（定義照 §1 與 §3，出處填實際檔案路徑）
 
-- [ ] `Step 2` `CLAUDE.md`
+- [x] `Step 2` `CLAUDE.md`
   - 模組對應表 `app/config` 列補 `Interactive`（mid-run HITL + follow-up input）、`WithRoundTimeout`
   - 核心架構決策加一條：batch settlement 不變式（§2 那句）
   - 「目前明確未完成或刻意保留」移除已解決項
 
-- [ ] `Step 3` `README.todo` 把 approval / tool budget 相關項目移進 `## Archive`
+- [x] `Step 3` `README.todo` 把 approval / tool budget 相關項目移進 `## Archive`
 
-- [ ] `Step 4` 兩份原稿加 superseded banner 指向本檔
+- [x] `Step 4` 兩份原稿加 superseded banner 指向本檔
 
-- [ ] `Step 5` commit：`docs: settle round/batch terminology and document the Interactive seam`
+- [x] `Step 5` commit：docs 合併進本輪 docs commit
 
 ---
 
