@@ -8,6 +8,7 @@ use (
 	./sample/logdoctor
 	./sample/memory-demo
 	./sample/middleware-demo
+	./sample/skeleton-demo
 	./sample/strategy-demo
 	./tools/dependency-analyzer
 )

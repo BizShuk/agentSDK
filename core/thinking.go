@@ -13,13 +13,13 @@ const (
 	// REASON_DO_THEN_REVIEW — execute, then critique; iterate.
 	// Welleck et al. 2023, "Self-Refine: Iterative Refinement with Self-Feedback".
 	REASON_DO_THEN_REVIEW ReasoningStyle = "do_then_review"
-	// REASON_ONE_SHOT — one-shot chain of thought. STUB.
+	// REASON_ONE_SHOT — one-shot chain of thought: reason once, then done.
 	// Wei et al. 2022, "Chain of Thought Prompting".
 	REASON_ONE_SHOT ReasoningStyle = "one_shot"
-	// REASON_LEARN_FROM_FAILURE — remember failures, retry with reflection. STUB.
+	// REASON_LEARN_FROM_FAILURE — remember failures, retry with reflection.
 	// Shinn et al. 2023, "Reflexion: Language Agents with Verbal Reinforcement Learning".
 	REASON_LEARN_FROM_FAILURE ReasoningStyle = "learn_from_failure"
-	// REASON_PICK_AGENT — multi-agent router. STUB.
+	// REASON_PICK_AGENT — multi-agent router: pick a specialist, delegate.
 	REASON_PICK_AGENT ReasoningStyle = "choose_agent"
 )
 

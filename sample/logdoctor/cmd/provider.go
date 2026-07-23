@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/bizshuk/agentsdk/core"
@@ -43,7 +42,7 @@ func selectProvider(name providerName) (core.Provider, error) {
 		}
 		return p, nil
 	case providerGoogle:
-		p, err := googleprovider.New(context.Background())
+		p, err := googleprovider.New()
 		if err != nil {
 			return nil, fmt.Errorf("google provider: %w", err)
 		}

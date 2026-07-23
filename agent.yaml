@@ -1,0 +1,16 @@
+limits:
+    autonomy: L2
+    max_turns: 20
+memory:
+    compaction: none
+    store: file
+middleware:
+    preset: default
+model:
+    provider: minimax
+name: my-agent
+reasoning:
+    enable:
+        - think_then_act
+    style: think_then_act
+tier: basic

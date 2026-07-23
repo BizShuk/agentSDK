@@ -9,16 +9,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
-	anthropicprovider "github.com/bizshuk/agentsdk/provider/anthropic"
-	googleprovider "github.com/bizshuk/agentsdk/provider/google"
-	grokprovider "github.com/bizshuk/agentsdk/provider/grok"
-	minimaxprovider "github.com/bizshuk/agentsdk/provider/minimax"
-	ollamaprovider "github.com/bizshuk/agentsdk/provider/ollama"
+	"github.com/bizshuk/agentsdk/provider/registry"
 	gosdkconfig "github.com/bizshuk/gosdk/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -83,22 +78,25 @@ Examples:
 			}
 
 			if listProviders, _ := cmd.Flags().GetBool("list-providers"); listProviders {
-				fmt.Fprintln(out, strings.Join(registeredProviders(), ", "))
+				fmt.Fprintln(out, strings.Join(registry.Names(), ", "))
 				return nil
 			}
 
-			factory, label, err := resolveProvider(providerName)
-			if err != nil {
-				return err
+			entry, ok := registry.Lookup(providerName)
+			if !ok {
+				return fmt.Errorf("unknown provider %q (registered: %s)",
+					providerName, strings.Join(registry.Names(), ", "))
 			}
+			label := entry.Name
 
-			prov, err := factory(factoryOptions{
-				Model:   model,
-				APIKey:  apiKey,
-				BaseURL: baseURL,
+			prov, err := registry.New(providerName, registry.Options{
+				Model:     model,
+				APIKey:    apiKey,
+				BaseURL:   baseURL,
+				LookupEnv: envLookup,
 			})
 			if err != nil {
-				return fmt.Errorf("%s provider: %w", label, err)
+				return err
 			}
 
 			if listModels {
@@ -157,19 +155,9 @@ Examples:
 // provider registry
 // ---------------------------------------------------------------------------
 
-// factoryOptions are the resolved credential / endpoint overrides from
-// cobra flags. Empty fields let the adapter apply its own env fallback.
-type factoryOptions struct {
-	Model   string
-	APIKey  string
-	BaseURL string
-}
-
-// factory returns a core.Provider already wired with the requested
-// credential and model. Each adapter reads its own env when the
-// corresponding field is empty (e.g. minimax reads MINIMAX_API_KEY,
-// anthropic reads ANTHROPIC_API_KEY).
-type factory func(o factoryOptions) (core.Provider, error)
+// The name → adapter mapping lives in provider/registry, shared with the
+// agent composition layer so a config file and this CLI cannot disagree
+// about which providers exist or how their credentials resolve.
 
 // ---------------------------------------------------------------------------
 // gosdk config wiring
@@ -197,138 +185,9 @@ func bootGosdkConfig() error {
 // that to the adapter which then applies its own default.
 //
 // Viper normalizes config-file keys to lowercase, so we look up the
-// lower-cased form while still using uppercase env-var names in BindEnv
-// (those ARE the literal env-var names, so they must stay upper-case).
+// lower-cased form while still using uppercase env-var names in the
+// registry (those ARE the literal env-var names, so they stay upper-case).
 func envLookup(key string) string { return viper.GetString(strings.ToLower(key)) }
-
-// firstNonEmpty returns the first non-empty string in vals, or "" if all
-// are empty. Used by anthropic to express its OAuth > API-key precedence.
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-// resolveCreds hydrates the empty fields of factoryOptions from envLookup.
-// Empty keys are skipped (anthropic has no BaseURLEnvVar; ollama API key
-// is optional and frequently absent).
-func (o factoryOptions) resolveCreds(apiKeyEnv, baseURLEnv string) factoryOptions {
-	if o.APIKey == "" && apiKeyEnv != "" {
-		o.APIKey = envLookup(apiKeyEnv)
-	}
-	if o.BaseURL == "" && baseURLEnv != "" {
-		o.BaseURL = envLookup(baseURLEnv)
-	}
-	return o
-}
-
-// registry maps the --provider flag value to its adapter. Names are
-// case-insensitive at the boundary (see resolveProvider).
-var registry = map[string]factory{
-	"minimax": func(o factoryOptions) (core.Provider, error) {
-		o = o.resolveCreds("MINIMAX_API_KEY", "MINIMAX_BASE_URL")
-		opts := []minimaxprovider.Option{}
-		if o.Model != "" {
-			opts = append(opts, minimaxprovider.WithModel(o.Model))
-		}
-		if o.APIKey != "" {
-			opts = append(opts, minimaxprovider.WithAPIKey(o.APIKey))
-		}
-		if o.BaseURL != "" {
-			opts = append(opts, minimaxprovider.WithBaseURL(o.BaseURL))
-		}
-		return minimaxprovider.New(opts...)
-	},
-	"anthropic": func(o factoryOptions) (core.Provider, error) {
-		// Anthropic has no BaseURLEnvVar (only --base-url flag), and
-		// prefers ANTHROPIC_OAUTH_TOKEN over ANTHROPIC_API_KEY — both
-		// resolved through envLookup so .env participates.
-		if o.APIKey == "" {
-			o.APIKey = firstNonEmpty(
-				envLookup("ANTHROPIC_OAUTH_TOKEN"),
-				envLookup("ANTHROPIC_API_KEY"),
-			)
-		}
-		opts := []anthropicprovider.Option{}
-		if o.Model != "" {
-			opts = append(opts, anthropicprovider.WithModel(o.Model))
-		}
-		if o.APIKey != "" {
-			opts = append(opts, anthropicprovider.WithAPIKey(o.APIKey))
-		}
-		if o.BaseURL != "" {
-			opts = append(opts, anthropicprovider.WithBaseURL(o.BaseURL))
-		}
-		return anthropicprovider.New(opts...)
-	},
-	"google": func(o factoryOptions) (core.Provider, error) {
-		o = o.resolveCreds("GOOGLE_API_KEY", "GOOGLE_BASE_URL")
-		opts := []googleprovider.Option{}
-		if o.Model != "" {
-			opts = append(opts, googleprovider.WithModel(o.Model))
-		}
-		if o.APIKey != "" {
-			opts = append(opts, googleprovider.WithAPIKey(o.APIKey))
-		}
-		if o.BaseURL != "" {
-			opts = append(opts, googleprovider.WithBaseURL(o.BaseURL))
-		}
-		return googleprovider.New(opts...)
-	},
-	"grok": func(o factoryOptions) (core.Provider, error) {
-		o = o.resolveCreds("XAI_API_KEY", "XAI_BASE_URL")
-		opts := []grokprovider.Option{}
-		if o.Model != "" {
-			opts = append(opts, grokprovider.WithModel(o.Model))
-		}
-		if o.APIKey != "" {
-			opts = append(opts, grokprovider.WithAPIKey(o.APIKey))
-		}
-		if o.BaseURL != "" {
-			opts = append(opts, grokprovider.WithBaseURL(o.BaseURL))
-		}
-		return grokprovider.New(opts...)
-	},
-	"ollama": func(o factoryOptions) (core.Provider, error) {
-		o = o.resolveCreds("OPENAI_API_KEY", "OPENAI_BASE_URL")
-		opts := []ollamaprovider.Option{}
-		if o.Model != "" {
-			opts = append(opts, ollamaprovider.WithModel(o.Model))
-		}
-		if o.APIKey != "" {
-			opts = append(opts, ollamaprovider.WithAPIKey(o.APIKey))
-		}
-		if o.BaseURL != "" {
-			opts = append(opts, ollamaprovider.WithBaseURL(o.BaseURL))
-		}
-		return ollamaprovider.New(opts...)
-	},
-}
-
-func registeredProviders() []string {
-	out := make([]string, 0, len(registry))
-	for k := range registry {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func resolveProvider(name string) (factory, string, error) {
-	key := strings.ToLower(strings.TrimSpace(name))
-	if key == "" {
-		key = "minimax"
-	}
-	f, ok := registry[key]
-	if !ok {
-		return nil, "", fmt.Errorf("unknown provider %q (registered: %s)",
-			name, strings.Join(registeredProviders(), ", "))
-	}
-	return f, key, nil
-}
 
 // effectiveModel returns the model the provider was built with. Falls back
 // to its ID when the adapter doesn't expose a separate accessor.

@@ -63,7 +63,7 @@ func (c chanSink) OnStreamEvent(ev core.StreamEvent) { c.ch <- ev }
 // runInteractive drives the REPL until /quit, EOF, or ctx cancel.
 func runInteractive(ctx context.Context, parts *agentParts, state core.State) error {
 	events := make(chan core.StreamEvent, 64)
-	parts.engine.Sink = chanSink{ch: events}
+	parts.Engine.Sink = chanSink{ch: events}
 
 	u := &ui{
 		renderer: tui.NewRenderer(tui.NewProcessTerminal()),
@@ -137,7 +137,7 @@ func handleLine(parts *agentParts, u *ui, state core.State, line string, done ch
 		return false, state
 	}
 	if u.running {
-		parts.engine.Steer(line)
+		parts.Engine.Steer(line)
 		u.append("↳ (steer) " + line)
 		return false, state
 	}
@@ -150,7 +150,7 @@ func handleLine(parts *agentParts, u *ui, state core.State, line string, done ch
 			u.append(helpLines(parts)...)
 			return false, state
 		case "sessions":
-			metas, err := parts.sessions.List(parts.cwd)
+			metas, err := parts.Sessions.List(parts.Cwd)
 			if err != nil {
 				u.append("✗ " + err.Error())
 				return false, state
@@ -161,7 +161,7 @@ func handleLine(parts *agentParts, u *ui, state core.State, line string, done ch
 			u.append("")
 			return false, state
 		default:
-			expanded, err := parts.skills.ExpandCommand(name, strings.TrimSpace(rest))
+			expanded, err := parts.Skills.ExpandCommand(name, strings.TrimSpace(rest))
 			if err != nil {
 				u.append("✗ 未知指令 /" + name + "（/help 看清單）")
 				return false, state
@@ -179,7 +179,7 @@ func startRun(parts *agentParts, u *ui, state core.State, prompt, display string
 	u.hint = HINT_RUNNING
 	state.Messages = append(state.Messages, userMessage(prompt))
 	go func(st core.State) {
-		final, err := parts.engine.Run(context.Background(), st)
+		final, err := parts.Engine.Run(context.Background(), st)
 		done <- runResult{state: final, err: err}
 	}(state)
 	return state
@@ -227,10 +227,10 @@ func helpLines(parts *agentParts) []string {
 		"/sessions      列出此目錄的 sessions",
 		"/quit          離開",
 	}
-	for _, c := range parts.skills.Commands() {
+	for _, c := range parts.Skills.Commands() {
 		out = append(out, "/"+c.Name+"  （slash command）")
 	}
-	for _, s := range parts.skills.Skills() {
+	for _, s := range parts.Skills.Skills() {
 		out = append(out, "skill: "+s.Name+" — "+s.Description)
 	}
 	return append(out, "")

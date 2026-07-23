@@ -111,13 +111,13 @@ func NewRoot() *cobra.Command {
 func runOnce(ctx context.Context, out io.Writer, parts *agentParts, state core.State, task string, jsonMode bool) error {
 	enc := wire.NewEncoder(out)
 	if jsonMode {
-		parts.engine.Sink = wire.NewSink(out)
+		parts.Engine.Sink = wire.NewSink(out)
 	} else {
-		parts.engine.Sink = progressSink{w: os.Stderr}
+		parts.Engine.Sink = progressSink{w: os.Stderr}
 	}
 
 	state.Messages = append(state.Messages, userMessage(task))
-	final, err := parts.engine.Run(ctx, state)
+	final, err := parts.Engine.Run(ctx, state)
 	if err != nil {
 		if jsonMode {
 			_ = enc.Encode(wire.Envelope{Type: wire.TYPE_ERROR, Error: &wire.ErrorPayload{Message: err.Error()}, Ts: time.Now().UTC()})
@@ -147,7 +147,7 @@ func (p progressSink) OnStreamEvent(ev core.StreamEvent) {
 }
 
 func printSessions(out io.Writer, parts *agentParts) error {
-	metas, err := parts.sessions.List(parts.cwd)
+	metas, err := parts.Sessions.List(parts.Cwd)
 	if err != nil {
 		return err
 	}

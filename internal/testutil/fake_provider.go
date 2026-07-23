@@ -22,6 +22,7 @@ type ScriptedProvider struct {
 	queue   []core.ModelResult
 	calls   int
 	streams int
+	lastReq core.ModelRequest
 	// OnRequest is an optional side-effect hook fired before returning
 	// the head of the queue. Useful for capturing the request that
 	// triggered a particular scripted response.
@@ -73,6 +74,7 @@ func (s *ScriptedProvider) AuthSchemes() []string { return []string{"api_key"} }
 // Generate pops the next scripted result. Errors if the queue is empty.
 func (s *ScriptedProvider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
 	s.mu.Lock()
+	s.lastReq = req
 	if s.OnRequest != nil {
 		s.OnRequest(req)
 	}
@@ -90,6 +92,7 @@ func (s *ScriptedProvider) Generate(ctx context.Context, req core.ModelRequest) 
 // Stream emits the head of the queue as a single chunked result.
 func (s *ScriptedProvider) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
 	s.mu.Lock()
+	s.lastReq = req
 	if len(s.queue) == 0 {
 		s.mu.Unlock()
 		return nil, ErrQueueEmpty
@@ -109,6 +112,15 @@ func (s *ScriptedProvider) Stream(ctx context.Context, req core.ModelRequest) (<
 // assert on token usage.
 func (s *ScriptedProvider) CountTokens(ctx context.Context, msgs []core.Message) (int, error) {
 	return len(msgs), nil
+}
+
+// LastRequest returns the most recent request the provider received —
+// the seam for asserting what a composition layer actually sent (system
+// message ordering, tool specs, model id).
+func (s *ScriptedProvider) LastRequest() core.ModelRequest {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastReq
 }
 
 // RequestCount returns how many times Generate was called.

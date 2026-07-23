@@ -435,3 +435,7 @@ plans/draft.md
 
 .md-tree-highlight/
 logdoctor
+
+# build artifacts
+/skeleton-demo
+sample/skeleton-demo/skeleton-demo

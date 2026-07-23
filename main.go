@@ -6,8 +6,8 @@
 //
 // This binary currently mounts one subcommand:
 //
-//   provider   — minimal smoke-test CLI that calls core.Provider directly
-//                (no Agent / Engine / harness); see cmd/provider.go.
+//	provider   — minimal smoke-test CLI that calls core.Provider directly
+//	             (no Agent / Engine / harness); see cmd/provider.go.
 //
 // Sample agents under sample/* (code-agent, file-agent, greet-agent,
 // logdoctor, memory-demo, middleware-demo, strategy-demo) are the canonical
@@ -51,6 +51,7 @@ Sample agents under sample/* are the canonical end-to-end demos.`),
 	}
 
 	root.AddCommand(cmd.NewProviderCommand())
+	root.AddCommand(cmd.NewWizardCommand())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)

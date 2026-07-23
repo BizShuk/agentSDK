@@ -49,11 +49,6 @@ func TestFakeProviderScriptThenEcho(t *testing.T) {
 	assert.Contains(t, r3.Text, "後續問題", "script 用盡後 echo 最後一則 user 輸入")
 }
 
-func TestMergeSystem(t *testing.T) {
-	assert.Equal(t, "a\n\nb", mergeSystem("a", "", "  ", "b"))
-	assert.Equal(t, "", mergeSystem("", "  "))
-}
-
 func TestFormatEvent(t *testing.T) {
 	lines := formatEvent(core.StreamEvent{Kind: core.STREAM_MESSAGE, Text: "line1\nline2"})
 	require.Len(t, lines, 2)

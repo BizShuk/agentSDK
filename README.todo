@@ -1,7 +1,30 @@
 # TODO
 
 - [ ] credential key should be just placeholder, and replace by env and .env
+  - 部分前進（2026-07-22）：`spec.Model.APIKeyEnv` 讓設定檔指名`環境變數名稱`而非密鑰本身；`registry.Options.APIKey` 的字面值只走程式注入（`WithProvider`），設定檔無此欄位。完整方案（憑證儲存改 placeholder）仍待開 plan
 - [x] DefaultEnvironmentNames add ollama and llmbox
+
+## Agent Skeleton（2026-07-22 落地，`M1`–`M7` 完成）
+
+計畫見 [`plans/2026-07-22-agent-skeleton-config-opt-in.md`](plans/2026-07-22-agent-skeleton-config-opt-in.md)。
+
+- [x] `M1` `agent/spec`：`Config` + 10 個 feature block、`Choice` 中繼資料、tier 展開、驗證、JSON 編解（`go list -deps` 只見 `core`）
+- [x] `M2` `agent.Once` / `OnceStream`：走 `one_shot` rule + 全 nil port 的同一條 Engine 路徑，不繞過；順手移除 `core/thinking.go` 三行 stale `STUB` 註解
+- [x] `M3` `prompt` package：`Slot`(system/user/reminder) / `Section` / `Source` / `Builder`，+ `agent` 內五個 adapter（persona / context files / skills / env / reminder）
+- [x] `M4` `agent/build.go` + `agent/options.go`：8 stage pipeline、`New`/`MustNew`/`Bootstrap`/`Preflight`、八個 `With*`
+- [x] `M5` `provider/registry`：name → adapter 唯一真相，env 查詢注入化
+- [x] `M6` `sample/code-agent/cmd/compose.go` `333` → `101` 行；政策移到 `safety.go`、session 選取移到 `session.go`
+- [x] `M7` `cmd/wizard.go`：`wizard`/`w` 逐階段設定產生器，選項全部來自 `spec` 與 `agent.ProviderChoices()`
+- [x] `CLAUDE.md` / `README.md` 同步（含順手修正的既有漂移：幽靈 `auth/`+`proxy/` 子樹、失效驗證迴圈、舊 workspace 路徑）
+
+待補：
+
+- [ ] `Parts.Prompt.Turn()` 尚無 production caller —— `sample/code-agent` 的互動迴圈仍自己拼 user message，接上後 reminder slot 才會真的每回合注入
+- [ ] `agent/once.go` 的 `oneshot()` 仍是獨立小路徑（不需要 `AppConfig`，硬折進 `Bootstrap` 會逼它憑空造一個）；若日後 `Once` 要支援持久化再合併
+- [ ] `spec.Telemetry` block 已定義但 `agent` 尚未接上 OTel wiring
+- [ ] `spec.Memory.Compaction` 已定義但 `agent` 尚未把 `memory.Window`/`Compactor` 接進 Engine
+- [ ] `wizard` 尚無 `--verify`（選了才在最後跑一次 `agent.Once` 做 smoke test）
+- [ ] `agent` 尚無 settings 檔階層載入（`~/.config/<app>/agent.yaml` → 專案 `agent.yaml` 的合併），與 hook/permission 的 settings 層一起做
 
 ## Provider CLI (root cobra subcommand, 2026-07-20)
 
@@ -9,7 +32,8 @@
 - [x] 不走 Engine/harness,直接 `core.Provider.Generate` / `Stream`;registry map 收 minimax + anthropic adapter
 - [x] `main.go` 改為掛載 `cmd.NewProviderCommand()`,長敘述列出 `provider` 為唯一 subcommand
 - [x] `CLAUDE.md`：project tree 加 `cmd/`、module mapping 加 `root CLI subcommands` 列、`Development and Verification` 加 provider smoke-test 區塊
-- [ ] 視需要再加 `ollama` / `google` / `codex` adapter 進 registry（目前 registry 只收 minimax + anthropic）
+- [x] registry 抽成共用 `provider/registry` package（2026-07-22）：`minimax`/`anthropic`/`google`/`grok`/`ollama` 五個 adapter，env 查詢改為 `LookupEnv` 注入；`cmd/provider.go` 與 `agent` 共用同一份，`--list-providers` 與設定檔不會漂移
+- [ ] `codex` / `antigravity`（OAuth-only adapter）尚未進 registry —— 憑證流程與 API-key 型不同，需先決定 `registry.Options` 怎麼表達 OAuth
 
 ## Harness/UX（2026-07-19 skeleton 落地，細節待補）
 
@@ -19,7 +43,8 @@
 - [ ] `runtime`：follow-up phase reset 目前只認 `think_then_act.phase`，其他五個 rule 需通用 reset 慣例
 - [ ] `wire`：approval_request/human_decision 與 Engine HITL 的實際串接（目前只有 envelope 定義）
 - [ ] `session`：in-place tree branching（pi /tree 式單檔多分支）與 rewind
-- [ ] `subagent`：RunFunc 的 engine factory 標準組裝（app 層 helper）；tools allowlist 生效
+- [ ] `runtime`：「round-trip-without-execution」機制 —— 拿到 model 完整 assistant 回應（含 `tool_calls`）但不真的執行；目前 short-circuit 只 cover「model 沒 tool_calls → COMPLETED」，有 tool_calls 就會 dispatch。三條可行方向：(a) 新增 `INSTRUCTION_RETURN_TOOL_DECISION` + `RUN_STATUS_AWAITING_DECISION`，(b) `Engine.DryRun()` 模式在第一個 CALL_MODEL 後強制停下並把 `ModelResult.ToolCalls` 暴露給 caller，(c) 寫一個 `RejectTools` rule 在「看到 tool_calls 時改 emit RETURN」。動工前先開 plan 並對齊 wire format（instruction kind 是否進 `core.Instruction` 的穩定區）。
+- [x] `subagent`：RunFunc 的 engine factory 標準組裝 —— 2026-07-22 由 `agent.subagentRunner` 承擔（scoped ephemeral engine、無 store/WAL、`Def.Tools` allowlist 生效，空則沿用 parent 的工具集）
 - [ ] `contextfile`：auto-memory 寫回（MEMORY.md 索引式）
 - [ ] streaming delta：provider 原生 SSE 接進 `core.StreamEvent`（目前只有 folded events；`STREAM_MESSAGE_DELTA` 保留位）
 

@@ -4,11 +4,11 @@
 
 ## 技術基準 (Current Baseline)
 
-- 語言與 workspace：Go `1.26.0`、`go.work`，共 `9` 個 module entries（root、`tools/dependency-analyzer`、7 個 sample module）。`proxy` 與 `llm_provider` 均為外部 module dependency，不再列入本 workspace。Standalone dependency analyzer repo 仍位於 `~/projects/go-dependency-analysis`；本 workspace 同時保留已合併的 in-tree prototype。`provider/*` 已於 `551410d` 併回 root module；`tui/` 於 2026-07-21 併回，不再各自帶 `go.mod`。2026-07-19 移除原 `cli/` + `mcp/` 兩個未對接的套件,並移除外部 `video-utils` 依賴 (`go.mod` 與 `cmd/` wiring 同步清掉)。同日落地 harness/UX skeleton：`hook`、`permission`、`session`、`contextfile`、`skill`、`subagent`、`wire` 七個 core-only package + `tui` sub-package（zero-dep） + runtime steering/follow-up queue，計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md)、來源調查見 [`docs/memory/2026-07-19-agent-client-feature-catalog.md`](docs/memory/2026-07-19-agent-client-feature-catalog.md)。
-- root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/planning/action/tool/memory/middleware/runtime）、harness 群（hook/permission/session/contextfile/skill/subagent/wire，全部只依賴 core）與組合層（app/config）+ root CLI 子指令（`cmd/provider.go` 的 `provider` smoke-test 子指令,直接呼叫 `core.Provider.Generate/Stream`，不走 Agent/Engine/harness）。`core/` 保持標準函式庫 only；`auth` 是 production Git submodule 且獨立 module，`proxy` 也是獨立 module；二者各有自己的 `main.go` 並可單獨 build 出獨立 binary。root `main.go` 只掛載 `cmd.NewProviderCommand()`，不再掛載 auth/proxy 指令集；root module 仍透過 `config/` 直接 import `auth/model`、`auth/svc`、`auth/utils`，因此 `auth` 仍是 root 的 direct require，`proxy` 已從 root `go.mod` 移除。SDK 核心群不依賴兩者。
+- 語言與 workspace：Go `1.26.0`、`go.work`，共 `9` 個 module entries（root、`tools/dependency-analyzer`、7 個 sample module）。`proxy` 與 `llm_provider` 均為外部 module dependency，不再列入本 workspace。Standalone dependency analyzer repo 仍位於 `~/projects/go-dependency-analysis`；本 workspace 同時保留已合併的 in-tree prototype。`provider/*` 已於 `551410d` 併回 root module；`tui/` 於 2026-07-21 併回，不再各自帶 `go.mod`。2026-07-19 移除原 `cli/` + `mcp/` 兩個未對接的套件,並移除外部 `video-utils` 依賴 (`go.mod` 與 `cmd/` wiring 同步清掉)。同日落地 harness/UX skeleton：`hook`、`permission`、`session`、`contextfile`、`skill`、`subagent`、`wire` 七個 core-only package + `tui` sub-package（zero-dep） + runtime steering/follow-up queue，計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md)、來源調查見 [`docs/memory/2026-07-19-agent-client-feature-catalog.md`](docs/memory/2026-07-19-agent-client-feature-catalog.md)。2026-07-22 落地 agent skeleton：`agent/`（含 `agent/spec` 宣告層）、`prompt/`、`provider/registry/` 三個新 package + root `wizard` 子指令，計畫見 [`plans/2026-07-22-agent-skeleton-config-opt-in.md`](plans/2026-07-22-agent-skeleton-config-opt-in.md)。
+- root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/planning/action/tool/memory/middleware/runtime）、harness 群（hook/permission/session/contextfile/skill/subagent/wire/prompt，全部只依賴 core）、組合層（agent/app/config）+ root CLI 子指令（`cmd/provider.go` 的 `provider` smoke-test 直接呼叫 `core.Provider.Generate/Stream` 不走 Engine；`cmd/wizard.go` 的 `wizard`/`w` 產生 `agent.Config` 設定檔）。`agent/spec` 是宣告層，只 import `core`；`agent` 才是知道 planning/provider/harness 全部存在的組裝層。`core/` 保持標準函式庫 only；`auth` 與 `proxy` 都已脫離本 repo，是外部獨立 repo（本 repo 無 `auth/`、`proxy/` 目錄，也無 `.gitmodules`）。root `main.go` 掛載 `cmd.NewProviderCommand()` 與 `cmd.NewWizardCommand()`，不掛載 auth/proxy 指令集；root module 仍透過 `config/` 直接 import `auth/model`、`auth/svc`、`auth/utils`，因此 `auth` 仍是 root 的 direct require，`proxy` 已從 root `go.mod` 移除。SDK 核心群不依賴兩者。
 - 目前 proxy 架構：`protocol → route → transform → upstream`，三種 client wire format 的 `3×3` directed pair 已接上 handler。
-- 來源與規格：現行 pairwise 決策見 [`proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md`](proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md)；四個來源的 wire-format 盤點見 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md)。
-- Git submodule：`auth` 是 production auth module（`https://github.com/BizShuk/auth.git`）；`tmp/auth2api` 與 `tmp/cliproxyapi` 僅供格式研究與規格追溯，不是 agentsdk 的 runtime dependency。
+- 來源與規格：現行 pairwise 決策見 `proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md`（外部 repo）；四個來源的 wire-format 盤點見 `proxy/docs/specs/format/README.md`（外部 repo）。
+- 外部依賴：`auth` 是外部 module（`github.com/bizshuk/auth`，go.mod require，非 submodule），只被 `config/provider.go`（`model`/`svc`）與 `config/app.go`（`utils.FileStore`）使用；`proxy` 已無任何殘留（無目錄、無 require、無 import）。`tmp/auth2api` 與 `tmp/cliproxyapi` 僅供格式研究，不是 runtime dependency。
 
 ## 專案結構 (Project Structure)
 
@@ -18,10 +18,13 @@ agentsdk/
 ├── CLAUDE.md                         # 技術脈絡與架構決策（本檔）
 ├── go.work                           # root + analyzer + 7 sample modules (tui 已併回 root)
 ├── go.mod                            # github.com/bizshuk/agentsdk
-├── main.go                           # cobra root binary；掛載 `provider` smoke-test 子指令（cmd/provider.go）
-├── cmd/                              # root cobra subcommands（`provider` 打 core.Provider 不走 Engine）
-├── app/                              # CLI agent composition/lifecycle（Agent、preflight、panic recovery）
-├── config/                           # AppConfig、middleware presets、RefreshingProvider
+├── main.go                           # cobra root binary；掛載 `provider` 與 `wizard` 兩個子指令
+├── cmd/                              # root cobra subcommands：`provider` smoke-test、`wizard`/`w` 設定產生器
+├── agent/                            # 組裝層：spec.Config → 8 stage pipeline → *runtime.Engine；實作 app.Agent
+│   └── spec/                         # 宣告層：Config/Choice/tier 展開/驗證（只 import core，可獨立被讀取）
+├── prompt/                           # content management：Slot(system/user/reminder)、Source、Builder（只依賴 core）
+├── app/                              # CLI agent lifecycle（signal、preflight、deadline、panic recovery、exit code）
+├── config/                           # AppConfig、middleware presets、RefreshingProvider（runtime wiring，非宣告層）
 ├── core/                             # 純狀態機、Message/Part、Event、Instruction、ports（含 ObservationSource）
 ├── planning/                         # 6 個純函式 DecisionRule FSM
 ├── action/                           # tool registry、TypedTool/schema、sandbox、approval policy
@@ -41,38 +44,26 @@ agentsdk/
 ├── runtime/                          # Engine：dispatch Instruction、fold Event、Run/Resume/HITL
 ├── cmd/                              # root CLI 子指令；目前只有 `provider` smoke-test（Cobra 註冊進 main.go）
 ├── cli/                              # (已刪除) 9 種 JSONL Envelope 與 codec —— 無 production caller
-├── auth/                             # Git submodule + 獨立 module；main.go 可 build 出獨立 `auth` binary
-│   ├── model/                        # Credential、options 與 credential metadata
-│   ├── svc/                          # Login、OAuth/PKCE、device flow、FileStore、Resolver
-│   ├── utils/                        # active name、store、browser、PKCE helper
-│   ├── cmd/                          # login/list/verify/refresh/logout/use 指令集（Install 掛載）
-│   ├── provider/                     # 6 個 auth provider 包 + ROUTES registry
-│   └── authtest/                     # 共用測試假 provider
-├── proxy/                            # 獨立 module；main.go 可 build 出獨立 `proxy` binary
-│   ├── handlers/                     # Gin HTTP surface：server、handler、middleware、observability
-│   ├── config/                       # LoadConfig/Config（gosdk layered viper、APP_NAME=agentSDK）
-│   ├── model/                        # protocol：DTO、SSE parser、ProxyError；package 改名 model
-│   │   └── {anthropic,chat,responses}/  # 三個 sub-format 套件
-│   ├── svc/                          # 第二層 domain
-│   │   ├── route/                    # qualified model → provider family
-│   │   ├── transform/                 # 9 組 pairwise request/response/stream transforms
-│   │   └── upstream/                  # concrete profile、credential resolver、safe HTTP client
-│   ├── docs/                         # proxy-owned plans/specs + wire-format catalog
-│   └── cmd/                          # `proxy` 指令（NewCommand）
+├── auth 外部依賴                     # `github.com/bizshuk/auth`：獨立 repo + go.mod require（非 in-tree 目錄）
+│                                     # config/provider.go 用 model/svc（Resolver），config/app.go 用 utils.FileStore
+├── proxy 外部依賴                    # 已完全脫離本 repo：無目錄、無 go.mod require、無任何 import
 ├── mcp/                              # (已刪除) 獨立 module：MCP Client → action.ToolSource —— 無 production caller
 ├── provider/
+│   ├── registry/                     # name → adapter 的唯一真相；env 查詢用注入（不綁 viper），CLI 與 agent 共用
 │   ├── anthropic/                    # 獨立 module：anthropic-sdk-go adapter
 │   ├── google/                       # 獨立 module：google.golang.org/genai adapter
 │   └── openaicompat/                 # 獨立 module：stdlib OpenAI-compatible HTTP/SSE adapter
 ├── video-utils 外部依賴              # (已移除 2026-07-19) 原 `github.com/bizshuk/video-utils`：audio、frames、subtitles/ffmpeg utilities + video CLI command。root module 不再依賴;若日後重啟,改以獨立 git repo clone 後 add 為 workspace module
 ├── sample/
-│   ├── code-agent/                   # 全 harness 組合 CLI：tui 互動 / -p print / --json（wire）+ session flags
+│   ├── code-agent/                   # 全 harness 組合 CLI：tui 互動 / -p print / --json（wire）+ session flags；compose.go 用 agent 宣告（333→101 行）
 │   ├── file-agent/                   # 6 內建工具的檔案操作 agent
 │   ├── greet-agent/                  # 內建工具 + greet tool
 │   ├── logdoctor/                    # log listener、todo tools、watch/resume/approve CLI
 │   ├── memory-demo/                  # StateStore/WAL/checkpoint demo
 │   ├── middleware-demo/              # middleware chain demo
+│   ├── skeleton-demo/                # wizard --print-go 樣板:app.Main(agent.MustNew(cfg)) + 12 行 stdinAgent 包裝
 │   └── strategy-demo/                # 6 reasoning strategy demo
+├── tools/dependency-analyzer/        # go.work member：in-tree dependency analyzer prototype
 ├── docs/specs/                       # root SDK architecture/spec history
 ├── plans/                            # 進行中的落地計畫
 └── tmp/                              # submodule 與 runtime symlink，不放 production logic
@@ -86,7 +77,8 @@ agentsdk/
 | Root runtime              | Go stdlib、`github.com/bizshuk/gosdk v1.2.1`        | config/log/notify 等組合點在 root 或 sample                                     |
 | Auth module               | `viper` + stdlib                                    | Git submodule + 獨立 module；credential 機制、Resolver、active.json             |
 | HTTP proxy                | `gin-gonic/gin v1.11.0`、`gosdk/mw`、`gosdk/router` | 獨立 module；`/v1` API、health/ping、localhost CORS、API key、per-IP rate limit |
-| CLI/config                | `spf13/cobra v1.10.2`、`spf13/viper v1.20.1`        | auth/proxy module CLI、samples、root `provider` 子指令                       |
+| CLI/config                | `spf13/cobra v1.10.2`、`spf13/viper v1.20.1`        | auth/proxy module CLI、samples、root `provider` / `wizard` 子指令            |
+| Config 序列化             | stdlib `encoding/json`、`gopkg.in/yaml.v3 v3.0.1`   | `agent/spec` 只用 JSON；YAML 在 `agent` 走 JSON tag 轉譯，不另立 tag        |
 | State/schema              | `testify v1.11.1`、`invopop/jsonschema v0.14.0`     | table-driven tests、TypedTool JSON Schema                                       |
 | IDs/telemetry             | `google/uuid v1.6.0`、OpenTelemetry `v1.44.0`       | request ID、transform warning/loss metrics                                      |
 | Anthropic adapter         | `anthropics/anthropic-sdk-go v1.50.2`               | 只在 `provider/anthropic` module 引入                                           |
@@ -110,6 +102,11 @@ agentsdk/
 - `mcp.Client` 只做 MCP `ListTools`/`CallTool` 與 `core.ToolSpec`/`ToolResult` 轉換，不把 MCP transport 混入 core 或 runtime。
 - Harness ports（2026-07-19，借鏡 claude-code harness + pi 模組化）：`core` 新增 `Hooks`（`HookEvent`/`HookDecision`）與 `EventSink`（`StreamEvent`）兩個純資料 port；`runtime.Engine` 持有 nil 即 no-op 的 `Hooks`/`Sink` 欄位，`PreToolUse` block 會折成失敗 `ToolResult` 讓 model 看到拒絕、`PostToolUse` 的 `SystemNote` 追加為 system message。所有 harness package 只依賴 `core`，由 composition root 注入。
 - `permission.Engine` 是兩軸決策（codex 式）：`Mode`（`default`/`acceptEdits`/`plan`/`bypassPermissions`）× rule specifier（`Bash(git:*)`、`Edit(src/**)`；自寫 `**` matcher，因 `filepath.Match` 的 `*` 不跨 `/`），優先序 `deny > ask > allow`；無 rule 命中時可注入 `Fallback`（如 `action.DefaultApprovalPolicy` 的 autonomy grid）。
+- Agent skeleton（2026-07-22）：`spec.Config` 是宣告式資料，`agent` 是組裝層。opt-in 有兩層——層 `1` feature 開關（block 是 pointer，`nil` = 關、`{}` = 開且用預設，剛好對應 JSON 的「缺 key / 空物件」），層 `2` variant 選擇（block 內具名字串）。`planning` 再多一層正交軸：`Reasoning.Enable` 決定註冊哪些 rule 進 `NewDecide` 的 map，`Reasoning.Style` 決定這次 seed 哪個——未註冊的 style 會讓 `NewDecide` 回 `NOTIFY error`，故 `spec.Validate` 早報。
+- Tier 階梯（`oneshot`/`basic`/`standard`/`full`）是 block 集合的單調展開簡寫，展開後顯式 block 覆蓋（explicit wins）。`tier` 與 `reasoning` 正交，組合`不`視為衝突：`T0` 無工具 → provider 收不到 tool spec → `ModelResult.ToolCalls` 恆空 → `runtime/loop.go` 的 short-circuit 在 `Decide` 前收成 `COMPLETED`，任何 strategy 到 `T0` 都退化成一次 model call。`T0` 預設關持久化，否則 `config.OpenForCLI` 的空 appName 檢查會讓 `Name` 從「`T1+` 必填」變成「永遠必填」。
+- `agent.Once` 不繞過 Engine：它用 `planning.OneShotReasoning` + 全 nil port 走同一條路。不得改寫成「每次回 `[CALL_MODEL, DONE]`」的 no-op `Decide`——那會破壞 `core.Decide` 的純函式不變式，retry/WAL replay 會重發 model call（理由見 `planning/one_shot.go` 型別註解）。
+- 注入用 `agent.Option`（`func(*builder) error`），不用 `Deps` struct：沿 repo 既有慣例（`app` + 7 個 provider adapter 共 `8` 處 `type Option func(*x)`）。`Option` 是 closure、不可列舉、只活在本 process；`spec.Choice` 是資料、可列舉、要跨序列化邊界寫進設定檔——兩者不可合併，只在 wizard 的 `--print-go` 輸出端相遇。
+- `prompt` 擁有「這一輪送什麼進 context window」，`memory` 擁有「放不下時砍什麼」：前者是 policy、後者是 mechanism，合併會讓注入與裁切互相遞迴。`SLOT_SYSTEM` 內順序由不變到易變（persona `10` → context files `20` → skill 索引 `30` → env `40`），因為 prompt caching 要求前綴穩定；預算超限時從尾端整段丟，不切半。`contextfile`/`skill` 不知道 `prompt` 存在，adapter 住在 `agent`。
 - Steering / follow-up queue（pi 式）：`Engine.Steer` 在下一次 Decide 前插入 user message；`Engine.FollowUp` 把「本應完成」轉為續跑（每次一則）。follow-up 續跑會清掉 `think_then_act.phase` 讓 FSM 回到 reason（與 loop 既有 pending_call seeding 同一 seam）；其他五個 rule 的通用 reset 慣例待補。
 - `session.Manager` 只加 lineage（meta sidecar：`ID`/`Parent`/`Title`/`Cwd`）與 fork（複製 state+WAL、改 RunID）；transcript 真相仍是 WAL JSONL。
 - `wire` 是 `cli/` 的復活但有真 caller path：`runtime → core.EventSink → wire.Sink → JSONL`；Envelope 欄位是對外 API，需維持 JSON round-trip 穩定。
@@ -117,7 +114,9 @@ agentsdk/
 
 ## 認證與 provider 決策 (Auth and Providers)
 
-`auth/` 只提供 mechanism：`Credential`、API key、OAuth authorization-code（PKCE 或 client secret）、device code（RFC 8628 + OIDC discovery）、service-account JWT → Google STS、callback、refresh、FileStore。`auth/provider/<name>/` 封裝單一家 provider，依賴 `auth` 與必要的 provider-specific config 套件；`auth/provider` registry 再統一掛載實作。
+> 範圍：本節描述`外部 repo` [`github.com/bizshuk/auth`](https://github.com/BizShuk/auth) 的設計，不是本 repo 的目錄。本 repo 只透過 `config/` 消費它的 `model`/`svc`/`utils`。
+
+`auth` 只提供 mechanism：`Credential`、API key、OAuth authorization-code（PKCE 或 client secret）、device code（RFC 8628 + OIDC discovery）、service-account JWT → Google STS、callback、refresh、FileStore。`auth/provider/<name>/` 封裝單一家 provider，依賴 `auth` 與必要的 provider-specific config 套件；`auth/provider` registry 再統一掛載實作。
 
 `auth/provider.ROUTES` 是 provider id、credential kind、constructor 與 CLI 說明的唯一真相來源，目前 9 個 id：
 
@@ -138,6 +137,8 @@ antigravity_oauth  vertex
 - auth CLI 的預設 namespace 是 `~/.config/agentsdk/data/auth`；proxy config 目前以 `agentSDK` namespace 載入（`proxy.APP_NAME`），若兩者要共用憑證，使用 `auth-dir` 明確指定同一目錄。
 
 ## Proxy pairwise 決策 (Current Proxy Architecture)
+
+> 範圍：本節描述`外部 repo` `bizshuk/proxy` 的設計。本 repo 已無 `proxy/` 目錄、無 go.mod require、無任何 import；下列路徑與指令需在該 repo 內執行。
 
 Proxy 不使用 canonical request/response IR，也不保留 legacy `proxy/adaptor`。client protocol 與 concrete provider profile 分離：
 
@@ -185,7 +186,7 @@ openai-responses
 
 ## CLI、設定與持久化 (CLI, Config, Persistence)
 
-`main.go` 直接建立 Cobra root（binary 名稱 `agentsdk`，版本 `0.1.0`），目前只掛載 `cmd.NewProviderCommand()` 提供的 `provider` 子指令：直接呼叫 `core.Provider.Generate`/`Stream`，不走 Agent/Engine/harness，用於 provider adapter 的 wire-format smoke test。Root 不再掛載 `auth/cmd.Install` 或 `proxycmd.NewCommand()`——auth CLI 與 proxy CLI 都從各自 module root 各自 `go build .` 建出獨立 binary，與 root binary 共用相同設定與憑證目錄。auth 函式庫在 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫在 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`。`config.OpenForCLI(appName, level)` 為 sample 建立：
+`main.go` 直接建立 Cobra root（binary 名稱 `agentsdk`，版本 `0.1.0`），掛載兩個子指令：`cmd.NewProviderCommand()` 的 `provider`（直接呼叫 `core.Provider.Generate`/`Stream`，不走 Agent/Engine/harness，用於 provider adapter 的 wire-format smoke test），與 `cmd.NewWizardCommand()` 的 `wizard`（alias `w`）——逐階段產生 `agent.Config` 設定檔，階段序列刻意對齊 `agent` 的 8 stage 組裝順序，選項全部來自 `spec` 與 `agent.ProviderChoices()`，wizard 本身不持有任何詞彙。Root 不再掛載 `auth/cmd.Install` 或 `proxycmd.NewCommand()`——auth CLI 與 proxy CLI 都從各自 module root 各自 `go build .` 建出獨立 binary，與 root binary 共用相同設定與憑證目錄。auth 函式庫在 `auth/model`、`auth/svc`、`auth/utils`、`auth/provider`，proxy 函式庫在 `proxy/handlers`、`proxy/config`、`proxy/model`、`proxy/svc`。`config.OpenForCLI(appName, level)` 為 sample 建立：
 
 ```text
 ~/.config/<appName>/
@@ -206,6 +207,9 @@ JSONL 對外 envelope (`cli/`) 於 2026-07-19 移除：原 9 種 type (`observat
 
 | 領域              | 套件 / 進入點                                                                                                                                                                                                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 宣告式設定        | `agentsdk/agent/spec`：`Config`、`Choice`、`Expand`（tier 展開）、`Validate`、`Prepare`、`Decode`/`Encode`（只 import `core`） |
+| agent 組裝        | `agentsdk/agent`：`New`/`MustNew`/`Bootstrap`/`Preflight`（實作 `app.Agent`）、`Once`/`OnceStream`、`Option` 全部 `With*`、`BuildSources`、`ProviderChoices`、`LoadFile`/`SaveFile` |
+| prompt 內容管理   | `agentsdk/prompt`：`Slot`（system/user/reminder）、`Section`、`Source`、`Builder.Seed`/`Turn`、`Static` |
 | 狀態與 ports      | `agentsdk/core`：`NewDecide`、`State`、`Instruction`、`ModelProvider`                                                                                                                                                                            |
 | 推理策略          | `agentsdk/planning`：6 個 `New*` DecisionRule constructor                                                                                                                                                                                        |
 | runtime           | `agentsdk/runtime`：`NewEngine`、`Run`、`RunWithEvent`、`Resume`、`SubmitHumanDecision`                                                                                                                                                          |
@@ -222,7 +226,8 @@ JSONL 對外 envelope (`cli/`) 於 2026-07-19 移除：原 9 種 type (`observat
 | dependency graph  | external CLI `github.com/bizshuk/go-dependency-analysis`：Go tooling facts + JSON policy heuristics；不加入本 workspace、不被本 repo import                                                                                                        |
 | middleware        | `agentsdk/middleware`、`harness`、`loopguard`、`security`、`observability`                                                                                                                                                                       |
 | app/config        | `agentsdk/app`、`agentsdk/config`：`app.Run`、`OpenForCLI`、`SecureMiddleware`、`NewRefreshingProvider`                                                                                                                                          |
-| root CLI subcommands | `agentsdk/cmd`：`NewProviderCommand`（root cobra `provider` smoke-test CLI；打 `core.Provider.Generate`/`Stream` 不走 Engine；registry 掛 minimax/anthropic/google/grok/ollama;`--list-models` 優先打 live `core.ModelLister`,失敗 fallback static）                                                       |
+| provider registry | `agentsdk/provider/registry`：`Names`/`Entries`/`Lookup`/`New`/`Options.Resolve`；`env` 查詢以 `LookupEnv` 注入，CLI 傳 viper-backed、library 用 `os.Getenv` |
+| root CLI subcommands | `agentsdk/cmd`：`NewWizardCommand`（`wizard`/`w` 設定產生器）、`NewProviderCommand`（root cobra `provider` smoke-test CLI；打 `core.Provider.Generate`/`Stream` 不走 Engine；registry 掛 minimax/anthropic/google/grok/ollama;`--list-models` 優先打 live `core.ModelLister`,失敗 fallback static）                                                       |
 | authentication    | `github.com/bizshuk/auth/{model,svc,utils,provider}`（Git submodule + 獨立 module，root 有 `auth` binary main）：`Login`、`For`、`FileStore`、`NewResolver`                                                                                      |
 | proxy             | `agentsdk/proxy/handlers`、`agentsdk/proxy/config`、`agentsdk/proxy/model`、`agentsdk/proxy/svc/{route,transform,upstream}`（獨立 module，root 有 `proxy` binary main）：`handlers.New`、`config.LoadConfig`、`model.Format`、`svc/route.Router` |
 | JSONL             | (已移除 2026-07-19) 原 `agentsdk/cli`：`Envelope`、`JSONLCodec`                                                                                                                                                                                  |
@@ -235,15 +240,15 @@ JSONL 對外 envelope (`cli/`) 於 2026-07-19 移除：原 9 種 type (`observat
 前置需求：Go `1.26+`；使用 provider adapter 時依該 module 的 API key/environment。
 
 ```bash
-cd /Users/shuk/projects/agentSDK
+cd /Users/shuk/projects/ai/agentSDK
 go work sync
 go mod download
 go build ./...
 go test ./... -count=1 -timeout=120s
-go-dependency-analysis --workspace /Users/shuk/projects/agentSDK/go.work --format text
-go-dependency-analysis --workspace /Users/shuk/projects/agentSDK/go.work --format json --json-indent='  '
-go-dependency-analysis --workspace /Users/shuk/projects/agentSDK/go.work --format mermaid
-go-dependency-analysis --workspace /Users/shuk/projects/agentSDK/go.work \
+go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work --format text
+go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work --format json --json-indent='  '
+go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work --format mermaid
+go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work \
   --policy /Users/shuk/projects/go-dependency-analysis/examples/agentsdk.json
 ```
 
@@ -252,17 +257,21 @@ Analyzer 的 `go-tool-fact` 來自當次 Go toolchain/build context；`policy-he
 驗證所有 workspace modules：
 
 ```bash
-for mod in auth proxy provider/anthropic provider/google provider/openaicompat \
-  sample/code-agent sample/file-agent sample/greet-agent sample/logdoctor \
-  sample/memory-demo sample/middleware-demo sample/strategy-demo; do
-  (cd "$mod" && go test ./... -count=1 -timeout=120s)
+# provider/* 已併回 root module；auth/proxy 是獨立 repo，不在 go.work 內。
+for mod in . sample/code-agent sample/file-agent sample/greet-agent sample/logdoctor \
+  sample/memory-demo sample/middleware-demo sample/skeleton-demo sample/strategy-demo; do
+  (cd "$mod" && go build ./... && go test ./... -count=1 -timeout=120s)
 done
+
+# 依賴紀律：兩個宣告層 package 只准看到 core
+go list -deps ./agent/spec | grep agentsdk   # 只該有 core 與 agent/spec
+go list -deps ./prompt     | grep agentsdk   # 只該有 core 與 prompt
 ```
 
 `provider` 子指令 smoke-test（不打 Agent，直接打 core.Provider）：
 
 ```bash
-cd /Users/shuk/projects/agentSDK
+cd /Users/shuk/projects/ai/agentSDK
 go run . provider --list-providers
 go run . provider --list-models --provider minimax
 go run . provider "ping" --provider minimax
@@ -271,22 +280,31 @@ go run . provider "summarize this repo" --provider anthropic --model claude-sonn
 go run . provider "ping" --provider minimax --json | jq
 ```
 
+`wizard` 子指令（產生 `agent.Config` 設定檔，不打 provider、不驗憑證）：
+
+```bash
+cd /Users/shuk/projects/ai/agentSDK
+go run . w                                  # 互動：逐階段問，Enter 收預設，寫 ./agent.yaml
+go run . w -y --tier full -o -              # 非互動：全採預設，輸出 stdout
+go run . w -y --tier oneshot -o agent.json  # 副檔名決定格式（.json → JSON，其餘 → YAML）
+go run . w --edit agent.yaml                # 以既有設定當預設值逐階段確認（round-trip 無損）
+go run . w -o - --print-go                  # 額外印出等價的 Go literal
+go run . w --list reasoning.style           # 列出單一欄位的選項（來自 spec/registry）
+```
+
 常用本地流程：
 
 ```bash
-# Root binary (go run .) 只掛載 `provider` smoke-test 子指令
+# Root binary (go run .) 掛載 `provider` smoke-test 與 `wizard` 設定產生器
 go run . provider --list-providers                          # 列出已註冊 provider
 go run . provider --list-models --provider minimax          # 列出 provider catalog
 go run . provider "ping" --provider minimax                  # 單輪 prompt,直接打 core.Provider
 go run . provider --stream "stream me a haiku" --provider anthropic
 go run . provider "summarize X" --provider anthropic --model claude-sonnet-5
 
-# auth 與 proxy CLI 從各自 module root 啟動
-cd auth && go run . login --provider anthropic
-cd auth && go run . login --provider anthropic_oauth --no-browser
-cd auth && go run . list
-cd auth && go run . verify --all
-cd proxy && go run .                         # 啟動 LLM protocol proxy server
+# auth 與 proxy CLI 已移出本 repo，需在各自的 repo clone 內執行
+#   (bizshuk/auth)  go run . login --provider anthropic / list / verify --all
+#   (bizshuk/proxy) go run .                 # 啟動 LLM protocol proxy server
 
 cd sample/logdoctor
 go run . --fake --max-turns=10 run --once --fixture testdata/error.log
@@ -308,6 +326,8 @@ go run . --provider anthropic -p "..."    # 改讀 ANTHROPIC_API_KEY（含 minim
 
 `sample/logdoctor` 的 real provider 旗標為 `anthropic`、`openaicompat`、`google`；`--fake` 與 `--provider` 互斥。`sample/file-agent` 與 `sample/greet-agent` 使用 Anthropic-compatible adapter 與 `SecureMiddleware`。
 
+`sample/skeleton-demo` 是 `cmd/wizard.go::goLiteral` 輸出範本逐字對應的單檔 sample:沒有 cobra、沒有四種 dispatch mode、不需要 `*Parts.Sessions`/`*Parts.Skills`。差別在 main 比 code-agent 少 `~260` 行,只為了展示 wizard `--print-go` 模板可直接落地;唯一的 12 行 `stdinAgent` 包裝是為了把 stdin 內容塞進 Bootstrap 回傳的 opening state。對比 shape 見 `sample/skeleton-demo/README.md`。
+
 ## 目前狀態與待辦 (Status and Open Items)
 
 | 項目                                                                                                                       | 狀態                                                                                                                                                         |
@@ -319,8 +339,9 @@ go run . --provider anthropic -p "..."    # 改讀 ANTHROPIC_API_KEY（含 minim
 | M5 built-in tools、sample wiring、`app` lifecycle                                                                          | 完成                                                                                                                                                         |
 | M6 auth mechanism、9 provider ids、auth CLI                                                                                | 完成；`config.NewRefreshingProvider` 已補上呼叫前自動 refresh                                                                                                |
 | Proxy 3×3 pairwise cutover 與安全 hardening                                                                                | 完成（現行 branch）                                                                                                                                          |
-| 四來源 37 entity wire-format catalog                                                                                       | 完成，見 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md)                                                                            |
+| 四來源 37 entity wire-format catalog                                                                                       | 完成，見 `proxy/docs/specs/format/README.md`（外部 repo）                                                                            |
 | module 拆分：`auth`、`proxy` 獨立 module；`config` 解體；`perception/` 刪除                                                | 完成，見 [`plans/2026-07-18-architecture-module-split-roadmap.md`](plans/2026-07-18-architecture-module-split-roadmap.md)                                    |
+| Agent skeleton：`agent/spec`（宣告）+ `agent`（組裝）+ `prompt`（content management）+ `provider/registry` + `wizard` 子指令 | 完成（`M1`–`M7` 全落地，`compose.go` `333` → `101` 行）；計畫見 [`plans/2026-07-22-agent-skeleton-config-opt-in.md`](plans/2026-07-22-agent-skeleton-config-opt-in.md) |
 | Harness/UX skeleton：`hook`/`permission`/`session`/`contextfile`/`skill`/`subagent`/`wire` + `tui` sub-package + steering queue | skeleton 完成（全部含測試），細節項見 `README.todo`；計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md) |
 
 目前明確未完成或刻意保留：
@@ -329,7 +350,7 @@ go run . --provider anthropic -p "..."    # 改讀 ANTHROPIC_API_KEY（含 minim
 - `/admin/*` 仍是未實作 placeholder；不要在文件或 client 中當成穩定 API。
 - release tag 順序：`auth` → `proxy` → root（replace 指向相對路徑，只在本 repo workspace 生效；samples 於 repo 外單獨 build 需等 tag）。
 - credential 儲存改 env placeholder（`README.todo` 新項）尚未設計，動工前先開 plan。
-- Harness skeleton 的刻意保留：`tui` 尚無 Editor/raw-mode 輸入與 Markdown component（`ProcessTerminal.Size` 暫讀 `COLUMNS`，互動輸入走 cooked-mode line input）；streaming 仍是 folded events（`STREAM_MESSAGE_DELTA` 保留位）；hook/permission 的 settings 檔載入層未做。`sample/code-agent` 已落地為 tui 的第一個真 caller（互動 TUI + `-p` print + `--json` wire + session flags + `.agentsdk/` skills/commands/agents 探索），composition 全在 `sample/code-agent/cmd/compose.go`。完整清單見 `README.todo` 的 Harness/UX 段。
+- Harness skeleton 的刻意保留：`tui` 尚無 Editor/raw-mode 輸入與 Markdown component（`ProcessTerminal.Size` 暫讀 `COLUMNS`，互動輸入走 cooked-mode line input）；streaming 仍是 folded events（`STREAM_MESSAGE_DELTA` 保留位）；hook/permission 的 settings 檔載入層未做。`sample/code-agent` 已落地為 tui 的第一個真 caller（互動 TUI + `-p` print + `--json` wire + session flags + `.agentsdk/` skills/commands/agents 探索）；composition 已於 2026-07-22 改由 `agent` 承擔，`cmd/compose.go` 只剩 flag → `agent.Config` 映射（`101` 行），應用自身的政策與 session 選取分別移到 `cmd/safety.go` 與 `cmd/session.go`。完整清單見 `README.todo` 的 Harness/UX 段。
 
 ## 慣例與注意事項 (Conventions and Caveats)
 
@@ -339,4 +360,4 @@ go run . --provider anthropic -p "..."    # 改讀 ANTHROPIC_API_KEY（含 minim
 - `core.Decide`、planning rules、transform pair 不得直接做 I/O、讀 credential 或建立 HTTP request；這些責任分別屬於 runtime、upstream 與 auth。
 - `sample/logdoctor/core` 與 `agentsdk/core` 是不同 module path；import 時使用 `domain` / `sdkcore` alias。
 - `proxy/docs/specs/2026-07-16-client-llm-adaptor.md` 是 legacy historical design；修改 proxy 時以 pairwise spec、現行 `proxy/` code 與測試為準。
-- 修改 package tree、module、路由或 protocol contract 後，必須同步本檔；業務範疇變更才同步 `README.md`。格式 catalog 的 entity/來源異動則同步 [`proxy/docs/specs/format/README.md`](proxy/docs/specs/format/README.md)。
+- 修改 package tree、module、路由或 protocol contract 後，必須同步本檔；業務範疇變更才同步 `README.md`。格式 catalog 的 entity/來源異動則同步 `proxy/docs/specs/format/README.md`（外部 repo）。
