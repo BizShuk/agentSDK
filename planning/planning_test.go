@@ -1,6 +1,7 @@
 package planning_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/bizshuk/agentsdk/core"
@@ -386,4 +387,48 @@ func TestLatestAssistantTextEmpty(t *testing.T) {
 	_, instrs := p.NextStep(st)
 	require.Len(t, instrs, 1)
 	assert.Equal(t, core.INSTRUCTION_DONE, instrs[0].Kind)
+}
+
+// TestDispatchSurvivesJSONRoundTrip pins the crash-recovery path.
+//
+// StateStore persists State as JSON, so a working-memory value written
+// in-process as core.ToolCall reads back as map[string]any. The dispatch
+// phase used to type-assert, get false, and emit DONE — a run that
+// crashed mid-dispatch silently completed on Resume instead of
+// re-issuing the call. Decoding by shape is what makes Resume correct.
+func TestDispatchSurvivesJSONRoundTrip(t *testing.T) {
+	seed := core.State{ReasoningStyle: core.REASON_REACT}
+	planning.SeedDispatch(&seed,
+		core.ToolCall{ID: "c1", Name: "read", Args: map[string]any{"path": "a.txt"}},
+		core.ToolCall{ID: "c2", Name: "read", Args: map[string]any{"path": "b.txt"}},
+	)
+
+	raw, err := json.Marshal(seed)
+	require.NoError(t, err)
+	var reloaded core.State
+	require.NoError(t, json.Unmarshal(raw, &reloaded))
+
+	_, insts := planning.NewThinkThenAct().NextStep(reloaded)
+	require.Len(t, insts, 2, "both calls must survive the round trip")
+	for i, want := range []string{"c1", "c2"} {
+		assert.Equal(t, core.INSTRUCTION_CALL_TOOL, insts[i].Kind)
+		require.NotNil(t, insts[i].CallTool)
+		assert.Equal(t, want, insts[i].CallTool.Call.ID)
+	}
+}
+
+// TestDispatchReadsLegacySingularKey covers state written before batch
+// dispatch existed: one ToolCall under the singular key must still run.
+func TestDispatchReadsLegacySingularKey(t *testing.T) {
+	s := core.State{
+		ReasoningStyle: core.REASON_REACT,
+		WorkingMemory: map[string]any{
+			planning.THINK_THEN_ACT_PHASE:        planning.THINK_THEN_ACT_DISPATCH,
+			planning.THINK_THEN_ACT_PENDING_CALL: core.ToolCall{ID: "old", Name: "read"},
+		},
+	}
+	_, insts := planning.NewThinkThenAct().NextStep(s)
+	require.Len(t, insts, 1)
+	require.NotNil(t, insts[0].CallTool)
+	assert.Equal(t, "old", insts[0].CallTool.Call.ID)
 }

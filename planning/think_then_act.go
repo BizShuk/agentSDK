@@ -11,6 +11,11 @@ const (
 	THINK_THEN_ACT_PENDING_CALL = "think_then_act.pending_call"
 	THINK_THEN_ACT_LAST_RESULT  = "think_then_act.last_result"
 
+	// THINK_THEN_ACT_PENDING_CALLS holds the whole tool-call batch of one
+	// round. The singular key above is still read as a one-element
+	// fallback so state persisted before batch dispatch resumes cleanly.
+	THINK_THEN_ACT_PENDING_CALLS = "think_then_act.pending_calls"
+
 	// ThinkThenAct phase values:
 	THINK_THEN_ACT_REASON   = "reason"   // ask LLM to reason
 	THINK_THEN_ACT_DISPATCH = "dispatch" // dispatch a tool call
@@ -52,13 +57,28 @@ func (p *ThinkThenAct) NextStep(state core.State) (core.State, []core.Instructio
 		return next, []core.Instruction{callModelFromMessages(next)}
 
 	case THINK_THEN_ACT_DISPATCH:
-		call, ok := scratchCall(state, THINK_THEN_ACT_PENDING_CALL)
-		if !ok {
+		// One model response may ask for several operations. They are
+		// emitted as one instruction slice so the runtime can settle the
+		// whole batch together: every tool_use part in the assistant
+		// message must end up with a matching tool_result, whether the
+		// call ran, was blocked, or was skipped.
+		calls := scratchCalls(state, THINK_THEN_ACT_PENDING_CALLS)
+		if len(calls) == 0 {
+			calls = scratchCalls(state, THINK_THEN_ACT_PENDING_CALL)
+		}
+		if len(calls) == 0 {
 			return state, []core.Instruction{doneInstruction()}
 		}
 		next := state.Clone()
 		scratchSet(&next, THINK_THEN_ACT_PHASE, THINK_THEN_ACT_REFLECT)
-		return next, []core.Instruction{callToolInstruction(call)}
+		// Consume the batch so a re-entry cannot re-dispatch it.
+		delete(next.WorkingMemory, THINK_THEN_ACT_PENDING_CALLS)
+		delete(next.WorkingMemory, THINK_THEN_ACT_PENDING_CALL)
+		insts := make([]core.Instruction, 0, len(calls))
+		for _, c := range calls {
+			insts = append(insts, callToolInstruction(c))
+		}
+		return next, insts
 
 	case THINK_THEN_ACT_REFLECT:
 		next := state.Clone()
@@ -72,7 +92,10 @@ func (p *ThinkThenAct) NextStep(state core.State) (core.State, []core.Instructio
 
 // SeedDispatch lets a driver (test, fixture) install a pending tool call so
 // the next NextStep emits INSTRUCTION_CALL_TOOL.
-func SeedDispatch(s *core.State, call core.ToolCall) {
+func SeedDispatch(s *core.State, calls ...core.ToolCall) {
+	if len(calls) == 0 {
+		return
+	}
 	scratchSet(s, THINK_THEN_ACT_PHASE, THINK_THEN_ACT_DISPATCH)
-	scratchSet(s, THINK_THEN_ACT_PENDING_CALL, call)
+	scratchSet(s, THINK_THEN_ACT_PENDING_CALLS, calls)
 }

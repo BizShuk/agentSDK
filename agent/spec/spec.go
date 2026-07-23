@@ -88,10 +88,16 @@ type Reasoning struct {
 // Limits bounds one run. Zero values mean "no bound from config" — the
 // tier defaults fill in a sane MaxTurns, and app.WithTimeout still caps
 // wall-clock time at the process level.
+// MaxTurns and MaxRounds measure different things and both are kept:
+// a round is one model request plus the tool calls it triggers (what an
+// operator counts), a turn is one Decide iteration (what loopguard
+// counts). MaxToolCalls bounds a single round's tool-call batch.
 type Limits struct {
-	MaxTurns    int    `json:"max_turns,omitempty"`
-	MaxWallTime string `json:"max_wall_time,omitempty"` // Go duration string, e.g. "10m"
-	Autonomy    string `json:"autonomy,omitempty"`      // L0..L4; empty = L2
+	MaxTurns     int    `json:"max_turns,omitempty"`
+	MaxRounds    int    `json:"max_rounds,omitempty"`
+	MaxToolCalls int    `json:"max_tool_calls,omitempty"`
+	MaxWallTime  string `json:"max_wall_time,omitempty"` // Go duration string, e.g. "10m"
+	Autonomy     string `json:"autonomy,omitempty"`      // L0..L4; empty = L2
 }
 
 // Middleware picks a preset chain rather than exposing chain assembly to

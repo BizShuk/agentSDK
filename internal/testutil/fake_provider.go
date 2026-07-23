@@ -47,6 +47,16 @@ func (s *ScriptedProvider) EnqueueToolCall(id, name string, args map[string]any)
 	})
 }
 
+// EnqueueToolCalls queues one response carrying a whole batch — the
+// shape every frontier model emits when it wants parallel operations,
+// and the one the engine has to settle 1:1 with tool_result messages.
+func (s *ScriptedProvider) EnqueueToolCalls(calls ...core.ToolCall) {
+	s.Enqueue(core.ModelResult{
+		StopReason: "tool_use",
+		ToolCalls:  calls,
+	})
+}
+
 // EnqueueEndTurn is sugar for a final assistant message.
 func (s *ScriptedProvider) EnqueueEndTurn(text string) {
 	s.Enqueue(core.ModelResult{

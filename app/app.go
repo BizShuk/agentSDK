@@ -111,32 +111,134 @@ func Run(ctx context.Context, a Agent, opts ...Option) int {
 	start := time.Now()
 	log.Info("run_start", "run_id", state.RunID)
 	final, runErr := safeRun(ctx, engine, state)
-	dur := time.Since(start)
-
 	if runErr != nil {
 		log.Error("run_failed",
 			"run_id", state.RunID,
-			"dur_ms", dur.Milliseconds(),
+			"dur_ms", time.Since(start).Milliseconds(),
 			"turns", final.Turn,
 			"err", runErr)
 		return EXIT_ERROR
+	}
+
+	// 5a. Interactive rounds. A run that stopped is asking the application
+	//     a question — approve this call, or give me the next input. An
+	//     Agent that does not implement Interactive skips this entirely and
+	//     keeps the out-of-process semantics (Run returns, PendingApprovals
+	//     left for an external verb).
+	if in, ok := a.(Interactive); ok {
+		for {
+			reason, asks := pauseReason(final)
+			if !asks {
+				break
+			}
+			res, err := resolveRound(ctx, in, o.roundTimeout, Pause{State: final, Reason: reason})
+			if err != nil {
+				log.Error("next_round failed",
+					"run_id", final.RunID, "reason", string(reason), "err", err)
+				return EXIT_ERROR
+			}
+			if res.Stop || (reason == PAUSE_ROUND_END && res.Input == "") {
+				break
+			}
+			next, err := advance(ctx, engine, final, reason, res)
+			if err != nil {
+				log.Error("advance failed",
+					"run_id", final.RunID, "reason", string(reason), "err", err)
+				return EXIT_ERROR
+			}
+			final = next
+			log.Info("round_advanced",
+				"run_id", final.RunID,
+				"reason", string(reason),
+				"decided_by", res.By,
+				"status", string(final.Status))
+		}
 	}
 
 	// 6. Completion hook. A run whose results could not be delivered did
 	//    not succeed, so an error here fails the process.
 	if c, ok := a.(Completer); ok {
 		if err := c.OnComplete(ctx, final); err != nil {
-			log.Error("on_complete failed", "run_id", state.RunID, "err", err)
+			log.Error("on_complete failed", "run_id", final.RunID, "err", err)
 			return EXIT_ERROR
 		}
 	}
 
 	log.Info("run_done",
-		"run_id", state.RunID,
-		"dur_ms", dur.Milliseconds(),
+		"run_id", final.RunID,
+		"dur_ms", time.Since(start).Milliseconds(),
 		"turns", final.Turn,
+		"rounds", final.Budget.UsedRounds,
 		"status", string(final.Status))
 	return EXIT_OK
+}
+
+// pauseReason classifies a stop into a question for the application, or
+// reports that there is nothing to ask. FAILED and ABORTED return false:
+// they are terminal, and asking the application to continue a failed run
+// would paper over the failure.
+func pauseReason(s core.State) (PauseReason, bool) {
+	switch s.Status {
+	case core.RUN_STATUS_PAUSED_APPROVAL:
+		return PAUSE_APPROVAL, true
+	case core.RUN_STATUS_COMPLETED:
+		return PAUSE_ROUND_END, true
+	default:
+		return "", false
+	}
+}
+
+// resolveRound bounds one NextRound call. cancel is deferred inside THIS
+// function, which returns per call — a defer placed in the caller's loop
+// would hold every pause's timer alive until Run itself returned.
+func resolveRound(ctx context.Context, in Interactive, d time.Duration, p Pause) (Resume, error) {
+	if d <= 0 {
+		return in.NextRound(ctx, p)
+	}
+	rctx, cancel := context.WithTimeout(ctx, d)
+	defer cancel()
+	return in.NextRound(rctx, p)
+}
+
+// advance applies one Resume and drives the engine to its next stop.
+//
+// Two non-obvious mechanics:
+//
+// SubmitHumanDecision ALREADY re-enters runStep and drives the run forward
+// (see runtime/loop.go). Calling Resume afterwards would load the persisted
+// state, find no undecided approval, fall through to WAL replay, and
+// re-execute every logged event — duplicate tool and model calls. So it is
+// deliberately NOT called here.
+//
+// Steer, not FollowUp, carries the new input. FollowUp only fires from
+// inside runStep when the loop would otherwise complete; by the time Run
+// sees a status the engine has already returned, so the queue would never
+// be read. Steer is drained at the top of the next Decide, which is exactly
+// where a new user message belongs.
+func advance(ctx context.Context, e *runtime.Engine, s core.State, reason PauseReason, res Resume) (core.State, error) {
+	if res.Input != "" {
+		e.Steer(res.Input)
+	}
+	if reason == PAUSE_APPROVAL {
+		by := res.By
+		if by == "" {
+			by = "interactive"
+		}
+		decision := res.Decision
+		if decision == "" {
+			// No answer is not consent for a call the policy flagged.
+			decision = core.APPROVAL_DECISION_REJECT
+		}
+		return e.SubmitHumanDecision(ctx, s.RunID, decision, by)
+	}
+	// PAUSE_ROUND_END: runStep short-circuits on a COMPLETED status, so the
+	// run has to be reopened before the steered message can be seen. Reset
+	// the FSM phase so it re-enters reasoning instead of emitting DONE on
+	// stale dispatch memory (the same seam the follow-up queue uses).
+	next := s.Clone()
+	next.Status = core.RUN_STATUS_RUNNING
+	delete(next.WorkingMemory, "think_then_act.phase")
+	return e.Run(ctx, next)
 }
 
 // safeRun drives the engine with panic recovery.

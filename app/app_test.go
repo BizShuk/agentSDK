@@ -17,6 +17,8 @@ import (
 	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/internal/testutil"
+	"github.com/bizshuk/agentsdk/middleware"
+	"github.com/bizshuk/agentsdk/middleware/security"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
 )
@@ -240,4 +242,178 @@ type deadlineProbe struct {
 func (a *deadlineProbe) Bootstrap(ctx context.Context, cfg *config.AppConfig) (*runtime.Engine, core.State, error) {
 	a.probe(ctx)
 	return a.testAgent.Bootstrap(ctx, cfg)
+}
+
+// --- Interactive seam (Task 3) ---
+
+// alwaysAsk is an ApprovalPolicy that gates every tool call, so a run
+// reaches PAUSED_APPROVAL on its first CALL_TOOL.
+type alwaysAsk struct{}
+
+func (alwaysAsk) Decide(_ struct{}, _ core.AutonomyLevel, _ core.CallToolInstruction, _ core.ToolSpec) core.ApprovalAction {
+	return core.APPROVAL_ACTION_ASK
+}
+
+// pausingEngine builds an engine whose first tool call trips the approval
+// gate — the run pauses at PAUSED_APPROVAL until a decision arrives.
+func pausingEngine() (*runtime.Engine, core.State) {
+	prov := testutil.NewScriptedProvider()
+	prov.EnqueueToolCall("c1", "echo", map[string]any{"msg": "hi"})
+	prov.EnqueueEndTurn("done")
+	reg := action.NewRegistry()
+	reg.Register(echoTool{})
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: planning.NewThinkThenAct(),
+	})
+	eng := runtime.NewEngine(step, prov, reg)
+	eng.Middleware = middleware.Chain(security.ApprovalGate(alwaysAsk{}))
+	return eng, core.State{
+		ReasoningStyle: core.REASON_REACT,
+		Autonomy:       core.AUTONOMY_L2,
+		Budget:         core.Budget{MaxTurns: 10},
+	}
+}
+
+// chatEngine builds an engine that completes immediately (end_turn), then
+// completes again after a follow-up — the ROUND_END path.
+func chatEngine() (*runtime.Engine, core.State) {
+	prov := testutil.NewScriptedProvider()
+	prov.EnqueueEndTurn("first answer")
+	prov.EnqueueEndTurn("second answer")
+	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: planning.NewThinkThenAct(),
+	})
+	eng := runtime.NewEngine(step, prov, action.NewRegistry())
+	return eng, core.State{ReasoningStyle: core.REASON_REACT, Budget: core.Budget{MaxTurns: 10}}
+}
+
+// interactiveAgent implements app.Interactive; boot picks the engine shape.
+type interactiveAgent struct {
+	name        string
+	boot        func() (*runtime.Engine, core.State)
+	next        func(context.Context, app.Pause) (app.Resume, error)
+	final       core.State
+	completeRan bool
+}
+
+func (a *interactiveAgent) Name() string { return a.name }
+
+func (a *interactiveAgent) Bootstrap(_ context.Context, _ *config.AppConfig) (*runtime.Engine, core.State, error) {
+	eng, st := a.boot()
+	return eng, st, nil
+}
+
+func (a *interactiveAgent) NextRound(ctx context.Context, p app.Pause) (app.Resume, error) {
+	return a.next(ctx, p)
+}
+
+func (a *interactiveAgent) OnComplete(_ context.Context, final core.State) error {
+	a.completeRan = true
+	a.final = final
+	return nil
+}
+
+// pausingAgent pauses but does NOT implement Interactive — the fallback
+// case that must still exit cleanly.
+type pausingAgent struct {
+	name        string
+	final       core.State
+	completeRan bool
+}
+
+func (a *pausingAgent) Name() string { return a.name }
+func (a *pausingAgent) Bootstrap(_ context.Context, _ *config.AppConfig) (*runtime.Engine, core.State, error) {
+	eng, st := pausingEngine()
+	return eng, st, nil
+}
+func (a *pausingAgent) OnComplete(_ context.Context, final core.State) error {
+	a.completeRan = true
+	a.final = final
+	return nil
+}
+
+// TestRunConsultsInteractiveOnApprovalPause: an approval pause is routed to
+// NextRound, and an APPROVE answer carries the run to COMPLETED.
+func TestRunConsultsInteractiveOnApprovalPause(t *testing.T) {
+	const name = "agentsdk-app-test-interactive-approve"
+	cleanupAppDir(t, name)
+
+	var seen []app.PauseReason
+	a := &interactiveAgent{
+		name: name,
+		boot: pausingEngine,
+		next: func(_ context.Context, p app.Pause) (app.Resume, error) {
+			seen = append(seen, p.Reason)
+			if p.Reason == app.PAUSE_APPROVAL {
+				return app.Resume{Decision: core.APPROVAL_DECISION_APPROVE, By: "tester"}, nil
+			}
+			return app.Resume{Stop: true}, nil
+		},
+	}
+	code := app.Run(context.Background(), a, app.WithRoundTimeout(5*time.Second))
+	require.Equal(t, app.EXIT_OK, code)
+	assert.Contains(t, seen, app.PAUSE_APPROVAL)
+	assert.True(t, a.completeRan)
+	assert.Equal(t, core.RUN_STATUS_COMPLETED, a.final.Status)
+}
+
+// TestRunInteractiveRejectCompletesRun: a REJECT answer ends the run
+// without the gated tool ever executing.
+func TestRunInteractiveRejectCompletesRun(t *testing.T) {
+	const name = "agentsdk-app-test-interactive-reject"
+	cleanupAppDir(t, name)
+
+	a := &interactiveAgent{
+		name: name,
+		boot: pausingEngine,
+		next: func(_ context.Context, p app.Pause) (app.Resume, error) {
+			if p.Reason == app.PAUSE_APPROVAL {
+				return app.Resume{Decision: core.APPROVAL_DECISION_REJECT, By: "tester"}, nil
+			}
+			return app.Resume{Stop: true}, nil
+		},
+	}
+	code := app.Run(context.Background(), a)
+	require.Equal(t, app.EXIT_OK, code)
+	assert.True(t, a.completeRan)
+	assert.Equal(t, core.RUN_STATUS_COMPLETED, a.final.Status)
+}
+
+// TestRunFollowUpReopensCompletedRun: a completed run is offered back to
+// the application, which feeds one more input before stopping.
+func TestRunFollowUpReopensCompletedRun(t *testing.T) {
+	const name = "agentsdk-app-test-interactive-followup"
+	cleanupAppDir(t, name)
+
+	var rounds int
+	a := &interactiveAgent{
+		name: name,
+		boot: chatEngine,
+		next: func(_ context.Context, p app.Pause) (app.Resume, error) {
+			rounds++
+			assert.Equal(t, app.PAUSE_ROUND_END, p.Reason)
+			if rounds == 1 {
+				return app.Resume{Input: "one more question"}, nil
+			}
+			return app.Resume{}, nil // empty input at round_end → stop
+		},
+	}
+	code := app.Run(context.Background(), a)
+	require.Equal(t, app.EXIT_OK, code)
+	assert.Equal(t, 2, rounds, "asked after the first completion and after the follow-up")
+	assert.True(t, a.completeRan)
+}
+
+// TestRunExitsOnPauseWithoutInteractive: an Agent that pauses but does not
+// implement Interactive still exits cleanly, leaving the pause persisted.
+func TestRunExitsOnPauseWithoutInteractive(t *testing.T) {
+	const name = "agentsdk-app-test-no-interactive"
+	cleanupAppDir(t, name)
+
+	a := &pausingAgent{name: name}
+	code := app.Run(context.Background(), a)
+	require.Equal(t, app.EXIT_OK, code, "no Interactive → clean exit")
+	assert.True(t, a.completeRan)
+	assert.Equal(t, core.RUN_STATUS_PAUSED_APPROVAL, a.final.Status,
+		"the pause is left for an external verb")
 }

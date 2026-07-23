@@ -1,6 +1,7 @@
 package planning
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
@@ -49,16 +50,49 @@ func scratchInt(state core.State, key string, def int) int {
 	return def
 }
 
-func scratchCall(state core.State, key string) (core.ToolCall, bool) {
+// scratchCalls reads a pending tool-call batch from working memory.
+func scratchCalls(state core.State, key string) []core.ToolCall {
 	if state.WorkingMemory == nil {
-		return core.ToolCall{}, false
+		return nil
 	}
-	v, ok := state.WorkingMemory[key]
-	if !ok {
-		return core.ToolCall{}, false
+	return decodeCalls(state.WorkingMemory[key])
+}
+
+// decodeCalls normalizes every shape a pending-call entry can take.
+//
+// Working memory survives a JSON round-trip through StateStore, so a
+// value written in-process as core.ToolCall reads back after a Load as
+// map[string]any. The plain type assertion this replaces returned false
+// there, and ThinkThenAct's dispatch phase then emitted DONE instead of
+// re-issuing the call — a crash mid-dispatch silently completed the run
+// instead of resuming it. Decoding by shape removes that whole class of
+// bug rather than patching the one path that surfaced it.
+//
+// The singular cases are kept because state persisted before batch
+// dispatch stores a single ToolCall.
+func decodeCalls(v any) []core.ToolCall {
+	switch x := v.(type) {
+	case nil:
+		return nil
+	case []core.ToolCall:
+		return x
+	case core.ToolCall:
+		return []core.ToolCall{x}
+	default:
+		raw, err := json.Marshal(x)
+		if err != nil {
+			return nil
+		}
+		var many []core.ToolCall
+		if err := json.Unmarshal(raw, &many); err == nil && len(many) > 0 {
+			return many
+		}
+		var one core.ToolCall
+		if err := json.Unmarshal(raw, &one); err == nil && one.Name != "" {
+			return []core.ToolCall{one}
+		}
+		return nil
 	}
-	tc, ok := v.(core.ToolCall)
-	return tc, ok
 }
 
 // scratchStringSlice reads a []string from working memory. Missing key or

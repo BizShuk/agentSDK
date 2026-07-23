@@ -201,6 +201,14 @@ func (a *Agent) Bootstrap(ctx context.Context, ac *appconfig.AppConfig) (*runtim
 		}
 	}
 
+	// Spawn the listener pump last so the engine is fully wired before any
+	// observation can Steer into it. The goroutine terminates when ctx is
+	// cancelled (signal or deadline) OR when the listener closes its
+	// channel — whichever happens first.
+	if a.deps.listener != nil {
+		go pumpListener(ctx, eng, a.deps.listener)
+	}
+
 	a.parts = &Parts{
 		Engine: eng, Sessions: sessions, Skills: skills, Prompt: builderP,
 		Config: a.cfg, AppConfig: ac, Cwd: cwd,
@@ -535,7 +543,11 @@ func (a *Agent) seedState(ctx context.Context, ac *appconfig.AppConfig, b prompt
 		RunID:          ac.RunID,
 		ReasoningStyle: core.ReasoningStyle(a.cfg.Reasoning.Style),
 		Autonomy:       autonomyLevel(a.cfg.Limits.Autonomy),
-		Budget:         core.Budget{MaxTurns: a.cfg.Limits.MaxTurns},
+		Budget: core.Budget{
+			MaxTurns:     a.cfg.Limits.MaxTurns,
+			MaxRounds:    a.cfg.Limits.MaxRounds,
+			MaxToolCalls: a.cfg.Limits.MaxToolCalls,
+		},
 	}
 	msgs, err := b.Seed(ctx, prompt.Req{Cwd: cwd, State: state})
 	if err != nil {
@@ -569,5 +581,44 @@ func autonomyLevel(s string) core.AutonomyLevel {
 		return core.AUTONOMY_L4
 	default:
 		return core.AUTONOMY_L2
+	}
+}
+
+// pumpListener drains an ObservationSource and forwards each payload to
+// Engine.Steer so the next Decide cycle sees it as a user message. The
+// goroutine exits when ctx is cancelled OR when the source closes its
+// channel — whichever happens first.
+//
+// Engine.Steer is concurrent-safe, so the goroutine can run alongside
+// the engine loop without further synchronization. Empty payloads are
+// dropped here rather than queued, since the engine's no-message-loop
+// would otherwise block on them.
+func pumpListener(ctx context.Context, eng *runtime.Engine, src core.ObservationSource) {
+	for obs := range src.Observations(ctx) {
+		if ctx.Err() != nil {
+			return
+		}
+		if text := payloadToString(obs.Payload); text != "" {
+			eng.Steer(text)
+		}
+	}
+}
+
+// payloadToString flattens an observation payload into a single user
+// message. The most common case is a string from a log listener; the
+// Stringer fallback covers structured payloads that know how to render
+// themselves; the catch-all handles anything else with %v formatting.
+// Empty results drop the observation (Engine.Steer would also filter
+// empties, but skipping here keeps the queue clean).
+func payloadToString(p any) string {
+	switch v := p.(type) {
+	case nil:
+		return ""
+	case string:
+		return v
+	case fmt.Stringer:
+		return v.String()
+	default:
+		return fmt.Sprintf("%v", v)
 	}
 }

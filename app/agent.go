@@ -68,3 +68,68 @@ type Preflighter interface {
 type Completer interface {
 	OnComplete(ctx context.Context, final core.State) error
 }
+
+// PauseReason classifies why a run stopped without the application being
+// done with it. It is the discriminator on Pause.
+type PauseReason string
+
+const (
+	// PAUSE_APPROVAL — the run holds an undecided PendingApproval. This
+	// covers both a per-call approval gate and the continue-gate raised
+	// when a whole tool batch is skipped over the tool-call budget.
+	PAUSE_APPROVAL PauseReason = "approval"
+	// PAUSE_ROUND_END — the run reached COMPLETED and would exit, but an
+	// interactive application may still have a follow-up to add.
+	PAUSE_ROUND_END PauseReason = "round_end"
+)
+
+// Pause is what Run hands the application when a run stops but is not yet
+// finished with. Reason says why; State is the run at the moment it
+// stopped (PendingApprovals populated when Reason is PAUSE_APPROVAL).
+type Pause struct {
+	State  core.State
+	Reason PauseReason
+}
+
+// Resume is the application's answer to a Pause.
+//
+// Decision is read only when Reason == PAUSE_APPROVAL; an empty value
+// there is treated as REJECT, because "no answer" must never be read as
+// consent for a call the policy already flagged.
+//
+// Input is appended as a user message before the next round, whatever the
+// reason — approving a call AND adding a correction is one round trip.
+//
+// Stop ends the run immediately. At PAUSE_ROUND_END an empty Input with
+// Stop=false also ends it: nothing to add means done.
+//
+// By attributes the decision in the audit trail (PendingApproval.DecidedBy).
+type Resume struct {
+	Decision core.ApprovalDecision
+	Input    string
+	Stop     bool
+	By       string
+}
+
+// Interactive is the single seam for everything a run needs from the
+// application mid-flight: approval decisions AND follow-up input. They are
+// the same question — "the run stopped and is not terminal, what next?" —
+// asked at different pause reasons, so they are one method rather than the
+// three (pause / resolve / reject) an earlier draft split them into.
+//
+// The Agent owns the input side and decides where the answer comes from:
+// stdin, an HTTP endpoint, a Kafka topic, a policy lookup, a channel fed
+// by Sink callbacks. Notification, audit, and rollback belong INSIDE
+// NextRound; they need the same ctx and the same State and would earn
+// nothing as separate interfaces.
+//
+// Implementations MUST honor ctx cancellation: Run blocks here until an
+// answer arrives or the process is asked to stop (SIGINT/SIGTERM,
+// WithRoundTimeout, or WithTimeout).
+//
+// An Agent that does not implement Interactive keeps today's behavior:
+// Run returns on the pause and the persisted PendingApprovals are left for
+// an out-of-process verb (e.g. `approve --run-id`) to decide.
+type Interactive interface {
+	NextRound(ctx context.Context, p Pause) (Resume, error)
+}

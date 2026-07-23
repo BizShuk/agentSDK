@@ -125,6 +125,43 @@ func blockedToolResult(call core.ToolCall, reason string) core.ToolResult {
 	return core.ToolResult{CallID: call.ID, Name: call.Name, OK: false, Error: reason}
 }
 
+// skippedToolResult is the result of a call that never ran. It is kept
+// distinct from blockedToolResult so the model can tell "policy refused
+// this" apart from "there was no room for this".
+func skippedToolResult(call core.ToolCall, reason string) core.ToolResult {
+	return core.ToolResult{CallID: call.ID, Name: call.Name, OK: false, Error: reason}
+}
+
+// settleSkipped closes out tool calls that will never dispatch.
+//
+// The invariant it protects: an assistant message carrying N tool_use
+// parts must be followed by N tool_result messages before the next
+// CALL_MODEL. Anthropic-format providers reject the request otherwise,
+// and every model reads a missing result as "still running", so it
+// re-requests the same operations next round. A pause, a tool-call
+// budget trip, or any terminal instruction mid-batch leaves calls
+// unrun — each one gets an explicit failed result instead of vanishing.
+func settleSkipped(s core.State, calls []core.ToolCall, reason string) core.State {
+	for _, c := range calls {
+		s = appendToolResultMessage(s, skippedToolResult(c, reason))
+	}
+	return s
+}
+
+// settleUnrun is settleSkipped over the tail of an instruction slice,
+// for the mid-batch case where the remaining work is still in
+// instruction form. Non-CALL_TOOL instructions carry no transcript
+// obligation and are ignored.
+func settleUnrun(s core.State, rest []core.Instruction, reason string) core.State {
+	calls := make([]core.ToolCall, 0, len(rest))
+	for _, inst := range rest {
+		if inst.Kind == core.INSTRUCTION_CALL_TOOL && inst.CallTool != nil {
+			calls = append(calls, inst.CallTool.Call)
+		}
+	}
+	return settleSkipped(s, calls, reason)
+}
+
 // appendToolResultMessage mirrors runInstruction's CALL_TOOL fold for
 // synthesized (hook-blocked) results.
 func appendToolResultMessage(s core.State, res core.ToolResult) core.State {

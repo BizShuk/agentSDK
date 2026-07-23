@@ -12,7 +12,7 @@ import (
 // tripped. The runtime treats it as a fatal loop exit (state.Status =
 // RUN_STATUS_FAILED).
 type BudgetExceededError struct {
-	Reason string // "turn_budget" | "token_budget" | "wall_time_budget"
+	Reason string // "turn_budget" | "round_budget" | "token_budget" | "wall_time_budget"
 }
 
 // Error implements error.

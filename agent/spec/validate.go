@@ -70,6 +70,19 @@ func (c Config) Validate() error {
 	if c.Limits.MaxTurns < 0 {
 		add("spec: limits.max_turns must not be negative, got %d", c.Limits.MaxTurns)
 	}
+	if c.Limits.MaxRounds < 0 {
+		add("spec: limits.max_rounds must not be negative, got %d", c.Limits.MaxRounds)
+	}
+	if c.Limits.MaxToolCalls < 0 {
+		add("spec: limits.max_tool_calls must not be negative, got %d", c.Limits.MaxToolCalls)
+	}
+	// A round costs at least one turn, so a turn ceiling below the round
+	// ceiling makes the round budget unreachable — always a swapped pair
+	// rather than an intent.
+	if c.Limits.MaxTurns > 0 && c.Limits.MaxRounds > 0 && c.Limits.MaxTurns < c.Limits.MaxRounds {
+		add("spec: limits.max_turns (%d) is below limits.max_rounds (%d) — a round costs at least one turn, so the round budget could never be reached",
+			c.Limits.MaxTurns, c.Limits.MaxRounds)
+	}
 	if c.Limits.MaxWallTime != "" {
 		if _, err := time.ParseDuration(c.Limits.MaxWallTime); err != nil {
 			add("spec: limits.max_wall_time %q is not a Go duration: %v", c.Limits.MaxWallTime, err)

@@ -28,6 +28,20 @@ const (
 	DEFAULT_SUBAGENT_TURNS  = 10
 	DEFAULT_ONESHOT_TURNS   = 2
 	DEFAULT_STANDARD_TURNS  = 40
+
+	// Rounds are the operator-facing budget; turns are the internal
+	// guard. The ladder mirrors the *_TURNS one branch for branch, and
+	// stays below it — a round costs at least one turn, and for ReAct
+	// about three.
+	DEFAULT_MAX_ROUNDS      = 10
+	DEFAULT_ONESHOT_ROUNDS  = 1
+	DEFAULT_STANDARD_ROUNDS = 30
+
+	// Tool-call ceilings per round. TIER_ONESHOT registers no tools, so
+	// its bound is left unset (0 = unbounded) rather than given a value
+	// that can never be reached.
+	DEFAULT_MAX_TOOL_CALLS      = 4
+	DEFAULT_STANDARD_TOOL_CALLS = 8
 	MIDDLEWARE_NONE         = "none"
 	MIDDLEWARE_DEFAULT      = "default"
 	MIDDLEWARE_SECURE       = "secure"
@@ -112,6 +126,32 @@ func (c Config) Expand() (Config, error) {
 			out.Limits.MaxTurns = DEFAULT_STANDARD_TURNS
 		default:
 			out.Limits.MaxTurns = DEFAULT_MAX_TURNS
+		}
+	}
+	if out.Limits.MaxRounds == 0 {
+		switch {
+		case rank == tierRank[TIER_ONESHOT]:
+			out.Limits.MaxRounds = DEFAULT_ONESHOT_ROUNDS
+		case rank >= tierRank[TIER_STANDARD]:
+			out.Limits.MaxRounds = DEFAULT_STANDARD_ROUNDS
+		default:
+			out.Limits.MaxRounds = DEFAULT_MAX_ROUNDS
+		}
+		// A caller who set only MaxTurns must still get a round default
+		// that fits under it. Otherwise the tier default could exceed an
+		// explicit turn ceiling and Validate would reject a pairing the
+		// caller never wrote.
+		if out.Limits.MaxTurns > 0 {
+			out.Limits.MaxRounds = min(out.Limits.MaxRounds, out.Limits.MaxTurns)
+		}
+	}
+	// TIER_ONESHOT is deliberately absent: it registers no tools, so a
+	// per-round tool-call ceiling there would be dead configuration.
+	if out.Limits.MaxToolCalls == 0 && rank > tierRank[TIER_ONESHOT] {
+		if rank >= tierRank[TIER_STANDARD] {
+			out.Limits.MaxToolCalls = DEFAULT_STANDARD_TOOL_CALLS
+		} else {
+			out.Limits.MaxToolCalls = DEFAULT_MAX_TOOL_CALLS
 		}
 	}
 

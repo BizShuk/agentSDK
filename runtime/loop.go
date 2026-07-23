@@ -13,6 +13,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -86,6 +87,14 @@ func (e *Engine) runInstruction(ctx context.Context, s core.State, inst core.Ins
 		if len(tools) == 0 && e.Tools != nil {
 			tools = e.Tools.List()
 		}
+		// A round is one model request plus the tool calls it triggers.
+		// Counting lives here (the runtime always tracks usage); the cap
+		// is enforced by the Budget middleware, which reads UsedRounds on
+		// the NEXT dispatch. On a retried failure the retry middleware
+		// discards this state and re-runs from the pre-call snapshot, so
+		// a round that only succeeds after N provider attempts still
+		// counts once.
+		s.Budget.UsedRounds++
 		mr, err := e.Model.Generate(ctx, core.ModelRequest{
 			Messages: inst.CallModel.Messages,
 			Tools:    tools,
@@ -244,7 +253,8 @@ func (e *Engine) consumeApprovedPendingCall(s core.State) core.State {
 			continue
 		}
 		// Decided. Consume it.
-		if pa.Decision == core.APPROVAL_DECISION_APPROVE && pa.ToolCall != nil {
+		switch {
+		case pa.Decision == core.APPROVAL_DECISION_APPROVE && pa.ToolCall != nil:
 			if s.WorkingMemory == nil {
 				s.WorkingMemory = make(map[string]any, 4)
 			}
@@ -255,7 +265,16 @@ func (e *Engine) consumeApprovedPendingCall(s core.State) core.State {
 			s.WorkingMemory["think_then_act.approved_call_id"] = pa.ToolCall.ID
 			s.Status = core.RUN_STATUS_RUNNING
 			approved = true
-		} else if pa.Decision == core.APPROVAL_DECISION_REJECT {
+		case pa.Decision == core.APPROVAL_DECISION_APPROVE:
+			// A continue-gate: an approval with no specific tool call,
+			// raised when the whole tool batch was skipped (tool-call
+			// budget). Approving means "resume the run" — there is nothing
+			// to re-dispatch, so just clear the pause. The FSM was left in
+			// reflect at pause time, so the next Decide re-reads the
+			// skipped results and re-plans.
+			s.Status = core.RUN_STATUS_RUNNING
+			approved = true
+		case pa.Decision == core.APPROVAL_DECISION_REJECT:
 			s.Status = core.RUN_STATUS_COMPLETED
 		}
 	}
@@ -412,7 +431,54 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 			return preStep, nil
 		}
 		if event.ModelResult != nil && len(event.ModelResult.ToolCalls) > 0 {
-			preStep.WorkingMemory["think_then_act.pending_call"] = event.ModelResult.ToolCalls[0]
+			// The whole batch is seeded, not just the head: the assistant
+			// message runInstruction already appended carries every
+			// tool_use part, so every one of them owes a tool_result.
+			//
+			// The key is a literal rather than a planning constant because
+			// runtime must not import planning (see CLAUDE.md dependency
+			// discipline); working memory is the agreed lingua franca.
+			calls := event.ModelResult.ToolCalls
+			if n := preStep.Budget.MaxToolCalls; n > 0 && len(calls) > n {
+				// Over the per-round ceiling. Skip the WHOLE batch — not
+				// just the excess — settle every call so the transcript
+				// stays 1:1, then pause for a human resume/stop decision
+				// rather than silently trimming. Executing a partial batch
+				// would let the model act on a subset it did not choose;
+				// pausing hands the call to the operator (or an
+				// ApprovalResolver) instead.
+				reason := fmt.Sprintf("tool call budget %d exceeded (%d requested): whole batch skipped, run paused", n, len(calls))
+				preStep = settleSkipped(preStep, calls, "skipped: "+reason)
+				names := make([]string, 0, len(calls))
+				for _, c := range calls {
+					names = append(names, c.Name)
+				}
+				// A continue-gate approval: no ToolCall, because the
+				// decision is "resume the run" not "run this one call".
+				preStep.PendingApprovals = append(preStep.PendingApprovals, core.PendingApproval{
+					ID:          fmt.Sprintf("toolbudget-%d", preStep.Turn),
+					Reason:      "tool_call_budget",
+					Risk:        core.RISK_LEVEL_HIGH,
+					Summary:     reason,
+					RequestedAt: time.Now().UTC(),
+				})
+				preStep.Status = core.RUN_STATUS_PAUSED_APPROVAL
+				// Leave the FSM in reflect so an approved resume re-reads
+				// the skipped results and re-plans instead of re-issuing
+				// the oversized batch.
+				preStep.WorkingMemory["think_then_act.phase"] = "reflect"
+				slog.Warn("tool_call_budget_exceeded",
+					"run_id", preStep.RunID,
+					"turn", preStep.Turn,
+					"limit", n,
+					"requested", len(calls),
+					"skipped", names)
+				if e.Store != nil {
+					_ = e.Store.Save(ctx, preStep)
+				}
+				return preStep, nil
+			}
+			preStep.WorkingMemory["think_then_act.pending_calls"] = calls
 		}
 		if event.ToolResult != nil {
 			preStep.WorkingMemory["think_then_act.last_result"] = event.ToolResult.CallID
@@ -441,7 +507,7 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 
 		var nextEvent *core.Event
 		terminal := false
-		for _, inst := range instructions {
+		for i, inst := range instructions {
 			// Backfill the tool's declared risk onto CALL_TOOL
 			// instructions before they hit the chain. The model's ToolCall
 			// carries no risk; the ApprovalGate needs the tool-defined
@@ -509,6 +575,11 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 				if out != nil {
 					nextEvent = out
 				}
+				// Anything still queued behind a terminal instruction —
+				// typically an approval pause rewritten from CALL_TOOL —
+				// will never dispatch. Settle it so the assistant turn's
+				// tool_use parts stay 1:1 with tool_result.
+				next = settleUnrun(next, instructions[i+1:], "skipped: run stopped before dispatch")
 				break
 			}
 			if out != nil && nextEvent == nil {

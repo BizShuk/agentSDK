@@ -70,8 +70,24 @@ func (s RunStatus) Terminal() bool {
 
 // Budget caps the resources consumed by a single run.
 type Budget struct {
-	MaxTurns    int           `json:"max_turns"`
-	UsedTurns   int           `json:"used_turns"`
+	MaxTurns  int `json:"max_turns"`
+	UsedTurns int `json:"used_turns"`
+
+	// MaxRounds caps CALL_MODEL dispatches. A round is one model request
+	// plus every tool call it triggers — the unit an operator actually
+	// reasons about. MaxTurns counts Decide iterations instead, which for
+	// ReAct runs ~3x higher for the same work (reason → dispatch →
+	// reflect); it stays as the runaway guard loopguard depends on.
+	MaxRounds  int `json:"max_rounds,omitempty"`
+	UsedRounds int `json:"used_rounds,omitempty"`
+
+	// MaxToolCalls caps operations within ONE round. Zero = unbounded.
+	// Excess calls are settled with a failed tool_result rather than
+	// dropped: an assistant turn carrying N tool_use parts must be
+	// followed by N tool_result messages, so a silent truncation would
+	// produce a transcript the provider rejects.
+	MaxToolCalls int `json:"max_tool_calls,omitempty"`
+
 	MaxTokens   int           `json:"max_tokens"`
 	UsedTokens  int           `json:"used_tokens"`
 	MaxWallTime time.Duration `json:"max_wall_time"`
@@ -83,6 +99,9 @@ type Budget struct {
 func (b Budget) Exceeded() (bool, string) {
 	if b.MaxTurns > 0 && b.UsedTurns >= b.MaxTurns {
 		return true, "turn_budget"
+	}
+	if b.MaxRounds > 0 && b.UsedRounds >= b.MaxRounds {
+		return true, "round_budget"
 	}
 	if b.MaxTokens > 0 && b.UsedTokens >= b.MaxTokens {
 		return true, "token_budget"
