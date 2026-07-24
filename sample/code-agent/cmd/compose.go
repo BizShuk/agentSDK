@@ -17,7 +17,7 @@ import (
 	"github.com/bizshuk/agentsdk/agent/spec"
 	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/provider/registry"
+	"github.com/bizshuk/agentsdk/provider"
 )
 
 // PROJECT_DIR is the project-local harness directory (skills / commands /

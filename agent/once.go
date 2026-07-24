@@ -9,7 +9,7 @@ import (
 	"github.com/bizshuk/agentsdk/agent/spec"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/planning"
-	"github.com/bizshuk/agentsdk/provider/registry"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/runtime"
 )
 

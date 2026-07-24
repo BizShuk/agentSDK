@@ -62,7 +62,7 @@ echo ping | go run ./sample/skeleton-demo
 
 ## Compare against the wizard output
 
-The Config block is the literal `cmd/wizard.go::goLiteral` output for `-t basic`, with three explicit edits documented in `main.go`:
+The Config block is the literal `cmd/agent/wizard.go::goLiteral` output for `-t basic`, with three explicit edits documented in `main.go`:
 
 ```bash
 cd /Users/shuk/projects/ai/agentSDK

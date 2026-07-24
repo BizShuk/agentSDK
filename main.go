@@ -20,7 +20,8 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/cmd"
-	"github.com/bizshuk/agentsdk/cmd/wizard"
+	"github.com/bizshuk/agentsdk/cmd/agent/wizard"
+	_ "github.com/bizshuk/agentsdk/provider/all"
 	"github.com/spf13/cobra"
 )
 

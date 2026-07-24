@@ -206,7 +206,7 @@ effect done            ← end_turn
 | Proxy     | 3×3 pairwise protocol transform、provider profile routing、SSE hardening                             | ✅ 完成     |
 | Format    | 四來源 `37` 個 client/provider wire-format entity catalog                                            | ✅ 完成     |
 | Harness   | hooks / permission / session / contextfile / skill / subagent / wire / tui skeleton + steering queue | 🚧 skeleton |
-| Agent     | 宣告式組裝：`agent/spec` + `agent` 8 stage pipeline + `prompt` + `provider/registry` + `wizard` 子指令 | ✅ 完成     |
+| Agent     | 宣告式組裝：`agent/spec` + `agent` 8 stage pipeline + `prompt` + `provider`（registry）+ `wizard` 子指令 | ✅ 完成     |
 
 詳細規格見 `docs/specs/` 與 `plans/`（proxy 規格已隨 repo 移出）,root milestone 實作完成後會轉為 `docs/specs/YYYY-MM-DD-<feature>.md`:
 

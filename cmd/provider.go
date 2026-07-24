@@ -13,7 +13,8 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/provider/registry"
+	_ "github.com/bizshuk/agentsdk/provider/all"
+	"github.com/bizshuk/agentsdk/provider"
 	gosdkconfig "github.com/bizshuk/gosdk/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -172,7 +173,7 @@ func ResetFlags() {
 // provider registry
 // ---------------------------------------------------------------------------
 
-// The name → adapter mapping lives in provider/registry, shared with the
+// The name → adapter mapping lives in provider, shared with the
 // agent composition layer so a config file and this CLI cannot disagree
 // about which providers exist or how their credentials resolve.
 

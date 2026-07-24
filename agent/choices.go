@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/agent/spec"
-	"github.com/bizshuk/agentsdk/provider/registry"
+	"github.com/bizshuk/agentsdk/provider"
 )
 
 // The spec types are aliased so an application importing only agent can

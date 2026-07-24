@@ -334,7 +334,7 @@ flowchart TD
     SPEC["agent/spec：Config、Choice、Validate、Load、tier 展開"]
     AG["agent：builder —— 8 stage pipeline"]
     CFG["config：runtime wiring（dirs / slog / FileStore / middleware preset）"]
-    WIZ["cmd/wizard.go"]
+    WIZ["cmd/agent/wizard.go"]
 
     SPEC -->|"只 import core"| CORE
     AG -->|"讀 schema"| SPEC
@@ -544,7 +544,7 @@ wizard `不`做的事：不建 Agent、不打 provider、不驗證憑證——�
 | `M4` | 完成 | `agent/build.go` + `agent/options.go`：8 stage pipeline、`New`/`Bootstrap`/`Preflight`、全部 `With*` | 每個 block nil/非 nil 各一組 assert Engine 欄位 |
 | `M5` | 完成 | provider registry（name → constructor），與 `cmd/provider.go` 共用 | `--list-providers` 與 Config 同一份來源 |
 | `M6` | 完成 | 用 `agent` 重寫 `sample/code-agent/cmd/compose.go`，`333` 行 → `<80` | 現有 `compose_test.go` 與互動/print/json 三模式行為不變 |
-| `M7` | 完成 | `agent.ProviderChoices()` + `cmd/wizard.go`（`wizard` / `w`），掛進 `main.go` | `-y --tier <每一階>` 產出的四份 YAML 都通過 `Validate()`；`--edit` round-trip 不失真；階段跳過規則 table test |
+| `M7` | 完成 | `agent.ProviderChoices()` + `cmd/agent/wizard.go`（`wizard` / `w`），掛進 `main.go` | `-y --tier <每一階>` 產出的四份 YAML 都通過 `Validate()`；`--edit` round-trip 不失真；階段跳過規則 table test |
 
 ## 不做的事
 

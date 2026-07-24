@@ -9,7 +9,7 @@ import (
 
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
-	"github.com/bizshuk/agentsdk/cmd/wizard"
+	"github.com/bizshuk/agentsdk/cmd/agent/wizard"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

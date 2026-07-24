@@ -1,11 +1,16 @@
 // Package registry is the single place that maps a provider name to its
 // adapter constructor.
 //
-// It exists because the name → adapter mapping had two owners: the
-// provider smoke-test CLI and every composition root that read a provider
-// name from config. Two owners means drift — a newly added adapter that
-// works from the CLI but not from a config file, or credential env
-// precedence that differs between them.
+// Adapters register themselves from their package init() — the registry
+// imports no adapter. Each binary decides which adapters to link by
+// blank-importing them (or provider/all for the full set); Go's linker
+// drops the rest, so a slim binary only pays for the adapters it asked
+// for. The set of "registered providers" is therefore a property of the
+// linking binary, not of this package.
+//
+// Registration is one-shot per name. A duplicate Register panics so
+// init-time contract violations surface immediately, the way
+// database/sql/driver registers do.
 //
 // Environment lookup is INJECTED rather than imported. The CLI resolves
 // credentials through gosdk/viper so that .env and config.yaml
@@ -19,13 +24,9 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/bizshuk/agentsdk/core"
-	anthropicprovider "github.com/bizshuk/agentsdk/provider/anthropic"
-	googleprovider "github.com/bizshuk/agentsdk/provider/google"
-	grokprovider "github.com/bizshuk/agentsdk/provider/grok"
-	minimaxprovider "github.com/bizshuk/agentsdk/provider/minimax"
-	ollamaprovider "github.com/bizshuk/agentsdk/provider/ollama"
 )
 
 // DEFAULT is the provider used when a name is empty. spec.DEFAULT_PROVIDER
@@ -101,99 +102,37 @@ type Entry struct {
 	APIKeyEnv  []string // credential env vars, highest precedence first
 	BaseURLEnv string   // endpoint override env var; empty = adapter default only
 	New        Factory
+	Catalog    func() []core.ModelSpec
 }
 
 // entries is the registry proper. Keys are lower-case; Lookup normalizes.
-var entries = map[string]Entry{
-	"minimax": {
-		Name: "minimax", Label: "MiniMax", Note: "default; OpenAI-compatible",
-		APIKeyEnv: []string{"MINIMAX_API_KEY"}, BaseURLEnv: "MINIMAX_BASE_URL",
-		New: func(o Options) (core.Provider, error) {
-			var opts []minimaxprovider.Option
-			if o.Model != "" {
-				opts = append(opts, minimaxprovider.WithModel(o.Model))
-			}
-			if o.APIKey != "" {
-				opts = append(opts, minimaxprovider.WithAPIKey(o.APIKey))
-			}
-			if o.BaseURL != "" {
-				opts = append(opts, minimaxprovider.WithBaseURL(o.BaseURL))
-			}
-			return minimaxprovider.New(opts...)
-		},
-	},
-	"anthropic": {
-		Name: "anthropic", Label: "Anthropic", Note: "OAuth token outranks API key",
-		APIKeyEnv: []string{"ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"},
-		New: func(o Options) (core.Provider, error) {
-			var opts []anthropicprovider.Option
-			if o.Model != "" {
-				opts = append(opts, anthropicprovider.WithModel(o.Model))
-			}
-			if o.APIKey != "" {
-				opts = append(opts, anthropicprovider.WithAPIKey(o.APIKey))
-			}
-			if o.BaseURL != "" {
-				opts = append(opts, anthropicprovider.WithBaseURL(o.BaseURL))
-			}
-			return anthropicprovider.New(opts...)
-		},
-	},
-	"google": {
-		Name: "google", Label: "Google Gemini",
-		APIKeyEnv: []string{"GOOGLE_API_KEY"}, BaseURLEnv: "GOOGLE_BASE_URL",
-		New: func(o Options) (core.Provider, error) {
-			var opts []googleprovider.Option
-			if o.Model != "" {
-				opts = append(opts, googleprovider.WithModel(o.Model))
-			}
-			if o.APIKey != "" {
-				opts = append(opts, googleprovider.WithAPIKey(o.APIKey))
-			}
-			if o.BaseURL != "" {
-				opts = append(opts, googleprovider.WithBaseURL(o.BaseURL))
-			}
-			return googleprovider.New(opts...)
-		},
-	},
-	"grok": {
-		Name: "grok", Label: "xAI Grok",
-		APIKeyEnv: []string{"XAI_API_KEY"}, BaseURLEnv: "XAI_BASE_URL",
-		New: func(o Options) (core.Provider, error) {
-			var opts []grokprovider.Option
-			if o.Model != "" {
-				opts = append(opts, grokprovider.WithModel(o.Model))
-			}
-			if o.APIKey != "" {
-				opts = append(opts, grokprovider.WithAPIKey(o.APIKey))
-			}
-			if o.BaseURL != "" {
-				opts = append(opts, grokprovider.WithBaseURL(o.BaseURL))
-			}
-			return grokprovider.New(opts...)
-		},
-	},
-	"ollama": {
-		Name: "ollama", Label: "Ollama", Note: "local; keyless by default",
-		APIKeyEnv: []string{"OPENAI_API_KEY"}, BaseURLEnv: "OPENAI_BASE_URL",
-		New: func(o Options) (core.Provider, error) {
-			var opts []ollamaprovider.Option
-			if o.Model != "" {
-				opts = append(opts, ollamaprovider.WithModel(o.Model))
-			}
-			if o.APIKey != "" {
-				opts = append(opts, ollamaprovider.WithAPIKey(o.APIKey))
-			}
-			if o.BaseURL != "" {
-				opts = append(opts, ollamaprovider.WithBaseURL(o.BaseURL))
-			}
-			return ollamaprovider.New(opts...)
-		},
-	},
+// Registered adapters populate it from their package init().
+var (
+	mu      sync.RWMutex
+	entries = map[string]Entry{}
+)
+
+// Register adds an adapter to the registry. It panics on a duplicate
+// name (idiomatic Go for init()-time contract violations — see
+// database/sql/driver). Adapters should call this exactly once from
+// their package's init().
+func Register(e Entry) {
+	if e.Name == "" || e.New == nil {
+		panic(fmt.Sprintf("registry: Register requires Name and New (got %+v)", e))
+	}
+	key := strings.ToLower(strings.TrimSpace(e.Name))
+	mu.Lock()
+	defer mu.Unlock()
+	if _, exists := entries[key]; exists {
+		panic(fmt.Sprintf("registry: provider %q already registered", e.Name))
+	}
+	entries[key] = e
 }
 
 // Names lists the registered provider names, sorted.
 func Names() []string {
+	mu.RLock()
+	defer mu.RUnlock()
 	out := make([]string, 0, len(entries))
 	for k := range entries {
 		out = append(out, k)
@@ -205,6 +144,8 @@ func Names() []string {
 // Entries lists every registry entry, sorted by name — the source a
 // wizard menu or a --list-providers listing renders from.
 func Entries() []Entry {
+	mu.RLock()
+	defer mu.RUnlock()
 	out := make([]Entry, 0, len(entries))
 	for _, name := range Names() {
 		out = append(out, entries[name])
@@ -219,8 +160,21 @@ func Lookup(name string) (Entry, bool) {
 	if key == "" {
 		key = DEFAULT
 	}
+	mu.RLock()
+	defer mu.RUnlock()
 	e, ok := entries[key]
 	return e, ok
+}
+
+// Catalog returns the bundled model list for a registered provider. The
+// returned slice is the adapter's own DefaultCatalog — the registry does
+// not synthesize one. Unknown names return false.
+func Catalog(name string) ([]core.ModelSpec, bool) {
+	e, ok := Lookup(name)
+	if !ok || e.Catalog == nil {
+		return nil, false
+	}
+	return e.Catalog(), true
 }
 
 // New builds the named provider, resolving credentials from Options and

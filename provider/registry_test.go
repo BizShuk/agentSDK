@@ -1,16 +1,36 @@
 package registry_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/bizshuk/agentsdk/agent/spec"
-	"github.com/bizshuk/agentsdk/provider/registry"
+	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNamesAreSortedAndComplete(t *testing.T) {
-	assert.Equal(t, []string{"anthropic", "google", "grok", "minimax", "ollama"}, registry.Names())
+	// The registered set depends on what the linking binary imports; the
+	// test binary blank-imports provider/all (see providers_test.go), so
+	// every built-in adapter must appear.
+	got := registry.Names()
+	require.NotEmpty(t, got)
+
+	// Names() must be sorted for stable menu output — verify by checking
+	// every adjacent pair is non-decreasing.
+	for i := 1; i < len(got); i++ {
+		assert.LessOrEqualf(t, got[i-1], got[i],
+			"Names() must be sorted; got %v", got)
+	}
+
+	want := []string{"anthropic", "antigravity", "codex", "google", "grok", "minimax", "ollama"}
+	for _, name := range want {
+		assert.Containsf(t, got, name,
+			"expected built-in provider %q to be registered", name)
+	}
 }
 
 func TestSpecDefaultProviderIsRegistered(t *testing.T) {
@@ -52,8 +72,15 @@ func TestEveryEntryIsSelfDescribing(t *testing.T) {
 		t.Run(e.Name, func(t *testing.T) {
 			assert.NotEmpty(t, e.Name)
 			assert.NotEmpty(t, e.Label, "a wizard menu renders Label")
-			assert.NotEmpty(t, e.APIKeyEnv, "every entry must document how its credential resolves")
+			// API-key paths must name the env var; OAuth-only entries
+			// document themselves in Note instead.
+			oauthOnly := strings.Contains(strings.ToLower(e.Note), "oauth")
+			if !oauthOnly {
+				assert.NotEmptyf(t, e.APIKeyEnv,
+					"every non-OAuth entry must document how its credential resolves; got %+v", e)
+			}
 			assert.NotNil(t, e.New)
+			assert.NotNil(t, e.Catalog, "every entry must expose its bundled catalog")
 		})
 	}
 }
@@ -126,4 +153,42 @@ func TestNewBuildsAProvider(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, p)
 	assert.NotEmpty(t, p.ID())
+}
+
+func TestRegisterPanicsOnDuplicate(t *testing.T) {
+	// A second registration with the same Name must panic at init time;
+	// we exercise it directly to verify the invariant.
+	assert.Panics(t, func() {
+		registry.Register(registry.Entry{Name: "minimax", New: func(registry.Options) (core.Provider, error) {
+			return nil, nil
+		}})
+	}, "Register must reject duplicate names")
+}
+
+func TestRegisterRejectsIncompleteEntry(t *testing.T) {
+	// An Entry without Name or New is a programmer error and must panic
+	// rather than silently produce a half-usable registration. The panic
+	// message includes a dump of the offending entry, so we recover and
+	// assert on a substring rather than the full string.
+	cases := []struct {
+		name  string
+		entry registry.Entry
+	}{
+		{"missing New", registry.Entry{Name: "incomplete-only-name"}},
+		{"missing Name", registry.Entry{New: func(registry.Options) (core.Provider, error) {
+			return nil, nil
+		}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				r := recover()
+				require.NotNil(t, r, "Register must panic on incomplete entry")
+				msg := strings.TrimSpace(fmt.Sprint(r))
+				assert.Containsf(t, msg, "registry: Register requires Name and New",
+					"panic message %q should mention the missing-field invariant", msg)
+			}()
+			registry.Register(tc.entry)
+		})
+	}
 }

@@ -8,7 +8,7 @@ import (
 
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
-	"github.com/bizshuk/agentsdk/provider/registry"
+	"github.com/bizshuk/agentsdk/provider"
 )
 
 // wizard carries the prompt loop's I/O and the non-interactive switch.
