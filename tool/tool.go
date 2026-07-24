@@ -37,69 +37,6 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 )
 
-// Options configure the built-in tool set. Zero value means "safe defaults"
-// — Read/Glob/Grep unrestricted, Write/Edit/Bash will error if Policy is nil.
-type Options struct {
-	// Policy is the sandbox consulted by every tool before accessing the
-	// filesystem or executing a command. Required for Write/Edit/Bash;
-	// optional for Read/Glob/Grep (nil means no path check).
-	Policy action.Sandbox
-
-	// WorkingDir is the base directory for tools that accept a --cwd or
-	// relative path argument. Defaults to "." (process CWD).
-	WorkingDir string
-
-	Read  ReadOptions
-	Write WriteOptions
-	Edit  EditOptions
-	Bash  BashOptions
-	Glob  GlobOptions
-	Grep  GrepOptions
-}
-
-// ReadOptions tunes the Read tool.
-type ReadOptions struct {
-	// MaxBytes caps the bytes read per call. 0 = 1 MiB.
-	MaxBytes int64
-}
-
-// WriteOptions tunes the Write tool.
-type WriteOptions struct {
-	// DefaultMode is the file permission applied when creating a new file.
-	// 0 means 0o644.
-	DefaultMode int
-}
-
-// EditOptions tunes the Edit tool.
-type EditOptions struct{}
-
-// BashOptions tunes the Bash tool.
-type BashOptions struct {
-	// DefaultTimeout caps command execution. 0 = 30 s.
-	DefaultTimeout time.Duration
-
-	// MaxOutputBytes caps the combined stdout + stderr. 0 = 1 MiB.
-	MaxOutputBytes int64
-
-	// Executor runs the command. nil = real os/exec implementation.
-	Executor Executor
-
-	// Env is the environment passed to the subprocess. nil = os.Environ().
-	Env []string
-}
-
-// GlobOptions tunes the Glob tool.
-type GlobOptions struct {
-	// MaxMatches caps the returned list. 0 = 100.
-	MaxMatches int
-}
-
-// GrepOptions tunes the Grep tool.
-type GrepOptions struct {
-	// MaxResults caps the returned matches. 0 = 100.
-	MaxResults int
-}
-
 // RegisterDefaults constructs all 6 tools and registers them into reg.
 // Returns the list of registered tools (useful for logging / telemetry).
 // Errors if a required invariant is broken (e.g. Write without a Policy).
@@ -169,9 +106,9 @@ func errPolicyRequired(toolName string) error {
 	return fmt.Errorf("%s requires a non-nil sandbox Policy", toolName)
 }
 
-func defaultMaxBytes() int64          { return 1 << 20 }  // 1 MiB
+func defaultMaxBytes() int64 { return 1 << 20 } // 1 MiB
 func defaultBashTimeout() time.Duration { return 30 * time.Second }
-func defaultMaxMatches() int          { return 100 }
+func defaultMaxMatches() int { return 100 }
 
 // checkPathArgs is a helper for sandbox re-check in tool handlers. It
 // builds a map with "path" -> p and runs it through policy.Check. If the

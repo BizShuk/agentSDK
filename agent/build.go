@@ -17,7 +17,6 @@ import (
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/session"
 	"github.com/bizshuk/agentsdk/skill"
-	"github.com/bizshuk/agentsdk/subagent"
 	builtin "github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/wire"
 )
@@ -247,7 +246,7 @@ func (a *Agent) buildTools(cwd, userDir string, prov core.Provider) (core.ToolRe
 	if a.cfg.Subagents != nil {
 		defs := discoverSubagentDefs(a.cfg, userDir, cwd)
 		if len(defs) > 0 {
-			reg.Register(subagent.NewSpawner(a.subagentRunner(prov), defs...))
+			reg.Register(skill.NewSpawner(a.subagentRunner(prov), defs...))
 		}
 	}
 	return reg, nil
@@ -301,7 +300,7 @@ func registerBuiltins(reg *action.Registry, allow []string, workDir string) erro
 
 // discoverSubagentDefs merges user-level and project-level definitions.
 // Project comes second so it wins a name clash.
-func discoverSubagentDefs(cfg Config, userDir, cwd string) []subagent.Def {
+func discoverSubagentDefs(cfg Config, userDir, cwd string) []skill.Def {
 	dirs := cfg.Subagents.Dirs
 	if len(dirs) == 0 {
 		projectDir := spec.DEFAULT_PROJECT_DIR
@@ -313,9 +312,9 @@ func discoverSubagentDefs(cfg Config, userDir, cwd string) []subagent.Def {
 			filepath.Join(cwd, projectDir, "agents"),
 		}
 	}
-	var defs []subagent.Def
+	var defs []skill.Def
 	for _, dir := range dirs {
-		found, err := subagent.DiscoverDefs(dir)
+		found, err := skill.DiscoverDefs(dir)
 		if err != nil {
 			continue // a missing definitions directory is normal
 		}
@@ -327,9 +326,9 @@ func discoverSubagentDefs(cfg Config, userDir, cwd string) []subagent.Def {
 // subagentRunner gives each delegation a scoped, ephemeral engine over the
 // same provider: no store, no WAL, its own turn budget. A subagent's work
 // is part of the parent's turn, not a run of its own.
-func (a *Agent) subagentRunner(prov core.Provider) subagent.RunFunc {
+func (a *Agent) subagentRunner(prov core.Provider) skill.RunFunc {
 	maxTurns := a.cfg.Subagents.MaxTurns
-	return func(ctx context.Context, def subagent.Def, promptText string) (string, error) {
+	return func(ctx context.Context, def skill.Def, promptText string) (string, error) {
 		reg := action.NewRegistry()
 		if a.cfg.Tools != nil {
 			workDir := a.cfg.Tools.WorkingDir
@@ -367,7 +366,7 @@ func (a *Agent) subagentRunner(prov core.Provider) subagent.RunFunc {
 		}
 		st.Messages = append(st.Messages, message(core.ROLE_USER, promptText))
 
-		final, err := sub.Run(subagent.WithDepth(ctx, subagent.Depth(ctx)+1), st)
+		final, err := sub.Run(skill.WithDepth(ctx, skill.Depth(ctx)+1), st)
 		if err != nil {
 			return "", err
 		}

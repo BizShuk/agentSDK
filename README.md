@@ -120,8 +120,7 @@ agentsdk/
 ├── permission/                # permission rules × mode (allow/ask/deny specifier, deny > ask > allow)
 ├── session/                   # session 管理層 (list / resume / fork / tree; WAL JSONL 為 transcript 真相)
 ├── contextfile/               # AGENTS.md / CLAUDE.md 階層載入 + @import 展開
-├── skill/                     # SKILL.md skills + slash commands + prompt templates (progressive disclosure)
-├── subagent/                  # markdown agent definitions + task tool (RunFunc closure DI, depth guard)
+├── skill/                     # SKILL.md skills + slash commands + prompt templates (progressive disclosure) + subagent Def/Spawner ("task" tool)
 ├── wire/                      # headless 表面: stream-json envelope / RPC framing / print formatter
 ├── tui/                       # sub-package (zero-dep)：differential-rendering terminal UI，不 import agentsdk
 ├── provider/                  # 7 個 adapter（已併回 root module）
@@ -159,7 +158,7 @@ client response ← reverse directed pair transform ← provider response
 - **六種 ThinkingPattern**:透過 `core.NewDecide` 與純函式 DecisionRule dispatch;working memory 作為 pattern 與 runtime 間的通訊介面
 - **Tagged union Instruction**:7 種 instruction kind 透過 Kind discriminator + optional pointer 欄位表達,JSON round-trip 透過 `omitempty` 精簡
 - **Notifier 結構性相容**: `core.Notifier` 介面方法集與 `gosdk/notify.Notifier` 完全相同,gosdk 的 Multi / Stdout / Slack 直接傳入,無需 adapter
-- **Harness 能力可插拔**: hooks / permission / session / skill / subagent / wire / prompt 各自為只依賴 `core` 的 package,`runtime.Engine` 持有 nil 即 no-op 的 port,全部由 `agent` (composition root) 注入 — 借鏡 pi 的單向依賴與 claude-code 的 harness 事件面
+- **Harness 能力可插拔**: hooks / permission / session / skill（內含 subagent Def/Spawner）/ wire / prompt 各自為只依賴 `core` 的 package,`runtime.Engine` 持有 nil 即 no-op 的 port,全部由 `agent` (composition root) 注入 — 借鏡 pi 的單向依賴與 claude-code 的 harness 事件面
 - **宣告與組裝分離**: `agent/spec` 是純資料 (只 import `core`),任何只想`讀`或`產生`設定的工具 (wizard / schema generator / web 表單) 不必背上 provider SDK 與 harness 的重量;`agent` 才是知道那些實作存在的組裝層
 - **presets, not walls**: 設定挑 preset 而非組合細節 (middleware 鏈的順序是正確性,不是偏好);`WithCustomize` 在全部 stage 之後拿到組好的 `*runtime.Engine`,任何設定詞彙沒覆蓋的都還做得到
 
@@ -205,7 +204,7 @@ effect done            ← end_turn
 | M6        | auth mechanism、9 provider ids、auth CLI                                                             | ✅ 完成     |
 | Proxy     | 3×3 pairwise protocol transform、provider profile routing、SSE hardening                             | ✅ 完成     |
 | Format    | 四來源 `37` 個 client/provider wire-format entity catalog                                            | ✅ 完成     |
-| Harness   | hooks / permission / session / contextfile / skill / subagent / wire / tui skeleton + steering queue | 🚧 skeleton |
+| Harness   | hooks / permission / session / contextfile / skill（內含 subagent）/ wire / tui skeleton + steering queue | 🚧 skeleton |
 | Agent     | 宣告式組裝：`agent/spec` + `agent` 8 stage pipeline + `prompt` + `provider`（registry）+ `wizard` 子指令 | ✅ 完成     |
 
 詳細規格見 `docs/specs/` 與 `plans/`（proxy 規格已隨 repo 移出）,root milestone 實作完成後會轉為 `docs/specs/YYYY-MM-DD-<feature>.md`:

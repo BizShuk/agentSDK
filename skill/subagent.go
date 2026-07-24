@@ -1,9 +1,4 @@
-// Package subagent provides markdown agent definitions and a "task" tool
-// that delegates a prompt to a named subagent — the claude-code agents
-// pattern. The Spawner never builds engines itself: the composition root
-// injects a RunFunc closure (which typically constructs a scoped
-// runtime.Engine per call), keeping this package dependent on core only.
-package subagent
+package skill
 
 import (
 	"context"
@@ -15,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/utils"
+	"github.com/bizshuk/agentsdk/utils/frontmatter"
 )
 
 const (
@@ -40,7 +35,7 @@ type Def struct {
 // ParseDef parses one definition; fallbackName is used when frontmatter
 // has no name (typically the file base name).
 func ParseDef(fallbackName, content string) Def {
-	fields, body := utils.Parse(content)
+	fields, body, _ := frontmatter.Parse(content)
 	name := fields["name"]
 	if name == "" {
 		name = fallbackName
@@ -50,7 +45,7 @@ func ParseDef(fallbackName, content string) Def {
 		Description: fields["description"],
 		Provider:    fields["provider"],
 		Model:       fields["model"],
-		Tools:       utils.List(fields["tools"]),
+		Tools:       frontmatter.List(fields["tools"]),
 		Prompt:      strings.TrimSpace(body),
 	}
 }
