@@ -1,5 +1,5 @@
 // Command code-agent is the composition sample that wires the whole
-// harness — contextfile, skill, hook, permission, session, subagent — into
+// harness — skill, hook, permission, session, subagent — into
 // one CLI with three surfaces: interactive TUI (tui module), print mode
 // (-p), and stream-json mode (--json, wire module). It is the first real
 // caller of the tui module.

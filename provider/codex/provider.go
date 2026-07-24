@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 )
 
 // Provider implements core.Provider against the OpenAI Codex
@@ -382,5 +383,7 @@ func (p *Provider) applyHeaders(req *http.Request) {
 	}
 }
 
-// Compile-time: ensure *Provider satisfies core.Provider.
-var _ core.Provider = (*Provider)(nil)
+// Metadata implements registry.Adapter. Returns the package-level
+// codex descriptor so direct constructors (New, NewWithOAuth) produce
+// adapters that agree with the registered Entry.Metadata.
+func (p *Provider) Metadata() registry.Metadata { return adapterMetadata() }

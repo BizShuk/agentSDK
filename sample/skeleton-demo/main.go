@@ -1,7 +1,7 @@
 // Command skeleton-demo is the single-file sample that demonstrates the
 // agent skeleton in its canonical, wizard-generated form:
 //
-//	func main() { app.Main(agent.MustNew(cfg, opts...), appOpts...) }
+//	func main() { agent.Main(agent.MustNew(cfg, opts...), runOpts...) }
 //
 // Compare to sample/code-agent, which uses cobra + a 101-line compose()
 // + four dispatch modes (interactive / -p / --json / --sessions). That
@@ -27,7 +27,7 @@
 //     demo, so tradeoffs are explicit.
 //  4. NextRound makes it a small REPL: the first stdin line is the
 //     opening prompt, each later line is a follow-up round, and a blank
-//     line or EOF ends the session. This is the app.Interactive seam —
+//     line or EOF ends the session. This is the agent.Interactive seam —
 //     the same method also answers approval pauses, shown here for
 //     completeness even though this config gates nothing.
 //
@@ -64,7 +64,6 @@ import (
 
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
-	"github.com/bizshuk/agentsdk/app"
 	appconfig "github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/runtime"
@@ -130,27 +129,27 @@ func (s stdinAgent) Bootstrap(ctx context.Context, ac *appconfig.AppConfig) (*ru
 	return engine, state, nil
 }
 
-// NextRound is the app.Interactive seam. A finished round offers one more
+// NextRound is the agent.Interactive seam. A finished round offers one more
 // line of input; a blank line or EOF ends the run. The approval branch is
 // wired for completeness — this config gates nothing, so it stays dark
 // unless you add a tool and tighten autonomy — and shows that the same
 // single method answers both "approve this?" and "what next?".
-func (s stdinAgent) NextRound(ctx context.Context, p app.Pause) (app.Resume, error) {
-	if p.Reason == app.PAUSE_APPROVAL {
+func (s stdinAgent) NextRound(ctx context.Context, p agent.Pause) (agent.Resume, error) {
+	if p.Reason == agent.PAUSE_APPROVAL {
 		fmt.Fprintf(os.Stderr, "\n[approval] %s — approve? [y/N] ", pendingLabel(p.State))
 		line, _ := nextLine(ctx)
 		if line == "y" || line == "yes" {
-			return app.Resume{Decision: core.APPROVAL_DECISION_APPROVE, By: "operator"}, nil
+			return agent.Resume{Decision: core.APPROVAL_DECISION_APPROVE, By: "operator"}, nil
 		}
-		return app.Resume{Decision: core.APPROVAL_DECISION_REJECT, By: "operator"}, nil
+		return agent.Resume{Decision: core.APPROVAL_DECISION_REJECT, By: "operator"}, nil
 	}
 	// PAUSE_ROUND_END: offer a follow-up. Blank / EOF → empty Input → stop.
 	fmt.Fprint(os.Stderr, "\n> ")
 	line, ok := nextLine(ctx)
 	if !ok {
-		return app.Resume{}, nil
+		return agent.Resume{}, nil
 	}
-	return app.Resume{Input: line}, nil
+	return agent.Resume{Input: line}, nil
 }
 
 // pendingLabel renders the open approval for the operator prompt.
@@ -207,9 +206,9 @@ func main() {
 	// first Option drives the engine; WithLogToStdout drives the lifecycle
 	// logger; WithRoundTimeout bounds how long one follow-up read may block
 	// before the REPL gives up on an idle operator.
-	app.Main(
+	agent.Main(
 		stdinAgent{agent.MustNew(cfg, agent.WithSink(sink))},
-		app.WithLogToStdout(),
-		app.WithRoundTimeout(2*time.Minute),
+		agent.WithLogToStdout(),
+		agent.WithRoundTimeout(2*time.Minute),
 	)
 }

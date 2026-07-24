@@ -1,4 +1,4 @@
-package app
+package agent
 
 import (
 	"context"
@@ -24,12 +24,12 @@ const (
 
 // Main is the entry point for an agent binary:
 //
-//	func main() { app.Main(&reviewAgent{}) }
+//	func main() { agent.Main(agent.MustNew(cfg)) }
 //
 // It binds SIGINT / SIGTERM to the run context so a supervisor's stop
 // signal cancels the in-flight model call or tool instead of killing the
 // process mid-write, then exits with Run's code.
-func Main(a Agent, opts ...Option) {
+func Main(a Runner, opts ...RunOption) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	os.Exit(Run(ctx, a, opts...))
@@ -47,15 +47,15 @@ func Main(a Agent, opts ...Option) {
 //  4. bootstrap— the agent assembles its Engine and opening State
 //  5. run      — drive the loop under panic recovery
 //  6. complete — hand the final State back to the agent (optional)
-func Run(ctx context.Context, a Agent, opts ...Option) int {
-	o := defaultOptions()
+func Run(ctx context.Context, a Runner, opts ...RunOption) int {
+	o := defaultRunOpts()
 	for _, opt := range opts {
 		opt(&o)
 	}
 
 	name := a.Name()
 	if name == "" {
-		slog.Error("app: Agent.Name must not be empty")
+		slog.Error("agent: Runner.Name must not be empty")
 		return EXIT_ERROR
 	}
 
@@ -121,10 +121,10 @@ func Run(ctx context.Context, a Agent, opts ...Option) int {
 	}
 
 	// 5a. Interactive rounds. A run that stopped is asking the application
-	//     a question — approve this call, or give me the next input. An
-	//     Agent that does not implement Interactive skips this entirely and
-	//     keeps the out-of-process semantics (Run returns, PendingApprovals
-	//     left for an external verb).
+	//     a question — approve this call, or give me the next input. A
+	//     Runner that does not implement Interactive skips this entirely
+	//     and keeps the out-of-process semantics (Run returns,
+	//     PendingApprovals left for an external verb).
 	if in, ok := a.(Interactive); ok {
 		for {
 			reason, asks := pauseReason(final)
@@ -250,7 +250,7 @@ func advance(ctx context.Context, e *runtime.Engine, s core.State, reason PauseR
 // the engine last committed and mark it FAILED, making the crash visible
 // and the run terminal.
 //
-// Recovery covers the calling goroutine only. An Agent that spawns its own
+// Recovery covers the calling goroutine only. A Runner that spawns its own
 // goroutines must guard them itself.
 func safeRun(ctx context.Context, e *runtime.Engine, state core.State) (final core.State, err error) {
 	defer func() {

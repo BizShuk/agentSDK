@@ -62,7 +62,7 @@ func listChoices(out io.Writer, key string) error {
 // goLiteral renders the config as Go source.
 func goLiteral(cfg agent.Config) string {
 	var b strings.Builder
-	b.WriteString("app.Main(agent.MustNew(agent.Config{\n")
+	b.WriteString("agent.Main(agent.MustNew(agent.Config{\n")
 	fmt.Fprintf(&b, "\tName: %q,\n", cfg.Name)
 	fmt.Fprintf(&b, "\tTier: %q,\n", cfg.Tier)
 	if cfg.Persona != "" {

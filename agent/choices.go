@@ -51,7 +51,7 @@ func ProviderChoices() []Choice {
 	for _, e := range entries {
 		out = append(out, Choice{
 			Value:   e.Name,
-			Label:   e.Label,
+			Label:   e.Metadata.Label,
 			Note:    providerNote(e),
 			Default: e.Name == registry.DEFAULT,
 		})
@@ -63,11 +63,11 @@ func ProviderChoices() []Choice {
 // so a wizard can tell the user what to export before they pick.
 func providerNote(e registry.Entry) string {
 	var parts []string
-	if e.Note != "" {
-		parts = append(parts, e.Note)
+	if e.Metadata.Note != "" {
+		parts = append(parts, e.Metadata.Note)
 	}
-	if len(e.APIKeyEnv) > 0 {
-		parts = append(parts, "reads "+strings.Join(e.APIKeyEnv, " or "))
+	if len(e.Metadata.APIKeyEnv) > 0 {
+		parts = append(parts, "reads "+strings.Join(e.Metadata.APIKeyEnv, " or "))
 	}
 	return strings.Join(parts, "; ")
 }

@@ -86,7 +86,7 @@ type Reasoning struct {
 }
 
 // Limits bounds one run. Zero values mean "no bound from config" — the
-// tier defaults fill in a sane MaxTurns, and app.WithTimeout still caps
+// tier defaults fill in a sane MaxTurns, and agent.WithTimeout still caps
 // wall-clock time at the process level.
 // MaxTurns and MaxRounds measure different things and both are kept:
 // a round is one model request plus the tool calls it triggers (what an

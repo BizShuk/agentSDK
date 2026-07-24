@@ -39,7 +39,7 @@ func TestContextFileSourceReadsTheHierarchy(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# project rules\n\nbe careful"), 0o600))
 
-	got := sectionsOf(t, agent.ContextFileSource("", 0), prompt.Req{Cwd: dir})
+	got := sectionsOf(t, agent.ContextFileSource(""), prompt.Req{Cwd: dir})
 	require.Len(t, got, 1)
 	assert.Equal(t, prompt.ORDER_FILES, got[0].Order)
 	assert.Contains(t, got[0].Text, "be careful")
@@ -47,7 +47,7 @@ func TestContextFileSourceReadsTheHierarchy(t *testing.T) {
 
 func TestContextFileSourceMissingFilesIsNotAnError(t *testing.T) {
 	// An agent must run in a directory with no AGENTS.md at all.
-	got := sectionsOf(t, agent.ContextFileSource("", 0), prompt.Req{Cwd: t.TempDir()})
+	got := sectionsOf(t, agent.ContextFileSource(""), prompt.Req{Cwd: t.TempDir()})
 	for _, s := range got {
 		assert.Empty(t, strings.TrimSpace(s.Text))
 	}
@@ -101,7 +101,7 @@ func TestSourcesAssembleInTheDocumentedOrder(t *testing.T) {
 	b := prompt.Builder{Sources: []prompt.Source{
 		agent.EnvSource(), // registered first, must still sort last
 		agent.PersonaSource("PERSONA"),
-		agent.ContextFileSource("", 0),
+		agent.ContextFileSource(""),
 	}}
 
 	msgs, err := b.Seed(context.Background(), prompt.Req{Cwd: dir, Input: "go"})

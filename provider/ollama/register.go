@@ -1,18 +1,31 @@
 package ollama
 
 import (
-	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/provider"
 )
 
-func init() {
-	registry.Register(registry.Entry{
-		Name:       "ollama",
+// adapterMetadata is the single source of truth for ollama's
+// registration descriptor. Both Entry.Metadata and *Provider.Metadata()
+// return this same value; the function form keeps APIKeyEnv immutable
+// across calls.
+func adapterMetadata() registry.Metadata {
+	return registry.Metadata{
 		Label:      "Ollama",
 		Note:       "local; keyless by default",
 		APIKeyEnv:  []string{"OPENAI_API_KEY"},
 		BaseURLEnv: "OPENAI_BASE_URL",
-		New: func(o registry.Options) (core.Provider, error) {
+	}
+}
+
+// Compile-time: ensure *Provider satisfies registry.Adapter.
+var _ registry.Adapter = (*Provider)(nil)
+
+func init() {
+	meta := adapterMetadata()
+	registry.Register(registry.Entry{
+		Name:     "ollama",
+		Metadata: meta,
+		New: func(o registry.Options) (registry.Adapter, error) {
 			var opts []Option
 			if o.Model != "" {
 				opts = append(opts, WithModel(o.Model))

@@ -1,10 +1,13 @@
 // Package prompt owns one decision: what content goes into the model's
 // context window, and in what order.
 //
-// That decision was previously spread across four places — contextfile
-// read the AGENTS.md hierarchy, skill.Registry rendered its index, the
-// composition root concatenated them by hand, and memory trimmed whatever
-// came out. Nobody owned "what do we send this turn".
+// That decision was previously spread across four places — the contextfile
+// package read the AGENTS.md hierarchy, skill.Registry rendered its index,
+// the composition root concatenated them by hand, and memory trimmed
+// whatever came out. Nobody owned "what do we send this turn". The
+// context-file loader now lives here (see LoadContextFiles) because it is
+// fixed behaviour with no customisation seam; skill still produces its
+// own content because it has a registry, types, and a spawner.
 //
 // The division of labour with memory is deliberate and worth keeping:
 //
@@ -14,8 +17,8 @@
 // Merging them would make injection and trimming mutually recursive.
 //
 // prompt imports core and the standard library only. Producers like
-// contextfile and skill are adapted into Sources by the composition root,
-// so no harness package imports another.
+// skill are adapted into Sources by the composition root, so no harness
+// package imports another.
 package prompt
 
 import (
@@ -59,9 +62,9 @@ const (
 	ORDER_REMINDER = 50 // changes every turn
 )
 
-// DEFAULT_MAX_BYTES caps assembled content. It matches contextfile's own
-// cap so turning file loading into a Source does not silently change how
-// much a project's instructions may contribute.
+// DEFAULT_MAX_BYTES caps assembled content. It matches the per-section
+// budget applied to the context-file loader so a project's instructions
+// cannot blow past the total prompt budget on their own.
 const DEFAULT_MAX_BYTES = 256 * 1024
 
 // Section is one contributor's output for one slot.
@@ -88,8 +91,9 @@ type Req struct {
 }
 
 // Source contributes sections. Implementations live wherever their data
-// lives — the composition root adapts contextfile, skill, and anything
-// application-specific into this interface.
+// lives — the composition root adapts skill and anything
+// application-specific into this interface; context-file loading lives
+// inside this package as LoadContextFiles.
 type Source interface {
 	Sections(ctx context.Context, req Req) ([]Section, error)
 }

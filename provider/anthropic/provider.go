@@ -26,6 +26,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 )
 
 // Provider implements core.Provider against the Anthropic API.
@@ -274,5 +275,7 @@ func resolveEndpoint(base string) string {
 	return base + "/v1/messages"
 }
 
-// Compile-time: ensure Provider satisfies core.Provider.
-var _ core.Provider = (*Provider)(nil)
+// Metadata implements registry.Adapter. Returns the package-level
+// anthropic descriptor so direct constructors (New, NewWithOAuth)
+// produce adapters that agree with the registered Entry.Metadata.
+func (p *Provider) Metadata() registry.Metadata { return adapterMetadata() }

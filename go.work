@@ -10,5 +10,4 @@ use (
 	./sample/middleware-demo
 	./sample/skeleton-demo
 	./sample/strategy-demo
-	./tools/dependency-analyzer
 )

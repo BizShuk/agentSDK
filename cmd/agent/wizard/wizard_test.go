@@ -172,7 +172,7 @@ func TestWizardAlwaysRegistersTheSelectedStyle(t *testing.T) {
 func TestWizardPrintGoIsCompilableShaped(t *testing.T) {
 	out, _, err := runWizard(t, "", "-y", "--tier", spec.TIER_STANDARD, "-o", "-", "--print-go")
 	require.NoError(t, err)
-	assert.Contains(t, out, "app.Main(agent.MustNew(agent.Config{")
+	assert.Contains(t, out, "agent.Main(agent.MustNew(agent.Config{")
 	assert.Contains(t, out, `Tier: "standard"`)
 	assert.Contains(t, out, "agent.Model{Provider:")
 	assert.Contains(t, out, "}))")

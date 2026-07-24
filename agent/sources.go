@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/agent/spec"
-	"github.com/bizshuk/agentsdk/contextfile"
 	"github.com/bizshuk/agentsdk/prompt"
 	"github.com/bizshuk/agentsdk/skill"
 )
@@ -18,9 +17,10 @@ import (
 // This file is the adapter layer that keeps the dependency rule intact.
 //
 // prompt defines the Source interface but imports nothing except core.
-// contextfile and skill produce content but know nothing about prompt.
-// Neither imports the other. The wiring lives here, in the composition
-// layer, which is the only package allowed to know both sides exist.
+// skill produces content but knows nothing about prompt; prompt's own
+// LoadContextFiles covers the AGENTS.md / CLAUDE.md hierarchy. Neither
+// imports the other. The wiring lives here, in the composition layer,
+// which is the only package allowed to know both sides exist.
 
 // PersonaSource contributes the fixed identity text from Config.Persona.
 func PersonaSource(persona string) prompt.Source {
@@ -32,10 +32,9 @@ func PersonaSource(persona string) prompt.Source {
 // It re-reads on every call rather than caching: the files are a
 // project's live instructions, and a long-running agent should see an
 // edit without a restart. The loader already caps its own byte budget.
-func ContextFileSource(userDir string, maxBytes int) prompt.Source {
-	loader := contextfile.Loader{UserDir: userDir, MaxBytes: maxBytes}
+func ContextFileSource(userDir string) prompt.Source {
 	return prompt.SourceFunc(func(_ context.Context, req prompt.Req) ([]prompt.Section, error) {
-		text, _, err := loader.Load(req.Cwd)
+		text, _, err := prompt.LoadContextFiles(req.Cwd, userDir)
 		if err != nil {
 			return nil, fmt.Errorf("context files: %w", err)
 		}
@@ -137,7 +136,7 @@ func BuildSources(cfg Config, reg *skill.Registry, userDir string) ([]prompt.Sou
 	for _, name := range cfg.Prompt.Sources {
 		switch name {
 		case spec.SOURCE_FILES:
-			out = append(out, ContextFileSource(promptUserDir(cfg, userDir), cfg.Prompt.MaxBytes))
+			out = append(out, ContextFileSource(promptUserDir(cfg, userDir)))
 		case spec.SOURCE_SKILLS:
 			out = append(out, SkillSource(reg))
 		case spec.SOURCE_ENV:

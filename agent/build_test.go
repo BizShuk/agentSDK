@@ -14,7 +14,7 @@ import (
 	"github.com/bizshuk/agentsdk/agent/spec"
 	appconfig "github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/hook"
+	"github.com/bizshuk/agentsdk/middleware/hook"
 	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/prompt"
 	"github.com/bizshuk/agentsdk/runtime"
@@ -446,9 +446,9 @@ func TestPartsExposeSessionsWhenEnabled(t *testing.T) {
 	assert.Nil(t, b.Parts().Sessions, "basic has persistence but no lineage")
 }
 
-// --- app.Agent conformance ---
+// --- Runner conformance ---
 
-func TestAgentSatisfiesAppContract(t *testing.T) {
+func TestAgentSatisfiesRunner(t *testing.T) {
 	// Compile-time proof that the assembly layer plugs into the existing
 	// lifecycle rather than replacing it.
 	var _ interface {

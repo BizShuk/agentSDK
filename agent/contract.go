@@ -1,19 +1,4 @@
-// Package app is the composition root for CLI-shaped agents.
-//
-// It owns the process lifecycle — signal binding, config load, preflight,
-// wall-clock timeout, panic recovery, structured run logging, and exit
-// codes — so a binary reduces to:
-//
-//	func main() { app.Main(&myAgent{}) }
-//
-// app introduces no new abstraction over runtime.Engine. It is boilerplate
-// convergence: every knob it sets has a default that the Agent can override,
-// and Bootstrap hands back the live *runtime.Engine so callers keep full
-// access to Middleware / Store / Approval / Emitter. Presets, not walls.
-//
-// Opinionated application conventions (cron scheduling, per-folder fan-out,
-// audit trails) do NOT belong here — they belong to the layer above.
-package app
+package agent
 
 import (
 	"context"
@@ -23,7 +8,7 @@ import (
 	"github.com/bizshuk/agentsdk/runtime"
 )
 
-// Agent is the contract a binary implements. Two methods, both required.
+// Runner is the contract a binary implements. Two methods, both required.
 //
 // Name is the application identifier. It feeds gosdk/config (which resolves
 // ~/.config/<Name>) and every log record, so it must be stable across runs
@@ -41,7 +26,11 @@ import (
 //
 // Store and Log on the returned Engine are pre-wired from cfg when the agent
 // leaves them nil; an agent that binds its own persistence keeps it.
-type Agent interface {
+//
+// The package's default implementation, *Agent, satisfies Runner. Wrap or
+// embed it when you need to add one of the optional interfaces (Preflighter,
+// Completer, Interactive); both *Agent and the wrapper remain a Runner.
+type Runner interface {
 	Name() string
 	Bootstrap(ctx context.Context, cfg *config.AppConfig) (*runtime.Engine, core.State, error)
 }

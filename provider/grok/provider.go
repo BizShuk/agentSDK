@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 )
 
 // Provider implements core.Provider against the xAI Grok API.
@@ -316,5 +317,7 @@ func maxTokensOrDefault(req core.ModelRequest) int {
 	return 4096
 }
 
-// Compile-time: ensure Provider satisfies core.Provider.
-var _ core.Provider = (*Provider)(nil)
+// Metadata implements registry.Adapter. Returns the package-level
+// grok descriptor so direct constructors (New, NewWithOAuth) produce
+// adapters that agree with the registered Entry.Metadata.
+func (p *Provider) Metadata() registry.Metadata { return adapterMetadata() }

@@ -64,16 +64,16 @@ func (o Options) lookup(key string) string {
 }
 
 // Resolve fills empty credential fields from the environment, trying the
-// entry's key names in order, and returns the result. Anthropic relies on
-// the ordering: an OAuth token outranks a long-lived API key when both
-// are present.
+// metadata's key names in order, and returns the result. Anthropic
+// relies on the ordering: an OAuth token outranks a long-lived API key
+// when both are present.
 //
 // Exported because "which credential would this actually use" is a
 // question callers legitimately ask before building anything — a preflight
 // check, or a wizard showing which env var it found.
-func (o Options) Resolve(e Entry) Options {
+func (o Options) Resolve(m Metadata) Options {
 	if o.APIKey == "" {
-		keys := e.APIKeyEnv
+		keys := m.APIKeyEnv
 		if o.APIKeyEnv != "" {
 			keys = []string{o.APIKeyEnv}
 		}
@@ -85,24 +85,27 @@ func (o Options) Resolve(e Entry) Options {
 		}
 	}
 	if o.BaseURL == "" {
-		o.BaseURL = o.lookup(e.BaseURLEnv)
+		o.BaseURL = o.lookup(m.BaseURLEnv)
 	}
 	return o
 }
 
-// Factory builds a provider from resolved options.
-type Factory func(Options) (core.Provider, error)
+// Factory builds an adapter from resolved options. The registry.Factory
+// signature is the public source of truth for what an adapter must
+// produce: a registry.Adapter, not just a core.Provider — adapters
+// must also expose Name() and Metadata() at runtime.
+type Factory func(Options) (Adapter, error)
 
 // Entry is everything callers need to know about one adapter: how to
-// build it, and enough metadata for a CLI listing or a wizard menu.
+// build it, and the static registration metadata a CLI listing or
+// wizard menu renders from. The post-construction view of the same
+// metadata lives on Adapter.Metadata(); the two must agree —
+// register.go is responsible for sourcing both from one literal.
 type Entry struct {
-	Name       string
-	Label      string
-	Note       string
-	APIKeyEnv  []string // credential env vars, highest precedence first
-	BaseURLEnv string   // endpoint override env var; empty = adapter default only
-	New        Factory
-	Catalog    func() []core.ModelSpec
+	Name     string
+	Metadata Metadata
+	New      Factory
+	Catalog  func() []core.ModelSpec
 }
 
 // entries is the registry proper. Keys are lower-case; Lookup normalizes.
@@ -177,15 +180,15 @@ func Catalog(name string) ([]core.ModelSpec, bool) {
 	return e.Catalog(), true
 }
 
-// New builds the named provider, resolving credentials from Options and
+// New builds the named adapter, resolving credentials from Options and
 // then the environment.
-func New(name string, o Options) (core.Provider, error) {
+func New(name string, o Options) (Adapter, error) {
 	e, ok := Lookup(name)
 	if !ok {
 		return nil, fmt.Errorf("registry: unknown provider %q (registered: %s)",
 			name, strings.Join(Names(), ", "))
 	}
-	p, err := e.New(o.Resolve(e))
+	p, err := e.New(o.Resolve(e.Metadata))
 	if err != nil {
 		return nil, fmt.Errorf("registry: %s provider: %w", e.Name, err)
 	}

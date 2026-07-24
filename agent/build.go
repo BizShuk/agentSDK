@@ -22,15 +22,15 @@ import (
 )
 
 // Agent is a prepared configuration plus its injected dependencies. It
-// implements app.Agent, so a binary reduces to:
+// implements Runner, so a binary reduces to:
 //
-//	func main() { app.Main(agent.MustNew(cfg)) }
+//	func main() { agent.Main(agent.MustNew(cfg)) }
 //
 // Construction is split in two on purpose. New validates and expands
 // without touching the filesystem, so a bad config fails immediately and
 // a test can build one without side effects. Bootstrap does the actual
 // assembly, because it needs the AppConfig — data dir, run ID, state
-// store, WAL — that app.Run opens in its first step.
+// store, WAL — that agent.Run opens in its first step.
 type Agent struct {
 	cfg   Config
 	deps  builder
@@ -38,7 +38,7 @@ type Agent struct {
 }
 
 // Parts exposes what Bootstrap assembled, for callers that drive the
-// engine themselves instead of handing it to app.Run: an interactive
+// engine themselves instead of handing it to agent.Run: an interactive
 // front end needs the session manager, a slash-command surface needs the
 // skill registry.
 //
@@ -85,7 +85,7 @@ func MustNew(cfg Config, opts ...Option) *Agent {
 	return a
 }
 
-// Name implements app.Agent.
+// Name implements Runner.
 func (a *Agent) Name() string { return a.cfg.Name }
 
 // Config returns the expanded, validated configuration.
@@ -94,7 +94,7 @@ func (a *Agent) Config() Config { return a.cfg }
 // Parts returns what Bootstrap assembled, or nil before it has run.
 func (a *Agent) Parts() *Parts { return a.parts }
 
-// Preflight implements app.Preflighter: it builds the provider so a bad
+// Preflight implements Preflighter: it builds the provider so a bad
 // credential surfaces before the run leaves any trace on disk.
 //
 // A run that discovers a bad API key on its first model call has already
@@ -109,7 +109,7 @@ func (a *Agent) Preflight(_ context.Context, _ *appconfig.AppConfig) error {
 	return nil
 }
 
-// Bootstrap implements app.Agent: it runs the assembly pipeline and
+// Bootstrap implements Runner: it runs the assembly pipeline and
 // returns the engine plus the opening state.
 //
 // The stage order is the knowledge this layer exists to hold. Each stage
@@ -484,7 +484,7 @@ func (a *Agent) buildMiddleware(sandbox action.Sandbox, perm core.ApprovalPolicy
 // --- stage 6 ---
 
 // buildPersistence returns the state store and WAL, or nils when the
-// memory block is off. app.Run backfills from AppConfig only when the
+// memory block is off. agent.Run backfills from AppConfig only when the
 // engine leaves them nil, so returning nils here genuinely disables
 // persistence rather than deferring to the default.
 func (a *Agent) buildPersistence(ac *appconfig.AppConfig) (core.StateStore, core.WriteAheadLog) {

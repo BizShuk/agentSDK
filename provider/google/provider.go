@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 )
 
 // Provider implements core.Provider against Google Generative AI's
@@ -316,5 +317,7 @@ func fromResponse(cr Response) core.ModelResult {
 	return out
 }
 
-// Compile-time: ensure Provider satisfies core.Provider.
-var _ core.Provider = (*Provider)(nil)
+// Metadata implements registry.Adapter. Returns the package-level
+// google descriptor so direct constructors (New) produce adapters
+// that agree with the registered Entry.Metadata.
+func (p *Provider) Metadata() registry.Metadata { return adapterMetadata() }

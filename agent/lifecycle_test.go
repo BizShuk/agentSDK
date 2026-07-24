@@ -1,4 +1,4 @@
-package app_test
+package agent_test
 
 import (
 	"context"
@@ -13,14 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bizshuk/agentsdk/action"
-	"github.com/bizshuk/agentsdk/app"
+	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/security"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 )
 
 // cleanupAppDir removes ~/.config/<name> once the test finishes. OpenForCLI
@@ -61,7 +61,7 @@ func (panicTool) Call(context.Context, json.RawMessage) (core.ToolResult, error)
 	panic("tool exploded")
 }
 
-// testAgent is a configurable app.Agent for the table below.
+// testAgent is a configurable agent.Runner for the table below.
 type testAgent struct {
 	name          string
 	tool          core.Tool
@@ -112,8 +112,8 @@ func (a *testAgent) OnComplete(_ context.Context, final core.State) error {
 }
 
 // preflightAgent adds the optional Preflighter to testAgent. It is a
-// separate type so the other cases stay free of the hook entirely — an
-// Agent that does not implement Preflighter must skip that step.
+// separate type so the other cases stay free of the hook entirely — a
+// Runner that does not implement Preflighter must skip that step.
 type preflightAgent struct{ *testAgent }
 
 func (a *preflightAgent) Preflight(context.Context, *config.AppConfig) error {
@@ -125,13 +125,13 @@ func TestRunHappyPath(t *testing.T) {
 	const name = "agentsdk-app-test-happy"
 	cleanupAppDir(t, name)
 
-	agent := &testAgent{name: name, tool: echoTool{}}
-	code := app.Run(context.Background(), agent)
+	a := &testAgent{name: name, tool: echoTool{}}
+	code := agent.Run(context.Background(), a)
 
-	assert.Equal(t, app.EXIT_OK, code)
-	assert.True(t, agent.bootstrapRan)
-	assert.True(t, agent.completeRan, "OnComplete should fire on a successful run")
-	assert.Equal(t, core.RUN_STATUS_COMPLETED, agent.completeState.Status)
+	assert.Equal(t, agent.EXIT_OK, code)
+	assert.True(t, a.bootstrapRan)
+	assert.True(t, a.completeRan, "OnComplete should fire on a successful run")
+	assert.Equal(t, core.RUN_STATUS_COMPLETED, a.completeState.Status)
 }
 
 func TestRunBackfillsPersistenceFromConfig(t *testing.T) {
@@ -140,11 +140,11 @@ func TestRunBackfillsPersistenceFromConfig(t *testing.T) {
 
 	// store left nil in Bootstrap → Run must wire cfg.StateStore, so the
 	// run ID must be non-empty and the final state must have persisted.
-	agent := &testAgent{name: name, tool: echoTool{}}
-	code := app.Run(context.Background(), agent)
+	a := &testAgent{name: name, tool: echoTool{}}
+	code := agent.Run(context.Background(), a)
 
-	require.Equal(t, app.EXIT_OK, code)
-	assert.NotEmpty(t, agent.completeState.RunID, "Run should seed RunID from AppConfig")
+	require.Equal(t, agent.EXIT_OK, code)
+	assert.NotEmpty(t, a.completeState.RunID, "Run should seed RunID from AppConfig")
 }
 
 func TestRunPreflightFailureAbortsBeforeBootstrap(t *testing.T) {
@@ -152,11 +152,11 @@ func TestRunPreflightFailureAbortsBeforeBootstrap(t *testing.T) {
 	cleanupAppDir(t, name)
 
 	base := &testAgent{name: name, tool: echoTool{}, preflightErr: errors.New("no api key")}
-	agent := &preflightAgent{testAgent: base}
+	a := &preflightAgent{testAgent: base}
 
-	code := app.Run(context.Background(), agent)
+	code := agent.Run(context.Background(), a)
 
-	assert.Equal(t, app.EXIT_ERROR, code)
+	assert.Equal(t, agent.EXIT_ERROR, code)
 	assert.True(t, base.preflightRan)
 	assert.False(t, base.bootstrapRan, "a failed preflight must not reach Bootstrap")
 }
@@ -165,22 +165,22 @@ func TestRunBootstrapFailure(t *testing.T) {
 	const name = "agentsdk-app-test-bootstrap"
 	cleanupAppDir(t, name)
 
-	agent := &testAgent{name: name, tool: echoTool{}, bootstrapErr: errors.New("bad wiring")}
-	code := app.Run(context.Background(), agent)
+	a := &testAgent{name: name, tool: echoTool{}, bootstrapErr: errors.New("bad wiring")}
+	code := agent.Run(context.Background(), a)
 
-	assert.Equal(t, app.EXIT_ERROR, code)
-	assert.False(t, agent.completeRan)
+	assert.Equal(t, agent.EXIT_ERROR, code)
+	assert.False(t, a.completeRan)
 }
 
 func TestRunOnCompleteFailureFailsProcess(t *testing.T) {
 	const name = "agentsdk-app-test-oncomplete"
 	cleanupAppDir(t, name)
 
-	agent := &testAgent{name: name, tool: echoTool{}, completeErr: errors.New("publish failed")}
-	code := app.Run(context.Background(), agent)
+	a := &testAgent{name: name, tool: echoTool{}, completeErr: errors.New("publish failed")}
+	code := agent.Run(context.Background(), a)
 
-	assert.Equal(t, app.EXIT_ERROR, code, "undelivered results are not a successful run")
-	assert.True(t, agent.completeRan)
+	assert.Equal(t, agent.EXIT_ERROR, code, "undelivered results are not a successful run")
+	assert.True(t, a.completeRan)
 }
 
 // TestRunRecoversToolPanic is the load-bearing case: a panicking tool must
@@ -191,11 +191,11 @@ func TestRunRecoversToolPanic(t *testing.T) {
 	cleanupAppDir(t, name)
 
 	store := testutil.NewMemStore()
-	agent := &testAgent{name: name, tool: panicTool{}, store: store}
+	a := &testAgent{name: name, tool: panicTool{}, store: store}
 
-	code := app.Run(context.Background(), agent)
+	code := agent.Run(context.Background(), a)
 
-	assert.Equal(t, app.EXIT_ERROR, code)
+	assert.Equal(t, agent.EXIT_ERROR, code)
 
 	runIDs, err := store.List(context.Background())
 	require.NoError(t, err)
@@ -205,32 +205,32 @@ func TestRunRecoversToolPanic(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, core.RUN_STATUS_FAILED, final.Status,
 		"a panicked run must be terminal, not left running")
-	assert.False(t, agent.completeRan, "OnComplete must not fire on a crashed run")
+	assert.False(t, a.completeRan, "OnComplete must not fire on a crashed run")
 }
 
 func TestRunRejectsEmptyName(t *testing.T) {
-	agent := &testAgent{name: "", tool: echoTool{}}
-	assert.Equal(t, app.EXIT_ERROR, app.Run(context.Background(), agent))
-	assert.False(t, agent.bootstrapRan)
+	a := &testAgent{name: "", tool: echoTool{}}
+	assert.Equal(t, agent.EXIT_ERROR, agent.Run(context.Background(), a))
+	assert.False(t, a.bootstrapRan)
 }
 
-// TestRunHonorsTimeout confirms the deadline reaches the Agent — Bootstrap
+// TestRunHonorsTimeout confirms the deadline reaches the Runner — Bootstrap
 // sees a ctx that is already bounded, so a provider call inherits it.
 func TestRunHonorsTimeout(t *testing.T) {
 	const name = "agentsdk-app-test-timeout"
 	cleanupAppDir(t, name)
 
 	var gotDeadline bool
-	agent := &deadlineProbe{
+	a := &deadlineProbe{
 		testAgent: &testAgent{name: name, tool: echoTool{}},
 		probe: func(ctx context.Context) {
 			_, gotDeadline = ctx.Deadline()
 		},
 	}
 
-	code := app.Run(context.Background(), agent, app.WithTimeout(2*time.Second))
+	code := agent.Run(context.Background(), a, agent.WithTimeout(2*time.Second))
 
-	assert.Equal(t, app.EXIT_OK, code)
+	assert.Equal(t, agent.EXIT_OK, code)
 	assert.True(t, gotDeadline, "Bootstrap should receive a ctx carrying the run deadline")
 }
 
@@ -287,11 +287,11 @@ func chatEngine() (*runtime.Engine, core.State) {
 	return eng, core.State{ReasoningStyle: core.REASON_REACT, Budget: core.Budget{MaxTurns: 10}}
 }
 
-// interactiveAgent implements app.Interactive; boot picks the engine shape.
+// interactiveAgent implements agent.Interactive; boot picks the engine shape.
 type interactiveAgent struct {
 	name        string
 	boot        func() (*runtime.Engine, core.State)
-	next        func(context.Context, app.Pause) (app.Resume, error)
+	next        func(context.Context, agent.Pause) (agent.Resume, error)
 	final       core.State
 	completeRan bool
 }
@@ -303,7 +303,7 @@ func (a *interactiveAgent) Bootstrap(_ context.Context, _ *config.AppConfig) (*r
 	return eng, st, nil
 }
 
-func (a *interactiveAgent) NextRound(ctx context.Context, p app.Pause) (app.Resume, error) {
+func (a *interactiveAgent) NextRound(ctx context.Context, p agent.Pause) (agent.Resume, error) {
 	return a.next(ctx, p)
 }
 
@@ -338,21 +338,21 @@ func TestRunConsultsInteractiveOnApprovalPause(t *testing.T) {
 	const name = "agentsdk-app-test-interactive-approve"
 	cleanupAppDir(t, name)
 
-	var seen []app.PauseReason
+	var seen []agent.PauseReason
 	a := &interactiveAgent{
 		name: name,
 		boot: pausingEngine,
-		next: func(_ context.Context, p app.Pause) (app.Resume, error) {
+		next: func(_ context.Context, p agent.Pause) (agent.Resume, error) {
 			seen = append(seen, p.Reason)
-			if p.Reason == app.PAUSE_APPROVAL {
-				return app.Resume{Decision: core.APPROVAL_DECISION_APPROVE, By: "tester"}, nil
+			if p.Reason == agent.PAUSE_APPROVAL {
+				return agent.Resume{Decision: core.APPROVAL_DECISION_APPROVE, By: "tester"}, nil
 			}
-			return app.Resume{Stop: true}, nil
+			return agent.Resume{Stop: true}, nil
 		},
 	}
-	code := app.Run(context.Background(), a, app.WithRoundTimeout(5*time.Second))
-	require.Equal(t, app.EXIT_OK, code)
-	assert.Contains(t, seen, app.PAUSE_APPROVAL)
+	code := agent.Run(context.Background(), a, agent.WithRoundTimeout(5*time.Second))
+	require.Equal(t, agent.EXIT_OK, code)
+	assert.Contains(t, seen, agent.PAUSE_APPROVAL)
 	assert.True(t, a.completeRan)
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, a.final.Status)
 }
@@ -366,15 +366,15 @@ func TestRunInteractiveRejectCompletesRun(t *testing.T) {
 	a := &interactiveAgent{
 		name: name,
 		boot: pausingEngine,
-		next: func(_ context.Context, p app.Pause) (app.Resume, error) {
-			if p.Reason == app.PAUSE_APPROVAL {
-				return app.Resume{Decision: core.APPROVAL_DECISION_REJECT, By: "tester"}, nil
+		next: func(_ context.Context, p agent.Pause) (agent.Resume, error) {
+			if p.Reason == agent.PAUSE_APPROVAL {
+				return agent.Resume{Decision: core.APPROVAL_DECISION_REJECT, By: "tester"}, nil
 			}
-			return app.Resume{Stop: true}, nil
+			return agent.Resume{Stop: true}, nil
 		},
 	}
-	code := app.Run(context.Background(), a)
-	require.Equal(t, app.EXIT_OK, code)
+	code := agent.Run(context.Background(), a)
+	require.Equal(t, agent.EXIT_OK, code)
 	assert.True(t, a.completeRan)
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, a.final.Status)
 }
@@ -389,30 +389,30 @@ func TestRunFollowUpReopensCompletedRun(t *testing.T) {
 	a := &interactiveAgent{
 		name: name,
 		boot: chatEngine,
-		next: func(_ context.Context, p app.Pause) (app.Resume, error) {
+		next: func(_ context.Context, p agent.Pause) (agent.Resume, error) {
 			rounds++
-			assert.Equal(t, app.PAUSE_ROUND_END, p.Reason)
+			assert.Equal(t, agent.PAUSE_ROUND_END, p.Reason)
 			if rounds == 1 {
-				return app.Resume{Input: "one more question"}, nil
+				return agent.Resume{Input: "one more question"}, nil
 			}
-			return app.Resume{}, nil // empty input at round_end → stop
+			return agent.Resume{}, nil // empty input at round_end → stop
 		},
 	}
-	code := app.Run(context.Background(), a)
-	require.Equal(t, app.EXIT_OK, code)
+	code := agent.Run(context.Background(), a)
+	require.Equal(t, agent.EXIT_OK, code)
 	assert.Equal(t, 2, rounds, "asked after the first completion and after the follow-up")
 	assert.True(t, a.completeRan)
 }
 
-// TestRunExitsOnPauseWithoutInteractive: an Agent that pauses but does not
+// TestRunExitsOnPauseWithoutInteractive: a Runner that pauses but does not
 // implement Interactive still exits cleanly, leaving the pause persisted.
 func TestRunExitsOnPauseWithoutInteractive(t *testing.T) {
 	const name = "agentsdk-app-test-no-interactive"
 	cleanupAppDir(t, name)
 
 	a := &pausingAgent{name: name}
-	code := app.Run(context.Background(), a)
-	require.Equal(t, app.EXIT_OK, code, "no Interactive → clean exit")
+	code := agent.Run(context.Background(), a)
+	require.Equal(t, agent.EXIT_OK, code, "no Interactive → clean exit")
 	assert.True(t, a.completeRan)
 	assert.Equal(t, core.RUN_STATUS_PAUSED_APPROVAL, a.final.Status,
 		"the pause is left for an external verb")

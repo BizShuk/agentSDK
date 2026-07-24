@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/hook"
+	"github.com/bizshuk/agentsdk/middleware/hook"
 )
 
 // SAFETY_DENY and SAFETY_ASK are this application's permission rules —

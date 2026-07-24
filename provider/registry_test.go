@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/bizshuk/agentsdk/agent/spec"
-	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/provider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -71,12 +70,12 @@ func TestEveryEntryIsSelfDescribing(t *testing.T) {
 	for _, e := range registry.Entries() {
 		t.Run(e.Name, func(t *testing.T) {
 			assert.NotEmpty(t, e.Name)
-			assert.NotEmpty(t, e.Label, "a wizard menu renders Label")
+			assert.NotEmpty(t, e.Metadata.Label, "a wizard menu renders Label")
 			// API-key paths must name the env var; OAuth-only entries
 			// document themselves in Note instead.
-			oauthOnly := strings.Contains(strings.ToLower(e.Note), "oauth")
+			oauthOnly := strings.Contains(strings.ToLower(e.Metadata.Note), "oauth")
 			if !oauthOnly {
-				assert.NotEmptyf(t, e.APIKeyEnv,
+				assert.NotEmptyf(t, e.Metadata.APIKeyEnv,
 					"every non-OAuth entry must document how its credential resolves; got %+v", e)
 			}
 			assert.NotNil(t, e.New)
@@ -135,7 +134,7 @@ func TestCredentialResolutionPrecedence(t *testing.T) {
 			e, ok := registry.Lookup(tc.provider)
 			require.True(t, ok)
 
-			got := tc.opts.Resolve(e)
+			got := tc.opts.Resolve(e.Metadata)
 			assert.Equal(t, tc.wantAPIKey, got.APIKey)
 			if tc.wantBaseURL != "" {
 				assert.Equal(t, tc.wantBaseURL, got.BaseURL)
@@ -153,13 +152,14 @@ func TestNewBuildsAProvider(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, p)
 	assert.NotEmpty(t, p.ID())
+	assert.NotEmpty(t, p.Metadata().Label, "a constructed adapter must carry its descriptor")
 }
 
 func TestRegisterPanicsOnDuplicate(t *testing.T) {
 	// A second registration with the same Name must panic at init time;
 	// we exercise it directly to verify the invariant.
 	assert.Panics(t, func() {
-		registry.Register(registry.Entry{Name: "minimax", New: func(registry.Options) (core.Provider, error) {
+		registry.Register(registry.Entry{Name: "minimax", New: func(registry.Options) (registry.Adapter, error) {
 			return nil, nil
 		}})
 	}, "Register must reject duplicate names")
@@ -175,7 +175,7 @@ func TestRegisterRejectsIncompleteEntry(t *testing.T) {
 		entry registry.Entry
 	}{
 		{"missing New", registry.Entry{Name: "incomplete-only-name"}},
-		{"missing Name", registry.Entry{New: func(registry.Options) (core.Provider, error) {
+		{"missing Name", registry.Entry{New: func(registry.Options) (registry.Adapter, error) {
 			return nil, nil
 		}}},
 	}
