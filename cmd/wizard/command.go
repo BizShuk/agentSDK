@@ -24,8 +24,8 @@ var (
 	listKey string
 )
 
-// Command is the package-level `wizard` subcommand (alias `w`).
-var Command = &cobra.Command{
+// WizardCmd is the package-level `wizard` subcommand (alias `w`).
+var WizardCmd = &cobra.Command{
 	Use:     "wizard",
 	Aliases: []string{"w"},
 	Short:   "Build an agent config interactively, stage by stage",
@@ -48,7 +48,7 @@ Examples:
 }
 
 func init() {
-	f := Command.Flags()
+	f := WizardCmd.Flags()
 	f.StringVarP(&out, "out", "o", DEFAULT_WIZARD_OUT, `Output path; "-" writes to stdout.`)
 	f.BoolVarP(&yes, "yes", "y", false, "Take every default; ask nothing.")
 	f.StringVar(&tier, "tier", "", "Preselect the tier: oneshot | basic | standard | full.")
@@ -131,10 +131,4 @@ func runWizardCmd(cmd *cobra.Command, _ []string) error {
 		fmt.Fprint(stdout, goLiteral(cfg))
 	}
 	return nil
-}
-
-// NewCommand returns Command for backwards compatibility.
-func NewCommand() *cobra.Command {
-	ResetFlags()
-	return Command
 }

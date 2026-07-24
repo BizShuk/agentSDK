@@ -17,7 +17,8 @@ import (
 // runWizard executes the command with the given args and stdin, returning stdout.
 func runWizard(t *testing.T, stdin string, args ...string) (string, string, error) {
 	t.Helper()
-	c := wizard.NewCommand()
+	wizard.ResetFlags()
+	c := wizard.WizardCmd
 	var out, errOut bytes.Buffer
 	c.SetOut(&out)
 	c.SetErr(&errOut)

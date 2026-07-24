@@ -16,10 +16,23 @@ import (
 	"github.com/bizshuk/agentsdk/provider/registry"
 	gosdkconfig "github.com/bizshuk/gosdk/config"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
-// NewProviderCommand returns the cobra subcommand:
+var (
+	ProviderName       string
+	ProviderModel      string
+	ProviderAPIKey     string
+	ProviderBaseURL    string
+	ProviderSystem     string
+	ProviderMaxTokens  int
+	ProviderStream     bool
+	ProviderAsJSON     bool
+	ProviderListModels bool
+)
+
+// ProviderCmd is the package-level "provider" subcommand.
 //
 //	provider [flags] <prompt...>
 //
@@ -28,23 +41,10 @@ import (
 // useful as a wire-format smoke test: any provider-side regression
 // (auth header, DTO translate, SSE parser) is exposed here without
 // requiring a full agentic loop.
-func NewProviderCommand() *cobra.Command {
-	var (
-		providerName string
-		model        string
-		apiKey       string
-		baseURL      string
-		system       string
-		maxTokens    int
-		stream       bool
-		asJSON       bool
-		listModels   bool
-	)
-
-	cmd := &cobra.Command{
-		Use:   "provider [flags] <prompt>",
-		Short: "Run a single prompt against a provider, bypassing the agent loop",
-		Long: strings.TrimSpace(`
+var ProviderCmd = &cobra.Command{
+	Use:   "provider [flags] <prompt>",
+	Short: "Run a single prompt against a provider, bypassing the agent loop",
+	Long: strings.TrimSpace(`
 provider is the minimal smoke-test CLI for the provider adapter family.
 It calls core.Provider.Generate (or Stream with --stream) directly —
 no Agent, Engine, tools, or harness — so any provider regression is
@@ -63,92 +63,109 @@ Examples:
   provider --list-models --provider ollama    # lists the models your server actually pulled
   provider --list-providers
 `),
-		SilenceUsage:  true,
-		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			out := cmd.OutOrStdout()
-			errOut := cmd.ErrOrStderr()
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		out := cmd.OutOrStdout()
+		errOut := cmd.ErrOrStderr()
 
-			// Boot gosdk/config once per invocation so .env / config.yaml /
-			// settings.json (in cwd, ./conf, ~/.config/agentsdk/) participate
-			// in credential resolution. Failures degrade gracefully — flag
-			// + OS env still work without gosdk.
-			if err := bootGosdkConfig(); err != nil {
-				fmt.Fprintf(errOut, "[provider] gosdk/config: %v (continuing with OS env only)\n", err)
-			}
+		// Boot gosdk/config once per invocation so .env / config.yaml /
+		// settings.json (in cwd, ./conf, ~/.config/agentsdk/) participate
+		// in credential resolution. Failures degrade gracefully — flag
+		// + OS env still work without gosdk.
+		if err := bootGosdkConfig(); err != nil {
+			fmt.Fprintf(errOut, "[provider] gosdk/config: %v (continuing with OS env only)\n", err)
+		}
 
-			if listProviders, _ := cmd.Flags().GetBool("list-providers"); listProviders {
-				fmt.Fprintln(out, strings.Join(registry.Names(), ", "))
-				return nil
-			}
+		if listProviders, _ := cmd.Flags().GetBool("list-providers"); listProviders {
+			fmt.Fprintln(out, strings.Join(registry.Names(), ", "))
+			return nil
+		}
 
-			entry, ok := registry.Lookup(providerName)
-			if !ok {
-				return fmt.Errorf("unknown provider %q (registered: %s)",
-					providerName, strings.Join(registry.Names(), ", "))
-			}
-			label := entry.Name
+		entry, ok := registry.Lookup(ProviderName)
+		if !ok {
+			return fmt.Errorf("unknown provider %q (registered: %s)",
+				ProviderName, strings.Join(registry.Names(), ", "))
+		}
+		label := entry.Name
 
-			prov, err := registry.New(providerName, registry.Options{
-				Model:     model,
-				APIKey:    apiKey,
-				BaseURL:   baseURL,
-				LookupEnv: envLookup,
-			})
-			if err != nil {
-				return err
-			}
+		prov, err := registry.New(ProviderName, registry.Options{
+			Model:     ProviderModel,
+			APIKey:    ProviderAPIKey,
+			BaseURL:   ProviderBaseURL,
+			LookupEnv: envLookup,
+		})
+		if err != nil {
+			return err
+		}
 
-			if listModels {
-				return dumpCatalog(cmd.Context(), errOut, out, prov, label)
-			}
+		if ProviderListModels {
+			return dumpCatalog(cmd.Context(), errOut, out, prov, label)
+		}
 
-			prompt := strings.TrimSpace(strings.Join(args, " "))
-			if prompt == "" {
-				return fmt.Errorf("prompt is required (or pass --list-models / --list-providers)")
-			}
+		prompt := strings.TrimSpace(strings.Join(args, " "))
+		if prompt == "" {
+			return fmt.Errorf("prompt is required (or pass --list-models / --list-providers)")
+		}
 
-			req := buildRequest(prompt, system, maxTokens)
+		req := buildRequest(prompt, ProviderSystem, ProviderMaxTokens)
 
-			fmt.Fprintf(errOut, "[provider] %s | model=%s | stream=%v\n",
-				label, effectiveModel(prov), stream)
+		fmt.Fprintf(errOut, "[provider] %s | model=%s | stream=%v\n",
+			label, effectiveModel(prov), ProviderStream)
 
-			if stream {
-				return runStream(cmd.Context(), prov, req, out, asJSON)
-			}
-			return runGenerate(cmd.Context(), prov, req, out, asJSON)
-		},
-	}
+		if ProviderStream {
+			return runStream(cmd.Context(), prov, req, out, ProviderAsJSON)
+		}
+		return runGenerate(cmd.Context(), prov, req, out, ProviderAsJSON)
+	},
+}
 
-	flags := cmd.Flags()
-	flags.StringVar(&providerName, "provider", "minimax",
+func init() {
+	flags := ProviderCmd.Flags()
+	flags.StringVar(&ProviderName, "provider", "minimax",
 		"Provider family (minimax | anthropic | google | grok | ollama; case-insensitive).")
-	flags.StringVarP(&model, "model", "m", "",
+	flags.StringVarP(&ProviderModel, "model", "m", "",
 		"Model id (alias -m); empty = adapter flagship default. "+
 			"Use --list-models to see the provider's catalog.")
-	flags.StringVar(&apiKey, "api-key", "",
+	flags.StringVar(&ProviderAPIKey, "api-key", "",
 		"API key override; empty = resolved from .env / "+
 			"~/.config/agentsdk/.env / shell env "+
 			"(MINIMAX_API_KEY / ANTHROPIC_OAUTH_TOKEN+ANTHROPIC_API_KEY / "+
 			"GOOGLE_API_KEY / XAI_API_KEY / OPENAI_API_KEY). "+
 			"Precedence: --api-key > .env > OS env.")
-	flags.StringVar(&baseURL, "base-url", "",
+	flags.StringVar(&ProviderBaseURL, "base-url", "",
 		"Base URL override; empty = resolved from .env / shell env / "+
 			"adapter default. Same precedence as --api-key.")
-	flags.StringVar(&system, "system", "",
+	flags.StringVar(&ProviderSystem, "system", "",
 		"Optional system message prepended to the prompt.")
-	flags.IntVar(&maxTokens, "max-tokens", 0,
+	flags.IntVar(&ProviderMaxTokens, "max-tokens", 0,
 		"max_tokens for the request; 0 = adapter default.")
-	flags.BoolVar(&stream, "stream", false,
+	flags.BoolVar(&ProviderStream, "stream", false,
 		"Use SSE Stream instead of blocking Generate.")
-	flags.BoolVar(&asJSON, "json", false,
+	flags.BoolVar(&ProviderAsJSON, "json", false,
 		"Print the full ModelResult / chunk stream as JSON lines.")
-	flags.BoolVar(&listModels, "list-models", false,
+	flags.BoolVar(&ProviderListModels, "list-models", false,
 		"Print the provider's static catalog and exit.")
 	flags.Bool("list-providers", false,
 		"Print the registered provider names and exit.")
+}
 
-	return cmd
+// ResetFlags resets ProviderCmd flag state for clean test execution.
+func ResetFlags() {
+	ProviderName = "minimax"
+	ProviderModel = ""
+	ProviderAPIKey = ""
+	ProviderBaseURL = ""
+	ProviderSystem = ""
+	ProviderMaxTokens = 0
+	ProviderStream = false
+	ProviderAsJSON = false
+	ProviderListModels = false
+
+	ProviderCmd.Flags().VisitAll(func(f *pflag.Flag) {
+		f.Changed = false
+		_ = f.Value.Set(f.DefValue)
+	})
 }
 
 // ---------------------------------------------------------------------------

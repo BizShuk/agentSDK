@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/cmd"
+	"github.com/bizshuk/agentsdk/cmd/wizard"
 	"github.com/spf13/cobra"
 )
 
@@ -50,8 +51,8 @@ Sample agents under sample/* are the canonical end-to-end demos.`),
 		SilenceErrors: true,
 	}
 
-	root.AddCommand(cmd.NewProviderCommand())
-	root.AddCommand(cmd.NewWizardCommand())
+	root.AddCommand(cmd.ProviderCmd)
+	root.AddCommand(wizard.WizardCmd)
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)

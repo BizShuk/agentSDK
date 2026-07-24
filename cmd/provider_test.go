@@ -63,11 +63,12 @@ func newFakeMessagesServer(t *testing.T, expectModel string) (*httptest.Server, 
 	return srv, &sawKey
 }
 
-// runCLI drives NewProviderCommand with the given args and returns the
+// runCLI drives ProviderCmd with the given args and returns the
 // captured stdout / stderr + error from Execute().
 func runCLI(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
-	root := NewProviderCommand()
+	ResetFlags()
+	root := ProviderCmd
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
