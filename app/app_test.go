@@ -16,7 +16,7 @@ import (
 	"github.com/bizshuk/agentsdk/app"
 	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/internal/testutil"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/security"
 	"github.com/bizshuk/agentsdk/planning"

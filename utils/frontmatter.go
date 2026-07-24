@@ -1,8 +1,17 @@
-// Package frontmatter parses the minimal "---" key/value header shared by
-// SKILL.md, slash commands, and subagent definitions. It is intentionally
-// not YAML — flat "key: value" lines only, which is all the markdown-
-// definition formats of claude-code / codex / pi require.
-package frontmatter
+// Package utils holds root-module shared plumbing that does not belong
+// to any specific domain package. Today it carries two surfaces:
+//
+//   - frontmatter.Parse / frontmatter.List: the minimal "---" key/value
+//     header shared by SKILL.md, slash commands, and subagent
+//     definitions. Intentionally not YAML — flat "key: value" lines only,
+//     which is all the markdown-definition formats of claude-code / codex
+//     / pi require.
+//   - ScriptedProvider / MemStore / RecordingNotifier: in-process fakes
+//     for core.Provider, core.StateStore and core.Notifier, consumed by
+//     every test file in the repo. They live here (rather than under
+//     internal/) so sample/ modules outside the root module can import
+//     them too.
+package utils
 
 import (
 	"strings"

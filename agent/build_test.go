@@ -15,7 +15,7 @@ import (
 	appconfig "github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/hook"
-	"github.com/bizshuk/agentsdk/internal/testutil"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/prompt"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/stretchr/testify/assert"

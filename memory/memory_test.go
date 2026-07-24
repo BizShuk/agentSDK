@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/internal/testutil"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/memory"
 	"github.com/bizshuk/agentsdk/memory/checkpoint"
 	"github.com/bizshuk/agentsdk/memory/compaction"

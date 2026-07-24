@@ -1,4 +1,4 @@
-// Package modelsapi holds the shared plumbing every provider adapter uses
+// Package utils holds the shared plumbing every provider adapter uses
 // to enumerate models from its upstream's live catalog endpoint instead of
 // a hand-maintained constant list.
 //
@@ -15,7 +15,7 @@
 // bundled DefaultCatalog stays as the source of metadata (family,
 // reasoning flag, context window) that the list endpoints do not report,
 // and as the offline fallback. Merge stitches the two together.
-package modelsapi
+package utils
 
 import (
 	"context"

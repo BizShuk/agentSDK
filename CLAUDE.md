@@ -39,8 +39,7 @@ agentsdk/
 ├── skill/                            # SKILL.md/commands/templates registry（progressive disclosure）
 ├── subagent/                         # 定義解析 + task tool（RunFunc closure DI、depth guard）
 ├── wire/                             # headless envelope：stream-json/RPC/print（core.EventSink adapter）
-├── internal/frontmatter/             # skill/subagent 共用的 "---" key:value 解析器
-├── internal/modelsapi/               # provider adapter 共用的 live model catalog helper（Fetch/DecodeIDList/Merge）
+├── utils/                            # 根層共用 utilities：frontmatter key:value 解析器 + utils/testutil/（in-process fake provider/state store/notifier）
 ├── tui/                              # sub-package（zero-dep）：differential renderer、ANSI 工具、Component/Terminal 抽象
 ├── middleware/                       # chain、retry/timeout/budget/loopguard、安全與 OTel tracing
 ├── memory/                           # context window、compactor、checkpoint、JSON state/WAL
@@ -54,6 +53,7 @@ agentsdk/
 ├── provider/
 │   ├── registry.go                   # name → adapter 的唯一真相；env 查詢用注入（不綁 viper），CLI 與 agent 共用；adapter 以 init() 自我註冊
 │   ├── all/                          # meta-package：blank-import 全部 adapter 的便利入口
+│   ├── utils/                        # provider 共用 utilities：live model catalog helper（Fetch/DecodeIDList/Merge）
 │   ├── anthropic/                    # 獨立 module：anthropic-sdk-go adapter
 │   ├── antigravity/                  # adapter：Google Cloud Antigravity OAuth
 │   ├── codex/                        # adapter：OpenAI Codex OAuth
@@ -367,7 +367,7 @@ go run . --provider anthropic -p "..."    # 改讀 ANTHROPIC_API_KEY（含 minim
 
 - 常數使用 `SCREAMING_SNAKE_CASE`，變數、函式、型別使用 Go `MixedCaps`；package 名稱使用單字。
 - 錯誤以 `fmt.Errorf("...: %w", err)` wrap；公開 error 不帶 credential、authorization、prompt 或未清理 upstream body。
-- 測試採 table-driven + `t.Run`，`testify/assert` 與 `testify/require` 並用；`internal/testutil` 只可被測試使用。
+- 測試採 table-driven + `t.Run`，`testify/assert` 與 `testify/require` 並用；`utils/testutil` 只可被測試使用。
 - `core.Decide`、planning rules、transform pair 不得直接做 I/O、讀 credential 或建立 HTTP request；這些責任分別屬於 runtime、upstream 與 auth。
 - `sample/logdoctor/core` 與 `agentsdk/core` 是不同 module path；import 時使用 `domain` / `sdkcore` alias。
 - `proxy/docs/specs/2026-07-16-client-llm-adaptor.md` 是 legacy historical design；修改 proxy 時以 pairwise spec、現行 `proxy/` code 與測試為準。

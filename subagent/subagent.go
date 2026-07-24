@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/internal/frontmatter"
+	"github.com/bizshuk/agentsdk/utils"
 )
 
 const (
@@ -40,7 +40,7 @@ type Def struct {
 // ParseDef parses one definition; fallbackName is used when frontmatter
 // has no name (typically the file base name).
 func ParseDef(fallbackName, content string) Def {
-	fields, body := frontmatter.Parse(content)
+	fields, body := utils.Parse(content)
 	name := fields["name"]
 	if name == "" {
 		name = fallbackName
@@ -50,7 +50,7 @@ func ParseDef(fallbackName, content string) Def {
 		Description: fields["description"],
 		Provider:    fields["provider"],
 		Model:       fields["model"],
-		Tools:       frontmatter.List(fields["tools"]),
+		Tools:       utils.List(fields["tools"]),
 		Prompt:      strings.TrimSpace(body),
 	}
 }

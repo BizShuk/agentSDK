@@ -20,7 +20,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bizshuk/agentsdk/internal/frontmatter"
+	"github.com/bizshuk/agentsdk/utils"
 )
 
 // ARGUMENTS_PLACEHOLDER is substituted by ExpandCommand.
@@ -71,7 +71,7 @@ func (r *Registry) DiscoverSkills(dir string) error {
 		if err != nil {
 			continue
 		}
-		fields, _ := frontmatter.Parse(string(raw))
+		fields, _ := utils.Parse(string(raw))
 		name := fields["name"]
 		if name == "" {
 			name = e.Name()
@@ -79,7 +79,7 @@ func (r *Registry) DiscoverSkills(dir string) error {
 		r.skills[name] = Skill{
 			Name:         name,
 			Description:  fields["description"],
-			AllowedTools: frontmatter.List(fields["allowed-tools"]),
+			AllowedTools: utils.List(fields["allowed-tools"]),
 			Path:         path,
 		}
 	}
@@ -138,7 +138,7 @@ func (r *Registry) Body(name string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("skill %s: %w", name, err)
 	}
-	_, body := frontmatter.Parse(string(raw))
+	_, body := utils.Parse(string(raw))
 	return strings.TrimSpace(body), nil
 }
 
@@ -153,7 +153,7 @@ func (r *Registry) ExpandCommand(name, args string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("command %s: %w", name, err)
 	}
-	_, body := frontmatter.Parse(string(raw))
+	_, body := utils.Parse(string(raw))
 	body = strings.TrimSpace(body)
 	if strings.Contains(body, ARGUMENTS_PLACEHOLDER) {
 		return strings.ReplaceAll(body, ARGUMENTS_PLACEHOLDER, args), nil

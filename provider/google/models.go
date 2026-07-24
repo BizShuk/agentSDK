@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/internal/modelsapi"
+	"github.com/bizshuk/agentsdk/provider/utils"
 )
 
 // DefaultCatalog lists the Google Generative AI models the proxy
@@ -343,7 +343,7 @@ func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
 		if token != "" {
 			url += "&pageToken=" + token
 		}
-		raw, err := modelsapi.Fetch(ctx, p.client, url, map[string]string{
+		raw, err := utils.Fetch(ctx, p.client, url, map[string]string{
 			"x-goog-api-key": p.apiKey,
 		})
 		if err != nil {

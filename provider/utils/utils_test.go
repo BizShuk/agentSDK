@@ -1,4 +1,4 @@
-package modelsapi
+package utils
 
 import (
 	"context"

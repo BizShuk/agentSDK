@@ -1,9 +1,0 @@
-{
-  "layers": {},
-  "forbidden": [
-    {"from": "github.com/bizshuk/agentsdk/tui", "to": "github.com/bizshuk/agentsdk"}
-  ],
-  "heavy": {},
-  "thresholds": {},
-  "severity": {}
-}

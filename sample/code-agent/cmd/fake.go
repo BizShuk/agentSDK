@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/internal/testutil"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 )
 
 // fakeProvider wraps testutil.ScriptedProvider with an echo fallback so

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/internal/modelsapi"
+	"github.com/bizshuk/agentsdk/provider/utils"
 )
 
 // DefaultCatalog lists common Ollama / OpenAI-compatible model ids.
@@ -55,15 +55,15 @@ func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
 	if p.apiKey != "" {
 		headers["Authorization"] = "Bearer " + p.apiKey
 	}
-	raw, err := modelsapi.Fetch(ctx, p.client, p.baseURL+"/models", headers)
+	raw, err := utils.Fetch(ctx, p.client, p.baseURL+"/models", headers)
 	if err != nil {
 		return nil, fmt.Errorf("ollama: list models: %w", err)
 	}
-	ids, err := modelsapi.DecodeIDList(raw)
+	ids, err := utils.DecodeIDList(raw)
 	if err != nil {
 		return nil, fmt.Errorf("ollama: %w", err)
 	}
-	return modelsapi.Merge(ids, DefaultCatalog()), nil
+	return utils.Merge(ids, DefaultCatalog()), nil
 }
 
 // Compile-time: ensure Provider satisfies the optional live-catalog port.

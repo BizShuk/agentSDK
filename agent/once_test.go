@@ -8,7 +8,7 @@ import (
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/internal/testutil"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/provider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/internal/modelsapi"
+	"github.com/bizshuk/agentsdk/provider/utils"
 )
 
 // DefaultCatalog returns the bundled Anthropic model catalog.
@@ -50,15 +50,15 @@ func DefaultCatalog() []core.ModelSpec {
 // The same call works against an Anthropic-compatible gateway, since the
 // URL is derived from the configured endpoint rather than hard-coded.
 func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
-	raw, err := modelsapi.Fetch(ctx, p.httpDoer, p.modelsEndpoint(), p.catalogHeaders())
+	raw, err := utils.Fetch(ctx, p.httpDoer, p.modelsEndpoint(), p.catalogHeaders())
 	if err != nil {
 		return nil, fmt.Errorf("anthropic: list models: %w", err)
 	}
-	ids, err := modelsapi.DecodeIDList(raw)
+	ids, err := utils.DecodeIDList(raw)
 	if err != nil {
 		return nil, fmt.Errorf("anthropic: %w", err)
 	}
-	return modelsapi.Merge(ids, DefaultCatalog()), nil
+	return utils.Merge(ids, DefaultCatalog()), nil
 }
 
 // modelsEndpoint swaps the /messages path for /models on whatever base the
@@ -68,7 +68,7 @@ func (p *Provider) modelsEndpoint() string {
 }
 
 // catalogHeaders assembles the auth + version headers the catalog endpoint
-// requires. Mirrors applyAuthHeaders, but as a map for modelsapi.Fetch.
+// requires. Mirrors applyAuthHeaders, but as a map for utils.Fetch.
 func (p *Provider) catalogHeaders() map[string]string {
 	h := map[string]string{"anthropic-version": p.apiVer}
 	if p.auth.Bearer != "" {
