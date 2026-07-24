@@ -11,6 +11,7 @@ import (
 	"github.com/bizshuk/agentsdk/internal/testutil"
 	"github.com/bizshuk/agentsdk/memory"
 	"github.com/bizshuk/agentsdk/memory/checkpoint"
+	"github.com/bizshuk/agentsdk/memory/compaction"
 	"github.com/bizshuk/agentsdk/memory/filestore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,7 +57,7 @@ func TestWindowTrimByTokenCount(t *testing.T) {
 }
 
 func TestHeadlineCompactor(t *testing.T) {
-	c := memory.HeadlineCompactor{}
+	c := compaction.HeadlineCompactor{}
 	msg, err := c.Compact([]core.Message{
 		{Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "first line\nsecond line"}}},
 		{Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "third line"}}},

@@ -68,9 +68,13 @@ func Marshal(cfg Config, f Format) ([]byte, error) {
 // force is set — a wizard run that silently overwrote a hand-tuned config
 // would be worse than one that failed.
 func SaveFile(path string, cfg Config, force bool) error {
+	absPath := path
+	if abs, err := filepath.Abs(path); err == nil {
+		absPath = abs
+	}
 	if !force {
 		if _, err := os.Stat(path); err == nil {
-			return fmt.Errorf("agent: %s already exists (pass force to overwrite)", path)
+			return fmt.Errorf("agent: %s already exists (pass force to overwrite)", absPath)
 		}
 	}
 	out, err := Marshal(cfg, FormatOf(path))
@@ -78,7 +82,7 @@ func SaveFile(path string, cfg Config, force bool) error {
 		return err
 	}
 	if err := os.WriteFile(path, out, 0o644); err != nil {
-		return fmt.Errorf("agent: write %s: %w", path, err)
+		return fmt.Errorf("agent: write %s: %w", absPath, err)
 	}
 	return nil
 }

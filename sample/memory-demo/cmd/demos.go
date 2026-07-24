@@ -12,6 +12,7 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory"
 	"github.com/bizshuk/agentsdk/memory/checkpoint"
+	"github.com/bizshuk/agentsdk/memory/compaction"
 	"github.com/bizshuk/agentsdk/memory/filestore"
 )
 
@@ -75,7 +76,7 @@ func demoCompact(w io.Writer) error {
 	fmt.Fprintf(w, "壓縮前(%d 則):\n", len(msgs))
 	printMessages(w, msgs)
 
-	summary, err := memory.HeadlineCompactor{}.Compact(msgs)
+	summary, err := compaction.HeadlineCompactor{}.Compact(msgs)
 	if err != nil {
 		return err
 	}
