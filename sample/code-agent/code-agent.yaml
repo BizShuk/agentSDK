@@ -1,0 +1,64 @@
+# code-agent — sample config
+#
+# This file mirrors what `cmd/compose.go::compose` builds at runtime — the
+# same `agent.Config` literal the cobra flags produce when the sample is
+# run with defaults. Round-trip the wizard to regenerate:
+#
+#   cd /Users/shuk/projects/ai/agentSDK
+#   go run . w -y --tier full --permission-mode acceptEdits -o - --print-go
+#
+# NOTE: code-agent is FLAG-DRIVEN, not YAML-driven. This file documents
+# the canonical config that compose() constructs; the sample does not
+# currently load it via agent.LoadFile. Adding that path is a future
+# enhancement — the 11 flags and 4 dispatch modes are intentional UX
+# surface that would be lost by going single-file.
+#
+# Anything not in spec.Config (the blockDestructiveBash hook, the
+# explicitProvider path for --api-key) is intentionally not in YAML —
+# spec.Config is data, agent.Option is the closure surface for things
+# only code can express (HTTP client, hook rules, fake provider).
+#
+# Schema notes:
+# - `tier: full` is the wizard equivalent of spec.TIER_FULL; the sample
+#   always boots in full mode regardless of flag values.
+# - `safety.deny/ask` mirror SAFETY_DENY/ASK in cmd/safety.go.
+# - `model.credential_kind` is post-OAuth-fix schema.
+
+name: code-agent
+tier: full
+
+model:
+  provider: anthropic
+  name: claude-sonnet-5
+  # credential_kind: ""       # "" | "api_key" | "oauth"
+
+reasoning:
+  style: think_then_act
+
+limits:
+  max_turns: 50
+  autonomy: L2
+
+memory:
+  store: file
+
+middleware:
+  preset: secure
+
+safety:
+  mode: acceptEdits
+  sandbox: true
+  deny:
+    - "Bash(sudo:*)"
+  ask:
+    - "Bash(git push:*)"
+
+prompt:
+  sources:
+    - files
+    - skills
+    - env
+  project_dir: .agentsdk
+
+subagents:
+  max_turns: 10
