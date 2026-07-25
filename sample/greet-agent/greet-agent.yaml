@@ -1,0 +1,39 @@
+# greet-agent — sample config
+#
+# Loaded at startup via agent.LoadFile → spec.Decode. The custom `greet`
+# tool lives in `tool/greet.go` and is registered through agent.WithTools
+# in main.go — closure surface, not data surface, so it is intentionally
+# not in YAML.
+#
+# Credential resolution follows the post-OAuth-fix rules:
+#   - model.credential_kind = "" → registry auto-loads from env; OAuth
+#     (ANTHROPIC_OAUTH_TOKEN) outranks API key (ANTHROPIC_API_KEY).
+#   - "api_key" / "oauth" → strict modes with missing-env error.
+# All env reads go through viper. No hardcoded dev creds.
+
+name: greet-agent
+tier: standard
+
+model:
+  provider: anthropic
+  name: claude-sonnet-5
+  # credential_kind: ""       # "" | "api_key" | "oauth"
+
+reasoning:
+  style: think_then_act
+
+limits:
+  max_turns: 10
+  autonomy: L2
+
+middleware:
+  preset: secure
+
+tools:
+  builtin:
+    - read
+    - write
+    - edit
+    - bash
+    - glob
+    - grep
