@@ -15,21 +15,21 @@ func BuiltinNames() []string {
 	return []string{NAME_READ, NAME_WRITE, NAME_EDIT, NAME_BASH, NAME_GLOB, NAME_GREP}
 }
 
-// RegisterDefaults constructs all 6 built-in tools and registers them into reg via RegisterFunc.
+// RegisterDefaults constructs all 6 built-in tools and registers them into reg.
 // Errors if a required invariant is broken (e.g. Write without a Policy).
 func RegisterDefaults(reg *tool.Registry, opts Options) error {
 	var errs []string
 
 	// --- Read ---
 	r := NewRead(opts.Policy, opts.WorkingDir, opts.ReadOpts...)
-	tool.RegisterTyped(reg, r)
+	reg.Register(r)
 
 	// --- Write ---
 	w, err := NewWrite(opts.Policy, opts.WorkingDir, opts.WriteOpts...)
 	if err != nil {
 		errs = append(errs, "write: "+err.Error())
 	} else {
-		tool.RegisterTyped(reg, w)
+		reg.Register(w)
 	}
 
 	// --- Edit ---
@@ -37,7 +37,7 @@ func RegisterDefaults(reg *tool.Registry, opts Options) error {
 	if err != nil {
 		errs = append(errs, "edit: "+err.Error())
 	} else {
-		tool.RegisterTyped(reg, e)
+		reg.Register(e)
 	}
 
 	// --- Bash ---
@@ -45,16 +45,16 @@ func RegisterDefaults(reg *tool.Registry, opts Options) error {
 	if err != nil {
 		errs = append(errs, "bash: "+err.Error())
 	} else {
-		tool.RegisterTyped(reg, b)
+		reg.Register(b)
 	}
 
 	// --- Glob ---
 	g := NewGlob(opts.Policy, opts.WorkingDir, opts.GlobOpts...)
-	tool.RegisterTyped(reg, g)
+	reg.Register(g)
 
 	// --- Grep ---
 	gr := NewGrep(opts.Policy, opts.WorkingDir, opts.GrepOpts...)
-	tool.RegisterTyped(reg, gr)
+	reg.Register(gr)
 
 	if len(errs) > 0 {
 		return fmt.Errorf("builtin.RegisterDefaults: %s", strings.Join(errs, "; "))

@@ -13,31 +13,36 @@ import (
 // it to record a decision on a PendingApproval out-of-band; the
 // persisted state carries the decision so the next `resume` consumes
 // it as an APPROVAL_DECISION input.
-func RegisterApprove(root *cobra.Command) {
-	f := &approveFlags{}
-	cmd := &cobra.Command{
-		Use:   "approve",
-		Short: "Approve or reject a PendingApproval on a paused run",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return approveExecute(cmd, f)
-		},
-	}
-	cmd.Flags().StringVar(&f.runID, "run-id", "",
-		"Run ID whose pending approval to decide.")
-	cmd.Flags().StringVar(&f.decision, "decision", "approve",
-		"Decision: 'approve' | 'reject'.")
-	cmd.Flags().StringVar(&f.by, "by", "operator",
-		"Operator identifier (recorded on the decision).")
-	cmd.Flags().StringVar(&f.dataDir, "data-dir", "",
-		"Persistence directory (default: $LOGDOCTOR_DATA or ./data).")
-	root.AddCommand(cmd)
-}
-
 type approveFlags struct {
 	runID    string
 	decision string
 	by       string
 	dataDir  string
+}
+
+var (
+	approveCmdFlags approveFlags
+
+	// ApproveCmd approves or rejects a PendingApproval on a paused run.
+	ApproveCmd = &cobra.Command{
+		Use:   "approve",
+		Short: "Approve or reject a PendingApproval on a paused run",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return approveExecute(cmd, &approveCmdFlags)
+		},
+	}
+)
+
+func init() {
+	ApproveCmd.Flags().StringVar(&approveCmdFlags.runID, "run-id", "",
+		"Run ID whose pending approval to decide.")
+	ApproveCmd.Flags().StringVar(&approveCmdFlags.decision, "decision", "approve",
+		"Decision: 'approve' | 'reject'.")
+	ApproveCmd.Flags().StringVar(&approveCmdFlags.by, "by", "operator",
+		"Operator identifier (recorded on the decision).")
+	ApproveCmd.Flags().StringVar(&approveCmdFlags.dataDir, "data-dir", "",
+		"Persistence directory (default: $LOGDOCTOR_DATA or ./data).")
+	RootCmd.AddCommand(ApproveCmd)
 }
 
 func approveExecute(cmd *cobra.Command, f *approveFlags) error {

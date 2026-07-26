@@ -23,21 +23,25 @@ type resumeFlags struct {
 	dataDir string
 }
 
-// RegisterResume attaches the resume subcommand to root. Call from main.go.
-func RegisterResume(root *cobra.Command) {
-	f := &resumeFlags{}
-	cmd := &cobra.Command{
+var (
+	resumeCmdFlags resumeFlags
+
+	// ResumeCmd resumes a paused run from its persisted State + WAL.
+	ResumeCmd = &cobra.Command{
 		Use:   "resume",
 		Short: "Resume a paused run from its persisted State + WAL",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return resumeExecute(cmd, f)
+			return resumeExecute(cmd, &resumeCmdFlags)
 		},
 	}
-	cmd.Flags().StringVar(&f.runID, "run-id", "",
+)
+
+func init() {
+	ResumeCmd.Flags().StringVar(&resumeCmdFlags.runID, "run-id", "",
 		"Run ID to resume (required).")
-	cmd.Flags().StringVar(&f.dataDir, "data-dir", "",
+	ResumeCmd.Flags().StringVar(&resumeCmdFlags.dataDir, "data-dir", "",
 		"Directory containing states/ and wal/ (default: $LOGDOCTOR_DATA or ./data).")
-	root.AddCommand(cmd)
+	RootCmd.AddCommand(ResumeCmd)
 }
 
 func resumeExecute(cmd *cobra.Command, f *resumeFlags) error {

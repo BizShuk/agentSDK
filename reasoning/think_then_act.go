@@ -1,7 +1,7 @@
-// Package planning hosts the six DecisionRule implementations.
+// Package reasoning hosts the six DecisionRule implementations.
 // Each rule's NextStep is a pure reducer: read state, write instructions + working memory.
 // No I/O — runtime does dispatching based on the instructions returned.
-package planning
+package reasoning
 
 import "github.com/bizshuk/agentsdk/core"
 

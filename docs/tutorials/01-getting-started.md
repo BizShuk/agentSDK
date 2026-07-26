@@ -23,8 +23,8 @@ flowchart TD
     P["perception/ 感知"] -->|"Percept"| R["runtime/ Shell"]
     R -->|"State + Input"| S["core/ 純狀態機"]
     S -->|"Effects"| R
-    R -->|"dispatch"| A["action/ 工具"]
-    R -->|"dispatch"| M["planning/ 規劃"]
+    R -->|"dispatch"| A["tool/ 工具"]
+    R -->|"dispatch"| M["reasoning/ 推理"]
     R -->|"persist"| MEM["memory/ 持久化"]
 ```
 
@@ -32,8 +32,8 @@ flowchart TD
 |----|------|------|
 | 核心狀態機 | `core/` | `State`, `Effect`, `Step`, `ThinkingPattern` — 純函式,零依賴 |
 | 感知 | `perception/` | `Source` 介面 — 外部事件進入迴圈 |
-| 規劃 | `planning/` | 6 種 `ThinkingPattern` — 決定下一步做什麼 |
-| 行動 | `action/` | `TypedTool`, `Registry` — 註冊與呼叫工具 |
+| 推理 | `reasoning/` | 6 種 `ThinkingPattern` — 決定下一步做什麼 |
+| 行動 | `tool/` | `core.Tool`、`Registry`、`CallWithRawMessage` — 註冊與呼叫工具 |
 | Shell | `runtime/` | `Loop` — 把上面的零件串起來，跑控制迴圈 |
 | 持久化 | `memory/` | `StateStore`, `WAL`, checkpoint / recovery |
 
@@ -97,21 +97,24 @@ type Step func(state State, input Input) (State, []Effect)
 
 ```go
 step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-    core.THINK_REACT: planning.NewReAct(),
+    core.THINK_REACT: reasoning.NewThinkThenAct(),
 })
 ```
 
 ## 2. 定義工具 (Tool)
 
-工具用泛型 `TypedTool[TArgs, TOut]` 定義，args schema 由 reflection 自動生成：
+工具直接實作 `core.Tool`。公開 `Call` 接 `json.RawMessage`，再用
+`tool.CallWithRawMessage` 轉成 typed args；args schema 由 reflection 自動生成：
 
 ```go
 import (
-    "github.com/bizshuk/agentsdk/core"
-    "github.com/bizshuk/agentsdk/tool"
+    "context"
+    "encoding/json"
+
+    sdkcore "github.com/bizshuk/agentsdk/core"
+    sdktool "github.com/bizshuk/agentsdk/tool"
 )
 
-// Step 1: 定義 args 與 output struct
 type GreetArgs struct {
     Name string `json:"name"`
 }
@@ -120,37 +123,38 @@ type GreetOutput struct {
     Reply string `json:"reply"`
 }
 
-// Step 2: 用 NewTypedTool 包裝你的函式
-greetTool := action.NewTypedTool(
-    "greet",                        // tool name (LLM 會看到)
-    "Greet someone by name",        // description
-    func(ctx context.Context, a GreetArgs) (GreetOutput, error) {
-        return GreetOutput{Reply: "Hello, " + a.Name + "!"}, nil
-    },
-)
+type GreetTool struct{}
 
-// Step 3: 如果需要審批，設定 risk level
-greetTool.SetRisk(sdkcore.RISK_LEVEL_HIGH)
+func (g *GreetTool) Name() string { return "greet" }
+
+func (g *GreetTool) Spec() sdkcore.ToolSpec {
+    return sdktool.MustSchemaForTool[GreetArgs](
+        g.Name(),
+        "Greet someone by name",
+        sdkcore.RISK_LEVEL_HIGH,
+    )
+}
+
+func (g *GreetTool) Call(
+    ctx context.Context,
+    raw json.RawMessage,
+) (sdkcore.ToolResult, error) {
+    return sdktool.CallWithRawMessage(ctx, g.Name(), raw, g.execute)
+}
+
+func (g *GreetTool) execute(
+    _ context.Context,
+    args GreetArgs,
+) (GreetOutput, error) {
+    return GreetOutput{Reply: "Hello, " + args.Name + "!"}, nil
+}
 ```
 
 ### 2.1 註冊到 Registry
 
 ```go
-reg := action.NewRegistry()
-reg.Register(greetTool)
-
-// 也可以包裝成 struct 隱藏內部 TypedTool：
-type GreetTool struct {
-    Inner *action.TypedTool[GreetArgs, GreetOutput]
-}
-
-func (g *GreetTool) Name() string                { return g.Inner.Name() }
-func (g *GreetTool) Description() string         { return g.Inner.Description() }
-func (g *GreetTool) Schema() sdkcore.ToolSchema  { return g.Inner.Schema() }
-func (g *GreetTool) Risk() sdkcore.RiskLevel     { return g.Inner.Risk() }
-func (g *GreetTool) Call(ctx context.Context, args json.RawMessage) (sdkcore.ToolResult, error) {
-    return g.Inner.Call(ctx, args)
-}
+reg := sdktool.NewRegistry()
+reg.Register(&GreetTool{})
 ```
 
 ## 3. 感知輸入 (Perception)
@@ -243,7 +247,7 @@ if input.ModelResult != nil && len(input.ModelResult.ToolCalls) > 0 {
 ```go
 import (
     "github.com/bizshuk/agentsdk/core"
-    "github.com/bizshuk/agentsdk/planning"
+    "github.com/bizshuk/agentsdk/reasoning"
     "github.com/bizshuk/agentsdk/runtime"
     "github.com/bizshuk/agentsdk/tool"
 )
@@ -254,7 +258,7 @@ reg.Register(greetTool)
 
 // 2. ThinkingPattern
 step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-    core.THINK_REACT: planning.NewReAct(),
+    core.THINK_REACT: reasoning.NewThinkThenAct(),
 })
 
 // 3. 建立 Loop（至少需要 step + model + tools）
@@ -397,29 +401,39 @@ type GreetOutput struct {
     Reply string `json:"reply"`
 }
 
-type Greet struct {
-    Inner *action.TypedTool[GreetArgs, GreetOutput]
-}
+type Greet struct{}
 
 func NewGreet() *Greet {
-    t := action.NewTypedTool("greet",
-        "Greet someone by name and return a friendly reply",
-        func(_ context.Context, a GreetArgs) (GreetOutput, error) {
-            if a.Name == "" {
-                return GreetOutput{}, fmt.Errorf("name is required")
-            }
-            return GreetOutput{Reply: fmt.Sprintf("Hello, %s! Nice to meet you.", a.Name)}, nil
-        })
-    return &Greet{Inner: t}
+    return &Greet{}
 }
 
-// 實現 core.Tool 介面
-func (g *Greet) Name() string                       { return g.Inner.Name() }
-func (g *Greet) Description() string                { return g.Inner.Description() }
-func (g *Greet) Schema() sdkcore.ToolSchema          { return g.Inner.Schema() }
-func (g *Greet) Risk() sdkcore.RiskLevel             { return g.Inner.Risk() }
-func (g *Greet) Call(ctx context.Context, raw json.RawMessage) (sdkcore.ToolResult, error) {
-    return g.Inner.Call(ctx, raw)
+func (g *Greet) Name() string { return "greet" }
+
+func (g *Greet) Spec() sdkcore.ToolSpec {
+    return sdktool.MustSchemaForTool[GreetArgs](
+        g.Name(),
+        "Greet someone by name and return a friendly reply",
+        sdkcore.RISK_LEVEL_LOW,
+    )
+}
+
+func (g *Greet) Call(
+    ctx context.Context,
+    raw json.RawMessage,
+) (sdkcore.ToolResult, error) {
+    return sdktool.CallWithRawMessage(ctx, g.Name(), raw, g.execute)
+}
+
+func (g *Greet) execute(
+    _ context.Context,
+    args GreetArgs,
+) (GreetOutput, error) {
+    if args.Name == "" {
+        return GreetOutput{}, fmt.Errorf("name is required")
+    }
+    return GreetOutput{
+        Reply: fmt.Sprintf("Hello, %s! Nice to meet you.", args.Name),
+    }, nil
 }
 ```
 
@@ -487,7 +501,7 @@ import (
     "time"
 
     "github.com/bizshuk/agentsdk/core"
-    "github.com/bizshuk/agentsdk/planning"
+    "github.com/bizshuk/agentsdk/reasoning"
     "github.com/bizshuk/agentsdk/runtime"
     "github.com/bizshuk/agentsdk/tool"
 
@@ -502,7 +516,7 @@ func main() {
 
     // 2. 選擇 ReAct pattern
     step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
-        core.THINK_REACT: planning.NewReAct(),
+        core.THINK_REACT: reasoning.NewThinkThenAct(),
     })
 
     // 3. Scripted provider (開發階段, 不需真實 LLM)
@@ -627,7 +641,7 @@ loop.Notifier = notify.NewMulti(
 
 - 閱讀 `docs/specs/` 下的 milestone 規格了解更多細節
 - 參考 `sample/logdoctor-agent/` 看更完整的範例 (含 persistence + resume)
-- 看 `planning/` 下的其他 pattern 選擇適合的思考模式
+- 看 `reasoning/` 下的其他 pattern 選擇適合的思考模式
 - M3 的 sandbox / MCP / tracing 功能用 `middleware.Chain` 插入
 
 ---

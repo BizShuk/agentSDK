@@ -130,8 +130,8 @@ func (s *Sanitizer) Middleware() middleware.Middleware {
 //
 // json.RawMessage is a named []byte type — a type switch case []byte does
 // NOT match it (Go does not cross named types in assertions), so it needs
-// its own case. action.RegisterFunc returns Output as json.RawMessage, so this
-// case is the one real tools actually hit.
+// its own case. tool.CallWithRawMessage returns Output as json.RawMessage, so
+// this case is the one real tools actually hit.
 func outputToString(v any) string {
 	if v == nil {
 		return ""

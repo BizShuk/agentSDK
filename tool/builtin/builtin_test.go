@@ -1,6 +1,8 @@
 package builtin_test
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/bizshuk/agentsdk/tool"
@@ -22,8 +24,15 @@ func TestRegisterDefaults_AllToolsRegistered(t *testing.T) {
 	assert.Len(t, names, 6)
 
 	for _, name := range names {
-		_, ok := reg.Get(name)
+		registered, ok := reg.Get(name)
 		assert.True(t, ok, "tool %q should be registered", name)
+		require.NotNil(t, registered.Spec().Parameters)
+
+		res, callErr := registered.Call(context.Background(), json.RawMessage(`{}`))
+		require.NoError(t, callErr)
+		assert.False(t, res.OK)
+		assert.Equal(t, name, res.Name)
+		assert.Contains(t, res.Error, "missing required field")
 	}
 }
 

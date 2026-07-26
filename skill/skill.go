@@ -17,8 +17,8 @@
 //
 //	skill.go     — package doc, Skill summary type, RenderTemplate helper
 //	command.go   — Command summary type, ARGUMENTS_PLACEHOLDER, Registry.ExpandCommand
-//	registry.go  — Registry, NewRegistry, Discover{Skills,Commands}, listings, Body, SystemPrompt
-//	subagent.go  — Def, ParseDef, DiscoverDefs, Spawner (core.Tool "task"), Depth/WithDepth
+//	registry.go  — Registry, NewRegistry, Discover{Skills,Commands,Subagents}, listings, Body, SystemPrompt
+//	subagent.go  — SubAgent, ParseDef, Spawner (core.Tool "task"), Depth/WithDepth
 package skill
 
 import "strings"

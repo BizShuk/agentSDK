@@ -10,16 +10,22 @@ import (
 	"github.com/bizshuk/agentsdk/utils/frontmatter"
 )
 
-// Registry indexes skills and commands from any number of directories.
+// Registry indexes skills, commands, and subagents from any number of
+// directories.
 // Later discoveries override earlier ones by name (project over user).
 type Registry struct {
-	skills   map[string]Skill
-	commands map[string]Command
+	skills    map[string]Skill
+	commands  map[string]Command
+	subagents map[string]SubAgent
 }
 
 // NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
-	return &Registry{skills: map[string]Skill{}, commands: map[string]Command{}}
+	return &Registry{
+		skills:    map[string]Skill{},
+		commands:  map[string]Command{},
+		subagents: map[string]SubAgent{},
+	}
 }
 
 // DiscoverSkills indexes <dir>/<name>/SKILL.md entries. A missing dir is
@@ -77,6 +83,31 @@ func (r *Registry) DiscoverCommands(dir string) error {
 	return nil
 }
 
+// DiscoverSubagents indexes <dir>/*.md definitions. A missing dir is not an
+// error.
+func (r *Registry) DiscoverSubagents(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("skill: read subagents dir %q: %w", dir, err)
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".md") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
+		def := ParseDef(strings.TrimSuffix(name, ".md"), string(raw))
+		r.subagents[def.Name] = def
+	}
+	return nil
+}
+
 // Skills lists summaries sorted by name.
 func (r *Registry) Skills() []Skill {
 	out := make([]Skill, 0, len(r.skills))
@@ -92,6 +123,16 @@ func (r *Registry) Commands() []Command {
 	out := make([]Command, 0, len(r.commands))
 	for _, c := range r.commands {
 		out = append(out, c)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// Subagents lists definitions sorted by name.
+func (r *Registry) Subagents() []SubAgent {
+	out := make([]SubAgent, 0, len(r.subagents))
+	for _, d := range r.subagents {
+		out = append(out, d)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

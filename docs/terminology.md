@@ -39,12 +39,12 @@
 
 | 術語 (Term)       | 英文 (English)   | 定義 (Definition)                                                                                                                        | 出處 (Source)                                                             |
 | ----------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `DecisionRule`    | (—)              | 純函式規劃 FSM，介面 `Kind() ReasoningStyle` + `NextStep(state)`；本 repo 六個內建實作位於 `planning/`                                   | `core/thinking.go`                                                        |
-| `ReasoningStyle`  | (—)              | 策略列舉常數（`REASON_REACT` 等），定義在 `core`，讓宣告層不必 import `planning` 即可枚舉                                                | `core/thinking.go`                                                        |
+| `DecisionRule`    | (—)              | 純函式規劃 FSM，介面 `Kind() ReasoningStyle` + `NextStep(state)`；本 repo 六個內建實作位於 `reasoning/`                                  | `core/reasoning.go`                                                       |
+| `ReasoningStyle`  | (—)              | 策略列舉常數（`REASON_REACT` 等），定義在 `core`，讓宣告層不必 import `reasoning` 即可枚舉                                               | `core/reasoning.go`                                                       |
 | `EventSink`       | (—)              | 呈現流 port；`Output.Format=json` 自動綁 `wire.NewSink`，`text`/`tui` 由前端接管                                                         | `core/stream.go`、`agent/build.go::buildSink`                             |
-| `round`           | round            | 一次 `CALL_MODEL` dispatch 及其引發的全部 tool call；使用者面的計量單位，由 `Budget.MaxRounds` 上限                                      | `runtime/loop.go::runInstruction`、`core/state.go::Budget`                |
-| `turn`            | turn             | 一次 `Decide` 迭代（`State.Turn`）；內部 runaway guard，由 `Budget.MaxTurns` 上限，不等於 model request/response 輪次                    | `runtime/loop.go::runStep`、`core/state.go::Budget`                       |
-| `tool call batch` | tool call batch  | 單一 `ModelResult.ToolCalls` 切片，即一個 round 內 model 一次要求的全部 operation；`Budget.MaxToolCalls` 限制其批量大小                  | `core/input.go::ModelResult`、`runtime/loop.go::runStep`                  |
+| `round`           | round            | 一次 `CALL_MODEL` dispatch 及其引發的全部 tool call；使用者面的計量單位，由 `Budget.MaxRounds` 上限                                      | `runtime/loop.go::runInstruction`、`core/budget.go::Budget`               |
+| `turn`            | turn             | 一次 `Decide` 迭代（`State.Turn`）；內部 runaway guard，由 `Budget.MaxTurns` 上限，不等於 model request/response 輪次                    | `runtime/loop.go::runStep`、`core/budget.go::Budget`                      |
+| `tool call batch` | tool call batch  | 單一 `ModelResult.ToolCalls` 切片，即一個 round 內 model 一次要求的全部 operation；`Budget.MaxToolCalls` 限制其批量大小                  | `core/model.go::ModelResult`、`runtime/loop.go::runStep`                  |
 | `settlement`      | settlement       | batch 內每個 call 在下一次 `CALL_MODEL` 前恰好對應一個 `tool_result`，無論它已執行、被 hook 擋、因 pause 未執行或被 budget skip          | `runtime/harness.go::settleSkipped`、`runtime/harness.go::settleUnrun`    |
 | `continue-gate`   | continue-gate    | `ToolCall == nil` 的 `PendingApproval`：整批工具因 `MaxToolCalls` 超限而 skip 後暫停，決策是 resume 或 stop 整個 run，不是執行單一 call  | `runtime/loop.go::runStep`、`runtime/loop.go::consumeApprovedPendingCall` |
 | `pause reason`    | pause reason     | run 停下但應用仍可續行的原因：`approval`（含 continue-gate）或 `round_end`；`agent.Run` 依此呼叫 `Interactive.NextRound`                   | `agent/contract.go::PauseReason`、`agent/lifecycle.go`                     |
@@ -56,20 +56,20 @@
 
 | 狀態                         | 字面值 (Literal)        | 語意                                              | 出處                                 |
 | ---------------------------- | ----------------------- | ------------------------------------------------- | ------------------------------------ |
-| `RUN_STATUS_RUNNING`         | `"running"`             | run 正在執行                                      | `core/state.go::RunStatus`           |
-| `RUN_STATUS_PAUSED_APPROVAL` | `"paused_for_approval"` | run 等待 approval 或 continue-gate 決策           | `core/state.go::RunStatus`           |
-| `RUN_STATUS_COMPLETED`       | `"completed"`           | run 正常完成                                      | `core/state.go::RunStatus`           |
-| `RUN_STATUS_FAILED`          | `"failed"`              | run 因錯誤失敗                                    | `core/state.go::RunStatus`           |
-| `RUN_STATUS_ABORTED`         | `"aborted"`             | run 已中止                                        | `core/state.go::RunStatus`           |
+| `RUN_STATUS_RUNNING`         | `"running"`             | run 正在執行                                      | `core/run_status.go::RunStatus`      |
+| `RUN_STATUS_PAUSED_APPROVAL` | `"paused_for_approval"` | run 等待 approval 或 continue-gate 決策           | `core/run_status.go::RunStatus`      |
+| `RUN_STATUS_COMPLETED`       | `"completed"`           | run 正常完成                                      | `core/run_status.go::RunStatus`      |
+| `RUN_STATUS_FAILED`          | `"failed"`              | run 因錯誤失敗                                    | `core/run_status.go::RunStatus`      |
+| `RUN_STATUS_ABORTED`         | `"aborted"`             | run 已中止                                        | `core/run_status.go::RunStatus`      |
 | `PAUSE_APPROVAL`             | `"approval"`            | `Interactive` 收到 approval 類 pause              | `agent/contract.go::PauseReason`     |
 | `PAUSE_ROUND_END`            | `"round_end"`           | `Interactive` 收到 round 完成後的 follow-up pause | `agent/contract.go::PauseReason`     |
-| `APPROVAL_DECISION_APPROVE`  | `"approve"`             | 核准 tool call 或 continue-gate resume            | `core/autonomy.go::ApprovalDecision` |
-| `APPROVAL_DECISION_REJECT`   | `"reject"`              | 拒絕 tool call 或結束 continue-gate run           | `core/autonomy.go::ApprovalDecision` |
-| `APPROVAL_DECISION_ASK`      | `"ask"`                 | 要求更多資訊並重新排隊                            | `core/autonomy.go::ApprovalDecision` |
-| turn budget reason           | `"turn_budget"`         | `UsedTurns` 已達 `MaxTurns`                       | `core/state.go::Budget.Exceeded`     |
-| round budget reason          | `"round_budget"`        | `UsedRounds` 已達 `MaxRounds`                     | `core/state.go::Budget.Exceeded`     |
-| token budget reason          | `"token_budget"`        | `UsedTokens` 已達 `MaxTokens`                     | `core/state.go::Budget.Exceeded`     |
-| wall-time budget reason      | `"wall_time_budget"`    | run wall time 已達 `MaxWallTime`                  | `core/state.go::Budget.Exceeded`     |
+| `APPROVAL_DECISION_APPROVE`  | `"approve"`             | 核准 tool call 或 continue-gate resume            | `core/approval.go::ApprovalDecision` |
+| `APPROVAL_DECISION_REJECT`   | `"reject"`              | 拒絕 tool call 或結束 continue-gate run           | `core/approval.go::ApprovalDecision` |
+| `APPROVAL_DECISION_ASK`      | `"ask"`                 | 要求更多資訊並重新排隊                            | `core/approval.go::ApprovalDecision` |
+| turn budget reason           | `"turn_budget"`         | `UsedTurns` 已達 `MaxTurns`                       | `core/budget.go::Budget.Exceeded`    |
+| round budget reason          | `"round_budget"`        | `UsedRounds` 已達 `MaxRounds`                     | `core/budget.go::Budget.Exceeded`    |
+| token budget reason          | `"token_budget"`        | `UsedTokens` 已達 `MaxTokens`                     | `core/budget.go::Budget.Exceeded`    |
+| wall-time budget reason      | `"wall_time_budget"`    | run wall time 已達 `MaxWallTime`                  | `core/budget.go::Budget.Exceeded`    |
 | tool-call budget reason      | `"tool_call_budget"`    | 單一 round 的 tool call batch 超過 `MaxToolCalls` | `runtime/loop.go::runStep`           |
 
 ## 縮寫 (Abbreviations)

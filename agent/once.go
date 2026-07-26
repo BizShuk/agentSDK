@@ -8,7 +8,7 @@ import (
 
 	"github.com/bizshuk/agentsdk/agent/spec"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/planning"
+	"github.com/bizshuk/agentsdk/reasoning"
 )
 
 // Once runs one model call without persistence or a required agent name.
@@ -62,7 +62,7 @@ func oneshot(cfg Config, prompt string, opts []Option) (*Engine, core.State, err
 	}
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_ONE_SHOT: planning.NewOneShotReasoning(),
+		core.REASON_ONE_SHOT: reasoning.NewOneShotReasoning(),
 	})
 
 	eng := NewEngine(step, prov, nil)

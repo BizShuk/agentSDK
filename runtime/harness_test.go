@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/planning"
+	"github.com/bizshuk/agentsdk/reasoning"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
@@ -38,7 +38,7 @@ func (c *collectSink) OnStreamEvent(ev core.StreamEvent) { c.kinds = append(c.ki
 
 func newHarnessEngine(prov *testutil.ScriptedProvider, reg *tool.Registry) *runtime.Engine {
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, reg)
 	loop.Emitter = func(core.Instruction) {}

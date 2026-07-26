@@ -2,17 +2,15 @@ package spec
 
 import "github.com/bizshuk/agentsdk/core"
 
-// Permission modes. The strings are the config-file vocabulary; the
-// runtime type lives in agent/permission as an alias of
-// core.PermissionMode. Reducing all three layers to one declaration
-// (in core) means a typo here fails to compile, and a TOML/JSON
-// config that survives spec.Decode but doesn't match any string
-// constant is type-checkable at runtime against the same set.
+// Permission modes are duplicated as literals rather than imported from
+// agent/permission: the declarative spec stays core-only and does not pull in
+// a runtime policy package. agent/permission/permission_mode_test.go pins the
+// two vocabularies together.
 const (
-	MODE_DEFAULT      = core.PERMISSION_MODE_DEFAULT
-	MODE_ACCEPT_EDITS = core.PERMISSION_MODE_ACCEPT_EDITS
-	MODE_PLAN         = core.PERMISSION_MODE_PLAN
-	MODE_BYPASS       = core.PERMISSION_MODE_BYPASS
+	MODE_DEFAULT      = "default"
+	MODE_ACCEPT_EDITS = "acceptEdits"
+	MODE_PLAN         = "plan"
+	MODE_BYPASS       = "bypassPermissions"
 )
 
 // (CredentialKind values now live in core — see core.CREDENTIAL_KIND_AUTO
@@ -49,8 +47,8 @@ func TierChoices() []Choice {
 // StyleChoices lists the reasoning strategies.
 //
 // The values come from core's ReasoningStyle constants rather than from
-// the planning package: enumerating a style needs only the name, while
-// constructing its rule needs planning — so spec stays core-only.
+// the reasoning package: enumerating a style needs only the name, while
+// constructing its rule needs reasoning — so spec stays core-only.
 func StyleChoices() []Choice {
 	return []Choice{
 		{Value: string(core.REASON_REACT), Label: "think then act", Default: true,

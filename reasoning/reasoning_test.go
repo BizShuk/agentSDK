@@ -1,30 +1,30 @@
-package planning_test
+package reasoning_test
 
 import (
 	"encoding/json"
 	"testing"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/planning"
+	"github.com/bizshuk/agentsdk/reasoning"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestThinkThenActFirstReasonEmitsCallModel(t *testing.T) {
-	p := planning.NewThinkThenAct()
+	p := reasoning.NewThinkThenAct()
 	s := core.State{ReasoningStyle: core.REASON_REACT, Messages: []core.Message{
 		{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "watch log"}}},
 	}}
 	out, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
 	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
-	assert.Equal(t, planning.THINK_THEN_ACT_DISPATCH, scratchGet(out, planning.THINK_THEN_ACT_PHASE))
+	assert.Equal(t, reasoning.THINK_THEN_ACT_DISPATCH, scratchGet(out, reasoning.THINK_THEN_ACT_PHASE))
 }
 
 func TestThinkThenActDispatchEmitsCallTool(t *testing.T) {
-	p := planning.NewThinkThenAct()
+	p := reasoning.NewThinkThenAct()
 	s := core.State{ReasoningStyle: core.REASON_REACT}
-	planning.SeedDispatch(&s, core.ToolCall{ID: "c1", Name: "read_log_tail", Args: map[string]any{"n": 5}})
+	reasoning.SeedDispatch(&s, core.ToolCall{ID: "c1", Name: "read_log_tail", Args: map[string]any{"n": 5}})
 
 	_, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
@@ -35,9 +35,9 @@ func TestThinkThenActDispatchEmitsCallTool(t *testing.T) {
 }
 
 func TestThinkThenActReflectEmitsCallModel(t *testing.T) {
-	p := planning.NewThinkThenAct()
+	p := reasoning.NewThinkThenAct()
 	s := core.State{ReasoningStyle: core.REASON_REACT, WorkingMemory: map[string]any{
-		planning.THINK_THEN_ACT_PHASE: planning.THINK_THEN_ACT_REFLECT,
+		reasoning.THINK_THEN_ACT_PHASE: reasoning.THINK_THEN_ACT_REFLECT,
 	}}
 	_, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
@@ -45,9 +45,9 @@ func TestThinkThenActReflectEmitsCallModel(t *testing.T) {
 }
 
 func TestPlanThenRunSkipsToExecuteWhenBlueprintSeeded(t *testing.T) {
-	p := planning.NewPlanThenRun()
+	p := reasoning.NewPlanThenRun()
 	s := core.State{ReasoningStyle: core.REASON_PLAN_THEN_RUN}
-	planning.SeedBlueprint(&s, []core.ToolCall{
+	reasoning.SeedBlueprint(&s, []core.ToolCall{
 		{ID: "s1", Name: "add_todo", Args: map[string]any{"title": "investigate"}},
 		{ID: "s2", Name: "add_todo", Args: map[string]any{"title": "fix"}},
 	})
@@ -56,16 +56,16 @@ func TestPlanThenRunSkipsToExecuteWhenBlueprintSeeded(t *testing.T) {
 	require.Len(t, instrs, 1)
 	assert.Equal(t, core.INSTRUCTION_CALL_TOOL, instrs[0].Kind)
 	assert.Equal(t, "s1", instrs[0].CallTool.Call.ID)
-	assert.Equal(t, 1, scratchGetInt(out, planning.PLAN_THEN_RUN_STEP_INDEX))
-	assert.Equal(t, planning.RUN_PHASE_PTR, scratchGet(out, planning.PLAN_THEN_RUN_PHASE))
+	assert.Equal(t, 1, scratchGetInt(out, reasoning.PLAN_THEN_RUN_STEP_INDEX))
+	assert.Equal(t, reasoning.RUN_PHASE_PTR, scratchGet(out, reasoning.PLAN_THEN_RUN_PHASE))
 }
 
 func TestPlanThenRunEmitsDoneWhenBlueprintExhausted(t *testing.T) {
-	p := planning.NewPlanThenRun()
+	p := reasoning.NewPlanThenRun()
 	s := core.State{ReasoningStyle: core.REASON_PLAN_THEN_RUN, WorkingMemory: map[string]any{
-		planning.PLAN_THEN_RUN_PHASE:      planning.RUN_PHASE_PTR,
-		planning.PLAN_THEN_RUN_STEP_INDEX: 2,
-		planning.PLAN_THEN_RUN_BLUEPRINT: []core.ToolCall{
+		reasoning.PLAN_THEN_RUN_PHASE:      reasoning.RUN_PHASE_PTR,
+		reasoning.PLAN_THEN_RUN_STEP_INDEX: 2,
+		reasoning.PLAN_THEN_RUN_BLUEPRINT: []core.ToolCall{
 			{ID: "s1", Name: "a"},
 			{ID: "s2", Name: "b"},
 		},
@@ -76,9 +76,9 @@ func TestPlanThenRunEmitsDoneWhenBlueprintExhausted(t *testing.T) {
 }
 
 func TestRunThenReviewPassedEmitsDone(t *testing.T) {
-	p := planning.NewRunThenReview()
+	p := reasoning.NewRunThenReview()
 	s := core.State{ReasoningStyle: core.REASON_DO_THEN_REVIEW}
-	planning.SeedReviewPassed(&s, "looks good")
+	reasoning.SeedReviewPassed(&s, "looks good")
 
 	_, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
@@ -86,15 +86,15 @@ func TestRunThenReviewPassedEmitsDone(t *testing.T) {
 }
 
 func TestRunThenReviewFailedEmitsCallModel(t *testing.T) {
-	p := planning.NewRunThenReview()
+	p := reasoning.NewRunThenReview()
 	s := core.State{ReasoningStyle: core.REASON_DO_THEN_REVIEW}
-	planning.SeedReviewFailed(&s, "step missing precondition")
+	reasoning.SeedReviewFailed(&s, "step missing precondition")
 
 	out, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
 	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
-	assert.Equal(t, planning.RUN_PHASE, scratchGet(out, planning.RUN_THEN_REVIEW_PHASE))
-	assert.Equal(t, 1, scratchGetInt(out, planning.RUN_THEN_REVIEW_ITERATION))
+	assert.Equal(t, reasoning.RUN_PHASE, scratchGet(out, reasoning.RUN_THEN_REVIEW_PHASE))
+	assert.Equal(t, 1, scratchGetInt(out, reasoning.RUN_THEN_REVIEW_ITERATION))
 }
 
 // TestRulesReachDone verifies the three formerly-STUB rules (OneShot,
@@ -114,22 +114,22 @@ func TestRulesReachDone(t *testing.T) {
 		{
 			name: "one_shot",
 			seed: func(s *core.State) { /* default phase = think */ },
-			rule: planning.NewOneShotReasoning(),
+			rule: reasoning.NewOneShotReasoning(),
 		},
 		{
 			name: "learn_from_failure",
 			seed: func(s *core.State) {
 				// Drive act → reflect → retry, then a passing critique ends it.
-				planning.SeedLFFCritiquePassed(s, "looks good")
+				reasoning.SeedLFFCritiquePassed(s, "looks good")
 			},
-			rule: planning.NewLearnFromFailure(),
+			rule: reasoning.NewLearnFromFailure(),
 		},
 		{
 			name: "choose_agent",
 			seed: func(s *core.State) {
-				planning.SeedAgents(s, []string{"router-agent"})
+				reasoning.SeedAgents(s, []string{"router-agent"})
 			},
-			rule: planning.NewChooseAgent(),
+			rule: reasoning.NewChooseAgent(),
 		},
 	}
 	for _, tc := range tests {
@@ -203,28 +203,28 @@ func scratchGetStringSlice(s core.State, key string) []string {
 // --- OneShotReasoning ---
 
 func TestOneShotThinkEmitsCallModel(t *testing.T) {
-	p := planning.NewOneShotReasoning()
+	p := reasoning.NewOneShotReasoning()
 	s := core.State{ReasoningStyle: core.REASON_ONE_SHOT}
 	out, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
 	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
-	assert.Equal(t, planning.ONE_SHOT_DONE, scratchGet(out, planning.ONE_SHOT_PHASE))
+	assert.Equal(t, reasoning.ONE_SHOT_DONE, scratchGet(out, reasoning.ONE_SHOT_PHASE))
 }
 
 func TestOneShotDoneEmitsDone(t *testing.T) {
-	p := planning.NewOneShotReasoning()
+	p := reasoning.NewOneShotReasoning()
 	s := core.State{ReasoningStyle: core.REASON_ONE_SHOT}
-	planning.SeedOneShotDone(&s)
+	reasoning.SeedOneShotDone(&s)
 	_, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
 	assert.Equal(t, core.INSTRUCTION_DONE, instrs[0].Kind)
 }
 
 func TestOneShotUnknownPhaseEmitsDone(t *testing.T) {
-	p := planning.NewOneShotReasoning()
+	p := reasoning.NewOneShotReasoning()
 	s := core.State{
 		ReasoningStyle: core.REASON_ONE_SHOT,
-		WorkingMemory:  map[string]any{planning.ONE_SHOT_PHASE: "garbage"},
+		WorkingMemory:  map[string]any{reasoning.ONE_SHOT_PHASE: "garbage"},
 	}
 	_, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
@@ -234,46 +234,46 @@ func TestOneShotUnknownPhaseEmitsDone(t *testing.T) {
 // --- LearnFromFailure ---
 
 func TestLFFActEmitsCallModel(t *testing.T) {
-	p := planning.NewLearnFromFailure()
+	p := reasoning.NewLearnFromFailure()
 	s := core.State{ReasoningStyle: core.REASON_LEARN_FROM_FAILURE}
 	out, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
 	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
-	assert.Equal(t, planning.LFF_REFLECT, scratchGet(out, planning.LEARN_FROM_FAILURE_PHASE))
+	assert.Equal(t, reasoning.LFF_REFLECT, scratchGet(out, reasoning.LEARN_FROM_FAILURE_PHASE))
 }
 
 func TestLFFReflectEmitsCallModel(t *testing.T) {
-	p := planning.NewLearnFromFailure()
+	p := reasoning.NewLearnFromFailure()
 	s := core.State{
 		ReasoningStyle: core.REASON_LEARN_FROM_FAILURE,
-		WorkingMemory:  map[string]any{planning.LEARN_FROM_FAILURE_PHASE: planning.LFF_REFLECT},
+		WorkingMemory:  map[string]any{reasoning.LEARN_FROM_FAILURE_PHASE: reasoning.LFF_REFLECT},
 	}
 	out, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
 	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
-	assert.Equal(t, planning.LFF_RETRY, scratchGet(out, planning.LEARN_FROM_FAILURE_PHASE))
+	assert.Equal(t, reasoning.LFF_RETRY, scratchGet(out, reasoning.LEARN_FROM_FAILURE_PHASE))
 }
 
 func TestLFFRetryPassedEmitsDone(t *testing.T) {
-	p := planning.NewLearnFromFailure()
+	p := reasoning.NewLearnFromFailure()
 	s := core.State{ReasoningStyle: core.REASON_LEARN_FROM_FAILURE}
-	planning.SeedLFFCritiquePassed(&s, "looks good")
+	reasoning.SeedLFFCritiquePassed(&s, "looks good")
 	out, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
 	assert.Equal(t, core.INSTRUCTION_DONE, instrs[0].Kind)
-	assert.Equal(t, planning.LFF_DONE, scratchGet(out, planning.LEARN_FROM_FAILURE_PHASE))
+	assert.Equal(t, reasoning.LFF_DONE, scratchGet(out, reasoning.LEARN_FROM_FAILURE_PHASE))
 }
 
 func TestLFFRetryFailedEmitsCallModel(t *testing.T) {
-	p := planning.NewLearnFromFailure()
+	p := reasoning.NewLearnFromFailure()
 	s := core.State{ReasoningStyle: core.REASON_LEARN_FROM_FAILURE}
-	planning.SeedLFFCritiqueFailed(&s, "step missing precondition")
+	reasoning.SeedLFFCritiqueFailed(&s, "step missing precondition")
 	out, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
 	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
-	assert.Equal(t, 1, scratchGetInt(out, planning.LEARN_FROM_FAILURE_ITERATION))
+	assert.Equal(t, 1, scratchGetInt(out, reasoning.LEARN_FROM_FAILURE_ITERATION))
 	// Reflection appended from the critique text.
-	reflections := scratchGetStringSlice(out, planning.LEARN_FROM_FAILURE_REFLECTIONS)
+	reflections := scratchGetStringSlice(out, reasoning.LEARN_FROM_FAILURE_REFLECTIONS)
 	assert.Contains(t, reflections, "step missing precondition")
 }
 
@@ -281,46 +281,46 @@ func TestLFFReflectionAccumulates(t *testing.T) {
 	s := core.State{
 		ReasoningStyle: core.REASON_LEARN_FROM_FAILURE,
 		WorkingMemory: map[string]any{
-			planning.LEARN_FROM_FAILURE_REFLECTIONS: []string{"old"},
+			reasoning.LEARN_FROM_FAILURE_REFLECTIONS: []string{"old"},
 		},
 	}
-	planning.SeedLFFReflection(&s, "new")
-	got := scratchGetStringSlice(s, planning.LEARN_FROM_FAILURE_REFLECTIONS)
+	reasoning.SeedLFFReflection(&s, "new")
+	got := scratchGetStringSlice(s, reasoning.LEARN_FROM_FAILURE_REFLECTIONS)
 	assert.Equal(t, []string{"old", "new"}, got)
 }
 
 // --- ChooseAgent ---
 
 func TestChooseAgentSelectWithListEmitsNotify(t *testing.T) {
-	p := planning.NewChooseAgent()
+	p := reasoning.NewChooseAgent()
 	s := core.State{ReasoningStyle: core.REASON_PICK_AGENT}
-	planning.SeedAgents(&s, []string{"a", "b"})
+	reasoning.SeedAgents(&s, []string{"a", "b"})
 	out, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
 	assert.Equal(t, core.INSTRUCTION_NOTIFY, instrs[0].Kind)
 	require.NotNil(t, instrs[0].Notify)
 	assert.Equal(t, "info", instrs[0].Notify.Level)
 	assert.Contains(t, instrs[0].Notify.Message, "a")
-	assert.Equal(t, "a", scratchGet(out, planning.CHOOSE_AGENT_CHOSEN))
-	assert.Equal(t, planning.CA_DELEGATE, scratchGet(out, planning.CHOOSE_AGENT_PHASE))
+	assert.Equal(t, "a", scratchGet(out, reasoning.CHOOSE_AGENT_CHOSEN))
+	assert.Equal(t, reasoning.CA_DELEGATE, scratchGet(out, reasoning.CHOOSE_AGENT_PHASE))
 }
 
 func TestChooseAgentSelectEmptyEmitsCallModel(t *testing.T) {
-	p := planning.NewChooseAgent()
+	p := reasoning.NewChooseAgent()
 	s := core.State{ReasoningStyle: core.REASON_PICK_AGENT}
 	out, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
 	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
-	assert.Equal(t, planning.CA_DELEGATE, scratchGet(out, planning.CHOOSE_AGENT_PHASE))
+	assert.Equal(t, reasoning.CA_DELEGATE, scratchGet(out, reasoning.CHOOSE_AGENT_PHASE))
 }
 
 func TestChooseAgentDelegateEmitsCallModelWithSystemMsg(t *testing.T) {
-	p := planning.NewChooseAgent()
+	p := reasoning.NewChooseAgent()
 	s := core.State{
 		ReasoningStyle: core.REASON_PICK_AGENT,
 		WorkingMemory: map[string]any{
-			planning.CHOOSE_AGENT_PHASE:  planning.CA_DELEGATE,
-			planning.CHOOSE_AGENT_CHOSEN: "a",
+			reasoning.CHOOSE_AGENT_PHASE:  reasoning.CA_DELEGATE,
+			reasoning.CHOOSE_AGENT_CHOSEN: "a",
 		},
 		Messages: []core.Message{{
 			Role: core.ROLE_USER,
@@ -339,10 +339,10 @@ func TestChooseAgentDelegateEmitsCallModelWithSystemMsg(t *testing.T) {
 }
 
 func TestChooseAgentDoneEmitsDone(t *testing.T) {
-	p := planning.NewChooseAgent()
+	p := reasoning.NewChooseAgent()
 	s := core.State{
 		ReasoningStyle: core.REASON_PICK_AGENT,
-		WorkingMemory:  map[string]any{planning.CHOOSE_AGENT_PHASE: planning.CA_DONE},
+		WorkingMemory:  map[string]any{reasoning.CHOOSE_AGENT_PHASE: reasoning.CA_DONE},
 	}
 	_, instrs := p.NextStep(s)
 	require.Len(t, instrs, 1)
@@ -360,25 +360,25 @@ func TestLatestAssistantTextFindsLast(t *testing.T) {
 	}}
 	// latestAssistantText is unexported; assert indirectly by driving LFF retry,
 	// which reads it. Seed a critique and confirm the rule sees "a2".
-	p := planning.NewLearnFromFailure()
+	p := reasoning.NewLearnFromFailure()
 	// Build state in retry phase with the messages above.
 	st := core.State{
 		ReasoningStyle: core.REASON_LEARN_FROM_FAILURE,
-		WorkingMemory:  map[string]any{planning.LEARN_FROM_FAILURE_PHASE: planning.LFF_RETRY},
+		WorkingMemory:  map[string]any{reasoning.LEARN_FROM_FAILURE_PHASE: reasoning.LFF_RETRY},
 		Messages:       s.Messages,
 	}
 	// "a2" does not start with "OK:" → retry branch: emits CALL_MODEL, appends reflection.
 	out, instrs := p.NextStep(st)
 	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, instrs[0].Kind)
-	assert.Contains(t, scratchGetStringSlice(out, planning.LEARN_FROM_FAILURE_REFLECTIONS), "a2")
+	assert.Contains(t, scratchGetStringSlice(out, reasoning.LEARN_FROM_FAILURE_REFLECTIONS), "a2")
 }
 
 func TestLatestAssistantTextEmpty(t *testing.T) {
-	p := planning.NewLearnFromFailure()
+	p := reasoning.NewLearnFromFailure()
 	// retry phase with no assistant message → conservative DONE.
 	st := core.State{
 		ReasoningStyle: core.REASON_LEARN_FROM_FAILURE,
-		WorkingMemory:  map[string]any{planning.LEARN_FROM_FAILURE_PHASE: planning.LFF_RETRY},
+		WorkingMemory:  map[string]any{reasoning.LEARN_FROM_FAILURE_PHASE: reasoning.LFF_RETRY},
 		Messages: []core.Message{{
 			Role: core.ROLE_USER,
 			Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "u"}},
@@ -398,7 +398,7 @@ func TestLatestAssistantTextEmpty(t *testing.T) {
 // re-issuing the call. Decoding by shape is what makes Resume correct.
 func TestDispatchSurvivesJSONRoundTrip(t *testing.T) {
 	seed := core.State{ReasoningStyle: core.REASON_REACT}
-	planning.SeedDispatch(&seed,
+	reasoning.SeedDispatch(&seed,
 		core.ToolCall{ID: "c1", Name: "read", Args: map[string]any{"path": "a.txt"}},
 		core.ToolCall{ID: "c2", Name: "read", Args: map[string]any{"path": "b.txt"}},
 	)
@@ -408,7 +408,7 @@ func TestDispatchSurvivesJSONRoundTrip(t *testing.T) {
 	var reloaded core.State
 	require.NoError(t, json.Unmarshal(raw, &reloaded))
 
-	_, insts := planning.NewThinkThenAct().NextStep(reloaded)
+	_, insts := reasoning.NewThinkThenAct().NextStep(reloaded)
 	require.Len(t, insts, 2, "both calls must survive the round trip")
 	for i, want := range []string{"c1", "c2"} {
 		assert.Equal(t, core.INSTRUCTION_CALL_TOOL, insts[i].Kind)
@@ -423,11 +423,11 @@ func TestDispatchReadsLegacySingularKey(t *testing.T) {
 	s := core.State{
 		ReasoningStyle: core.REASON_REACT,
 		WorkingMemory: map[string]any{
-			planning.THINK_THEN_ACT_PHASE:        planning.THINK_THEN_ACT_DISPATCH,
-			planning.THINK_THEN_ACT_PENDING_CALL: core.ToolCall{ID: "old", Name: "read"},
+			reasoning.THINK_THEN_ACT_PHASE:        reasoning.THINK_THEN_ACT_DISPATCH,
+			reasoning.THINK_THEN_ACT_PENDING_CALL: core.ToolCall{ID: "old", Name: "read"},
 		},
 	}
-	_, insts := planning.NewThinkThenAct().NextStep(s)
+	_, insts := reasoning.NewThinkThenAct().NextStep(s)
 	require.Len(t, insts, 1)
 	require.NotNil(t, insts[0].CallTool)
 	assert.Equal(t, "old", insts[0].CallTool.Call.ID)

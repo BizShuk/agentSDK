@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -59,19 +60,29 @@ func NewBash(policy tool.Sandbox, rootDir string, opts ...BashOption) (*Bash, er
 
 func defaultBashTimeout() time.Duration { return 30 * time.Second }
 
-var _ tool.Tool[BashArgs, BashOutput] = (*Bash)(nil)
+var _ tool.Tool = (*Bash)(nil)
 
 // Name returns the tool's registry name.
 func (b *Bash) Name() string { return NAME_BASH }
 
-// Risk returns the risk level.
-func (b *Bash) Risk() core.RiskLevel { return core.RISK_LEVEL_HIGH }
+// Spec returns the tool's metadata and reflected argument schema.
+func (b *Bash) Spec() core.ToolSpec {
+	return tool.MustSchemaForTool[BashArgs](
+		NAME_BASH,
+		BashDesc,
+		core.RISK_LEVEL_HIGH,
+	)
+}
 
-// Desc returns the tool description.
-func (b *Bash) Desc() string { return BashDesc }
+// Call converts raw JSON arguments and executes the bash operation.
+func (b *Bash) Call(
+	ctx context.Context,
+	raw json.RawMessage,
+) (core.ToolResult, error) {
+	return tool.CallWithRawMessage(ctx, b.Name(), raw, b.execute)
+}
 
-// Handle is the pure business logic — no JSON, no schema.
-func (b *Bash) Handle(ctx context.Context, a BashArgs) (BashOutput, error) {
+func (b *Bash) execute(ctx context.Context, a BashArgs) (BashOutput, error) {
 	// Sandbox check on command content.
 	if err := checkCommandArgs(b.policy, "bash", a.Command); err != nil {
 		return BashOutput{}, err

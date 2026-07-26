@@ -115,12 +115,8 @@ func (e *Engine) runInstruction(ctx context.Context, s core.State, inst core.Ins
 			}
 			for _, tc := range mr.ToolCalls {
 				parts = append(parts, core.Part{
-					Kind: core.PART_KIND_TOOL_USE,
-					ToolUse: &core.ToolUseChunk{
-						ID:   tc.ID,
-						Name: tc.Name,
-						Args: tc.Args,
-					},
+					Kind:    core.PART_KIND_TOOL_USE,
+					ToolUse: &tc,
 				})
 			}
 			s.Messages = append(s.Messages, core.Message{
@@ -143,14 +139,11 @@ func (e *Engine) runInstruction(ctx context.Context, s core.State, inst core.Ins
 			return s, nil, false, fmt.Errorf("call_tool instruction but no Tools bound")
 		}
 		res := e.Tools.Call(ctx, inst.CallTool.Call)
-		chunkOut := core.ToolResultPart{
-			CallID: res.CallID, Name: res.Name, OK: res.OK,
-			Output: res.Output, Error: res.Error,
-		}
+		transcriptResult := res
 		s.Messages = append(s.Messages, core.Message{
 			Role: core.ROLE_TOOL,
 			Parts: []core.Part{
-				{Kind: core.PART_KIND_TOOL_RESULT, ToolResult: &chunkOut},
+				{Kind: core.PART_KIND_TOOL_RESULT, ToolResult: &transcriptResult},
 			},
 			Ts: time.Now().UTC(),
 		})
@@ -514,7 +507,7 @@ func (e *Engine) runStep(ctx context.Context, state core.State, event core.Event
 			// risk to decide ALLOW vs ASK.
 			if inst.Kind == core.INSTRUCTION_CALL_TOOL && inst.CallTool != nil && e.Tools != nil {
 				if tool, ok := e.Tools.Get(inst.CallTool.Call.Name); ok {
-					inst.CallTool.Call.Risk = tool.Risk()
+					inst.CallTool.Call.Risk = tool.Spec().Risk
 				}
 			}
 			if e.Emitter != nil {

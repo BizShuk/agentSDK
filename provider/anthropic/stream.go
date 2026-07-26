@@ -118,7 +118,7 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 					select {
 					case out <- core.ModelChunk{
 						Kind: core.PART_KIND_TOOL_USE,
-						ToolUse: &core.ToolUseChunk{
+						ToolUse: &core.ToolCall{
 							ID:   ev.ContentBlock.ID,
 							Name: ev.ContentBlock.Name,
 							Args: decodeArgs(ev.ContentBlock.Input),

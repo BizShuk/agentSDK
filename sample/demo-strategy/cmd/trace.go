@@ -122,7 +122,7 @@ func argsString(args map[string]any) string {
 }
 
 // --- demo-local scratch / message helpers -----------------------------------
-// 這些是 demo 端模擬「環境」的最小工具,不觸碰 planning 的 unexported helper。
+// 這些是 demo 端模擬「環境」的最小工具,不觸碰 reasoning 的 unexported helper。
 
 func scratchStr(s core.State, key, def string) string {
 	if key == "" || s.WorkingMemory == nil {
@@ -154,7 +154,7 @@ func appendToolResult(s *core.State, callID, output string) {
 		Role: core.ROLE_TOOL,
 		Parts: []core.Part{{
 			Kind:       core.PART_KIND_TOOL_RESULT,
-			ToolResult: &core.ToolResultPart{CallID: callID, OK: true, Output: output},
+			ToolResult: &core.ToolResult{CallID: callID, OK: true, Output: output},
 		}},
 		Ts: time.Now().UTC(),
 	})

@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	if err := cmd.NewRoot().Execute(); err != nil {
+	if err := cmd.RootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

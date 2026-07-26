@@ -80,7 +80,7 @@
 計畫見 [`plans/2026-07-24-round-batch-and-interactive-seam.md`](plans/2026-07-24-round-batch-and-interactive-seam.md)（收斂並取代兩份 approval 草案）。
 
 - [x] `Task 0` `core.Budget` 加 `MaxRounds`/`UsedRounds`/`MaxToolCalls`、`Exceeded()` 加 `round_budget`；`spec.Limits` 三欄位 + tier 預設 + validate + `build.go` 映射
-- [x] `Task 1` batch settlement（修兩個 live bug）：`ThinkThenAct` dispatch phase 一次發 `N` 個 `CALL_TOOL`、`runtime` 播種整批並 `settleSkipped`/`settleUnrun`；`planning.decodeCalls` 修 JSON round-trip 後 pending call 消失
+- [x] `Task 1` batch settlement（修兩個 live bug）：`ThinkThenAct` dispatch phase 一次發 `N` 個 `CALL_TOOL`、`runtime` 播種整批並 `settleSkipped`/`settleUnrun`；`reasoning.decodeCalls` 修 JSON round-trip 後 pending call 消失
 - [x] `Task 2` `MaxToolCalls` 超限`整批 skip + settle + 暫停 continue-gate`（approve=resume 重讀 / reject=完成）；`MaxRounds` 經 budget middleware 生效
 - [x] `Task 3` 三介面草案收斂為單一 `agent.Interactive`（`NextRound`）+ `WithRoundTimeout`；`advance` 只走 `SubmitHumanDecision`（不 double-drive）
 - [x] `Task 4` `sample/skeleton-agent` 實作 `Interactive` 為 stdin REPL（單一背景 reader 餵 channel；live 驗證 `rounds:2`）
@@ -109,7 +109,7 @@
 - [ ] `wire`：approval_request/human_decision 與 Engine HITL 的實際串接（目前只有 envelope 定義）
 - [ ] `session`：in-place tree branching（pi /tree 式單檔多分支）與 rewind
 - [ ] `runtime`：「round-trip-without-execution」機制 —— 拿到 model 完整 assistant 回應（含 `tool_calls`）但不真的執行；目前 short-circuit 只 cover「model 沒 tool_calls → COMPLETED」，有 tool_calls 就會 dispatch。三條可行方向：(a) 新增 `INSTRUCTION_RETURN_TOOL_DECISION` + `RUN_STATUS_AWAITING_DECISION`，(b) `Engine.DryRun()` 模式在第一個 CALL_MODEL 後強制停下並把 `ModelResult.ToolCalls` 暴露給 caller，(c) 寫一個 `RejectTools` rule 在「看到 tool_calls 時改 emit RETURN」。動工前先開 plan 並對齊 wire format（instruction kind 是否進 `core.Instruction` 的穩定區）。部分建材已就緒（2026-07-24）：`MaxToolCalls` 的 continue-gate 已示範「整批不執行 → 暫停 → 人工決定 resume/stop」，可作方向 (b) 的暫停機制參考。
-- [x] `subagent`：RunFunc 的 engine factory 標準組裝 —— 2026-07-22 由 `agent.subagentRunner` 承擔（scoped ephemeral engine、無 store/WAL、`Def.Tools` allowlist 生效，空則沿用 parent 的工具集）
+- [x] `subagent`：RunFunc 的 engine factory 標準組裝 —— 2026-07-22 由 `agent.subagentRunner` 承擔（scoped ephemeral engine、無 store/WAL、`SubAgent.Tools` allowlist 生效，空則沿用 parent 的工具集）
 - [ ] `contextfile`：auto-memory 寫回（MEMORY.md 索引式）
 - [ ] streaming delta：provider 原生 SSE 接進 `core.StreamEvent`（目前只有 folded events；`STREAM_MESSAGE_DELTA` 保留位）
 

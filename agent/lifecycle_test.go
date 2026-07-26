@@ -16,7 +16,7 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/security"
-	"github.com/bizshuk/agentsdk/planning"
+	"github.com/bizshuk/agentsdk/reasoning"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
@@ -36,12 +36,8 @@ func cleanupAppDir(t *testing.T, name string) {
 // echoTool is a trivial tool the scripted provider can call.
 type echoTool struct{}
 
-func (echoTool) Name() string        { return "echo" }
-func (echoTool) Description() string { return "echo the input back" }
-func (echoTool) Risk() core.RiskLevel {
-	return core.RISK_LEVEL_LOW
-}
-func (echoTool) Schema() core.ToolSpec {
+func (echoTool) Name() string { return "echo" }
+func (echoTool) Spec() core.ToolSpec {
 	return core.ToolSpec{Name: "echo", Description: "echo the input back", Risk: core.RISK_LEVEL_LOW}
 }
 func (echoTool) Call(_ context.Context, args json.RawMessage) (core.ToolResult, error) {
@@ -53,7 +49,7 @@ func (echoTool) Call(_ context.Context, args json.RawMessage) (core.ToolResult, 
 type panicTool struct{ echoTool }
 
 func (panicTool) Name() string { return "boom" }
-func (panicTool) Schema() core.ToolSpec {
+func (panicTool) Spec() core.ToolSpec {
 	return core.ToolSpec{Name: "boom", Risk: core.RISK_LEVEL_LOW}
 }
 func (panicTool) Call(context.Context, json.RawMessage) (core.ToolResult, error) {
@@ -90,7 +86,7 @@ func (a *testAgent) Bootstrap(_ context.Context, _ *agent.AppConfig) (*runtime.E
 	reg.Register(a.tool)
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 
 	engine := runtime.NewEngine(step, provider, reg)
@@ -272,7 +268,7 @@ func pausingEngine() (*runtime.Engine, core.State) {
 	reg := tool.NewRegistry()
 	reg.Register(echoTool{})
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	eng := runtime.NewEngine(step, prov, reg)
 	eng.Middleware = middleware.Chain(security.ApprovalGate(alwaysAsk{}))
@@ -290,7 +286,7 @@ func chatEngine() (*runtime.Engine, core.State) {
 	prov.EnqueueEndTurn("first answer")
 	prov.EnqueueEndTurn("second answer")
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	eng := runtime.NewEngine(step, prov, tool.NewRegistry())
 	return eng, core.State{ReasoningStyle: core.REASON_REACT, Budget: core.Budget{MaxTurns: 10}}

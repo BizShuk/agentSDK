@@ -1,4 +1,4 @@
-package planning
+package reasoning
 
 import (
 	"fmt"
@@ -9,30 +9,31 @@ import (
 // Scratch keys for ChooseAgent (Router / Orchestrator) — exported so tests /
 // sample can drive the FSM.
 const (
-	CHOOSE_AGENT_PHASE      = "choose_agent.phase"       // string — "select" (default) | "delegate" | "done"
-	CHOOSE_AGENT_AGENT_LIST = "choose_agent.agent_list"  // []string — agent names; seed-only
+	CHOOSE_AGENT_PHASE      = "choose_agent.phase"        // string — "select" (default) | "delegate" | "done"
+	CHOOSE_AGENT_AGENT_LIST = "choose_agent.agent_list"   // []string — agent names; seed-only
 	CHOOSE_AGENT_CHOSEN     = "choose_agent.chosen_agent" // string — the picked agent name
 
 	// ChooseAgent phase values:
 	CA_SELECT   = "select"   // pick an agent from the list (or LLM-routing hook)
 	CA_DELEGATE = "delegate" // hand the task to the chosen agent
-	CA_DONE     = "done"    // terminal
+	CA_DONE     = "done"     // terminal
 )
 
 // ChooseAgent is the multi-agent router rule.
 //
 // working memory[CHOOSE_AGENT_PHASE] drives a three-phase FSM:
-//   select   → if CHOOSE_AGENT_AGENT_LIST is non-empty, pick [0] into
-//             CHOOSE_AGENT_CHOSEN and emit NOTIFY (info, "router chose agent: <name>");
-//             otherwise emit INSTRUCTION_CALL_MODEL as a hook for future
-//             LLM-driven routing. Either way, advance to delegate.
-//   delegate → emit INSTRUCTION_CALL_MODEL with a system-message prefix
-//             ("You are agent <chosen>. ...") prepended to state.Messages —
-//             the closest in-scope approximation of delegation without a
-//             sub-agent registry.
-//   done     → emit INSTRUCTION_DONE
 //
-// No sub-agent registry exists yet (that belongs to the action.ToolSource
+//	select   → if CHOOSE_AGENT_AGENT_LIST is non-empty, pick [0] into
+//	          CHOOSE_AGENT_CHOSEN and emit NOTIFY (info, "router chose agent: <name>");
+//	          otherwise emit INSTRUCTION_CALL_MODEL as a hook for future
+//	          LLM-driven routing. Either way, advance to delegate.
+//	delegate → emit INSTRUCTION_CALL_MODEL with a system-message prefix
+//	          ("You are agent <chosen>. ...") prepended to state.Messages —
+//	          the closest in-scope approximation of delegation without a
+//	          sub-agent registry.
+//	done     → emit INSTRUCTION_DONE
+//
+// No sub-agent registry exists yet (that belongs to the tool.ToolSource
 // dynamic-registration wave), so ChooseAgent does not actually spawn a
 // sub-agent. It records the routing decision in scratch and re-asks the
 // model in the chosen agent's voice.

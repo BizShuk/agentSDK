@@ -8,7 +8,7 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory/filestore"
 	"github.com/bizshuk/agentsdk/middleware/preset"
-	"github.com/bizshuk/agentsdk/planning"
+	"github.com/bizshuk/agentsdk/reasoning"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
@@ -59,7 +59,7 @@ func TestM4E2EApprovalPauseThenResumeApprove(t *testing.T) {
 	registerHighRiskTool(reg, &called1)
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, reg)
 	// Full security chain with the real L0-L4 approval policy. Sandbox is
@@ -118,7 +118,7 @@ func TestM4E2EApprovalRejectTerminates(t *testing.T) {
 	registerHighRiskTool(reg, &called2)
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, reg)
 	loop.Middleware = preset.Secure(nil, permission.DefaultApprovalPolicy{})

@@ -19,7 +19,7 @@ func TestWrite_CreateAndOverwrite(t *testing.T) {
 	path := filepath.Join(dir, "new.txt")
 
 	// First write: created=true.
-	out, herr := w.Handle(context.Background(), WriteArgs{Path: path, Content: "hello world"})
+	out, herr := w.execute(context.Background(), WriteArgs{Path: path, Content: "hello world"})
 	require.NoError(t, herr)
 	assert.True(t, out.Created)
 	assert.Equal(t, int64(11), out.Wrote)
@@ -29,7 +29,7 @@ func TestWrite_CreateAndOverwrite(t *testing.T) {
 	assert.Equal(t, "hello world", string(data))
 
 	// Second write: overwrite.
-	out2, herr2 := w.Handle(context.Background(), WriteArgs{Path: path, Content: "overwritten"})
+	out2, herr2 := w.execute(context.Background(), WriteArgs{Path: path, Content: "overwritten"})
 	require.NoError(t, herr2)
 	assert.False(t, out2.Created)
 }
@@ -41,7 +41,7 @@ func TestWrite_SandboxDenied(t *testing.T) {
 
 	// /etc is not in the allowed prefixes of testPolicy(dir).
 	path := "/etc/hosts"
-	_, herr := w.Handle(context.Background(), WriteArgs{Path: path, Content: "x"})
+	_, herr := w.execute(context.Background(), WriteArgs{Path: path, Content: "x"})
 	require.Error(t, herr)
 	assert.Contains(t, herr.Error(), "sandbox denied")
 }
@@ -56,5 +56,5 @@ func TestWrite_RiskLevel(t *testing.T) {
 	dir := t.TempDir()
 	w, err := NewWrite(testPolicy(dir), dir)
 	require.NoError(t, err)
-	assert.Equal(t, sdkcore.RISK_LEVEL_HIGH, w.Risk())
+	assert.Equal(t, sdkcore.RISK_LEVEL_HIGH, w.Spec().Risk)
 }

@@ -54,8 +54,8 @@ func TestDiscoverDefs(t *testing.T) {
 
 func TestSpawnerCall(t *testing.T) {
 	var gotDepth int
-	var gotDef Def
-	spawner := NewSpawner(func(ctx context.Context, def Def, prompt string) (string, error) {
+	var gotDef SubAgent
+	spawner := NewSpawner(func(ctx context.Context, def SubAgent, prompt string) (string, error) {
 		gotDepth = Depth(ctx)
 		gotDef = def
 		return "sub result: " + prompt, nil
@@ -71,7 +71,7 @@ func TestSpawnerCall(t *testing.T) {
 }
 
 func TestSpawnerFailuresEncodedInResult(t *testing.T) {
-	spawner := NewSpawner(func(_ context.Context, _ Def, _ string) (string, error) {
+	spawner := NewSpawner(func(_ context.Context, _ SubAgent, _ string) (string, error) {
 		return "", errors.New("boom")
 	}, ParseDef("reviewer", defMarkdown))
 
@@ -99,7 +99,7 @@ func TestSpawnerFailuresEncodedInResult(t *testing.T) {
 
 func TestSpawnerSchemaAndDescription(t *testing.T) {
 	spawner := NewSpawner(nil, ParseDef("reviewer", defMarkdown))
-	spec := spawner.Schema()
+	spec := spawner.Spec()
 	assert.Equal(t, TOOL_NAME, spec.Name)
-	assert.Contains(t, spawner.Description(), "reviewer: Reviews diffs for bugs")
+	assert.Contains(t, spec.Description, "reviewer: Reviews diffs for bugs")
 }

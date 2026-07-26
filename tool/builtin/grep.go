@@ -3,6 +3,7 @@ package builtin
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -62,19 +63,29 @@ func NewGrep(policy tool.Sandbox, rootDir string, opts ...GrepOption) *Grep {
 	return gr
 }
 
-var _ tool.Tool[GrepArgs, GrepOutput] = (*Grep)(nil)
+var _ tool.Tool = (*Grep)(nil)
 
 // Name returns the tool's registry name.
 func (g *Grep) Name() string { return NAME_GREP }
 
-// Risk returns the risk level.
-func (g *Grep) Risk() core.RiskLevel { return core.RISK_LEVEL_LOW }
+// Spec returns the tool's metadata and reflected argument schema.
+func (g *Grep) Spec() core.ToolSpec {
+	return tool.MustSchemaForTool[GrepArgs](
+		NAME_GREP,
+		GrepDesc,
+		core.RISK_LEVEL_LOW,
+	)
+}
 
-// Desc returns the tool description.
-func (g *Grep) Desc() string { return GrepDesc }
+// Call converts raw JSON arguments and executes the grep operation.
+func (g *Grep) Call(
+	ctx context.Context,
+	raw json.RawMessage,
+) (core.ToolResult, error) {
+	return tool.CallWithRawMessage(ctx, g.Name(), raw, g.execute)
+}
 
-// Handle is the pure business logic — no JSON, no schema.
-func (g *Grep) Handle(_ context.Context, a GrepArgs) (GrepOutput, error) {
+func (g *Grep) execute(_ context.Context, a GrepArgs) (GrepOutput, error) {
 	if a.Query == "" {
 		return GrepOutput{}, fmt.Errorf("grep: query must not be empty")
 	}

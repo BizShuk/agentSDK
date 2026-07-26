@@ -554,12 +554,10 @@ func TestBootstrapProducesARunnableEngine(t *testing.T) {
 // fakeTool is a minimal core.Tool for injection tests.
 type fakeTool struct{ name string }
 
-func (f *fakeTool) Name() string        { return f.name }
-func (f *fakeTool) Description() string { return "test tool" }
-func (f *fakeTool) Schema() core.ToolSpec {
-	return core.ToolSpec{Name: f.name, Description: "test tool"}
+func (f *fakeTool) Name() string { return f.name }
+func (f *fakeTool) Spec() core.ToolSpec {
+	return core.ToolSpec{Name: f.name, Description: "test tool", Risk: core.RISK_LEVEL_LOW}
 }
-func (f *fakeTool) Risk() core.RiskLevel { return core.RISK_LEVEL_LOW }
 func (f *fakeTool) Call(context.Context, json.RawMessage) (core.ToolResult, error) {
 	return core.ToolResult{OK: true, Output: "ok"}, nil
 }

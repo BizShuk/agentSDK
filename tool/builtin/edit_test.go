@@ -19,7 +19,7 @@ func TestEdit_SingleReplacement(t *testing.T) {
 	path := filepath.Join(dir, "code.py")
 	require.NoError(t, os.WriteFile(path, []byte("def foo():\n    return 1\n"), 0o644))
 
-	out, herr := e.Handle(context.Background(), EditArgs{
+	out, herr := e.execute(context.Background(), EditArgs{
 		Path:    path,
 		OldText: "return 1",
 		NewText: "return 42",
@@ -40,7 +40,7 @@ func TestEdit_NotFound_Error(t *testing.T) {
 	path := filepath.Join(dir, "code.py")
 	require.NoError(t, os.WriteFile(path, []byte("hello\n"), 0o644))
 
-	_, herr := e.Handle(context.Background(), EditArgs{
+	_, herr := e.execute(context.Background(), EditArgs{
 		Path:    path,
 		OldText: "missing",
 		NewText: "x",
@@ -57,7 +57,7 @@ func TestEdit_MultipleMatches_WithoutReplaceAll_Error(t *testing.T) {
 	path := filepath.Join(dir, "code.py")
 	require.NoError(t, os.WriteFile(path, []byte("foo\nfoo\nfoo\n"), 0o644))
 
-	_, herr := e.Handle(context.Background(), EditArgs{
+	_, herr := e.execute(context.Background(), EditArgs{
 		Path:    path,
 		OldText: "foo",
 		NewText: "bar",
@@ -74,7 +74,7 @@ func TestEdit_MultipleMatches_WithReplaceAll_Success(t *testing.T) {
 	path := filepath.Join(dir, "code.py")
 	require.NoError(t, os.WriteFile(path, []byte("foo\nfoo\nfoo\n"), 0o644))
 
-	out, herr := e.Handle(context.Background(), EditArgs{
+	out, herr := e.execute(context.Background(), EditArgs{
 		Path:       path,
 		OldText:    "foo",
 		NewText:    "bar",
@@ -93,7 +93,7 @@ func TestEdit_EmptyOldText_Error(t *testing.T) {
 	e, err := NewEdit(testPolicy(dir), dir)
 	require.NoError(t, err)
 
-	_, herr := e.Handle(context.Background(), EditArgs{
+	_, herr := e.execute(context.Background(), EditArgs{
 		Path:    "x.txt",
 		OldText: "",
 		NewText: "y",
@@ -107,7 +107,7 @@ func TestEdit_SandboxDenied(t *testing.T) {
 	e, err := NewEdit(testPolicy(dir), dir)
 	require.NoError(t, err)
 
-	_, herr := e.Handle(context.Background(), EditArgs{
+	_, herr := e.execute(context.Background(), EditArgs{
 		Path:    "/etc/hosts",
 		OldText: "localhost",
 		NewText: "x",
@@ -126,5 +126,5 @@ func TestEdit_RiskLevel(t *testing.T) {
 	dir := t.TempDir()
 	e, err := NewEdit(testPolicy(dir), dir)
 	require.NoError(t, err)
-	assert.Equal(t, sdkcore.RISK_LEVEL_HIGH, e.Risk())
+	assert.Equal(t, sdkcore.RISK_LEVEL_HIGH, e.Spec().Risk)
 }

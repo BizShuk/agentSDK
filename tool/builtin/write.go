@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 
@@ -53,19 +54,29 @@ func NewWrite(policy tool.Sandbox, rootDir string, opts ...WriteOption) (*Write,
 	return w, nil
 }
 
-var _ tool.Tool[WriteArgs, WriteOutput] = (*Write)(nil)
+var _ tool.Tool = (*Write)(nil)
 
 // Name returns the tool's registry name.
 func (w *Write) Name() string { return NAME_WRITE }
 
-// Risk returns the risk level.
-func (w *Write) Risk() core.RiskLevel { return core.RISK_LEVEL_HIGH }
+// Spec returns the tool's metadata and reflected argument schema.
+func (w *Write) Spec() core.ToolSpec {
+	return tool.MustSchemaForTool[WriteArgs](
+		NAME_WRITE,
+		WriteDesc,
+		core.RISK_LEVEL_HIGH,
+	)
+}
 
-// Desc returns the tool description.
-func (w *Write) Desc() string { return WriteDesc }
+// Call converts raw JSON arguments and executes the write operation.
+func (w *Write) Call(
+	ctx context.Context,
+	raw json.RawMessage,
+) (core.ToolResult, error) {
+	return tool.CallWithRawMessage(ctx, w.Name(), raw, w.execute)
+}
 
-// Handle is the pure business logic — no JSON, no schema.
-func (w *Write) Handle(_ context.Context, a WriteArgs) (WriteOutput, error) {
+func (w *Write) execute(_ context.Context, a WriteArgs) (WriteOutput, error) {
 	wd, err := safeCwd(w.rootDir)
 	if err != nil {
 		return WriteOutput{}, fmt.Errorf("write: working dir: %w", err)

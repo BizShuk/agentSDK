@@ -16,7 +16,7 @@ func TestRead_TextFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("line1\nline2\nline3\n"), 0o644))
 
 	r := NewRead(nil, dir)
-	out, err := r.Handle(context.Background(), ReadArgs{Path: path})
+	out, err := r.execute(context.Background(), ReadArgs{Path: path})
 	require.NoError(t, err)
 
 	assert.Equal(t, 3, out.Total)
@@ -32,7 +32,7 @@ func TestRead_LineRange(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
 	r := NewRead(nil, dir)
-	out, err := r.Handle(context.Background(), ReadArgs{Path: path, StartLine: 2, LineCount: 2})
+	out, err := r.execute(context.Background(), ReadArgs{Path: path, StartLine: 2, LineCount: 2})
 	require.NoError(t, err)
 
 	assert.Equal(t, 5, out.Total)
@@ -42,7 +42,7 @@ func TestRead_LineRange(t *testing.T) {
 
 func TestRead_FileNotFound(t *testing.T) {
 	r := NewRead(nil, t.TempDir())
-	_, err := r.Handle(context.Background(), ReadArgs{Path: "nonexistent.txt"})
+	_, err := r.execute(context.Background(), ReadArgs{Path: "nonexistent.txt"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "open")
 }
@@ -54,7 +54,7 @@ func TestRead_SandboxDenied(t *testing.T) {
 
 	r := NewRead(testPolicy(dir), dir)
 
-	_, err := r.Handle(context.Background(), ReadArgs{Path: "/etc/passwd"})
+	_, err := r.execute(context.Background(), ReadArgs{Path: "/etc/passwd"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sandbox denied")
 }
@@ -67,7 +67,7 @@ func TestRead_BinaryFileRejected(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, binData, 0o644))
 
 	r := NewRead(nil, dir)
-	_, err := r.Handle(context.Background(), ReadArgs{Path: path})
+	_, err := r.execute(context.Background(), ReadArgs{Path: path})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "binary content")
 }

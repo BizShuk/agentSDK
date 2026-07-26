@@ -25,32 +25,6 @@ func TestAutonomyDefaultStringMatchesTyped(t *testing.T) {
 		"spec.DEFAULT_AUTONOMY is the config-file default — it must equal core.AUTONOMY_DEFAULT_STRING")
 }
 
-// TestPermissionModeValuesAreStable pins the spelling of the four
-// permission-mode vocabulary strings against typo and rename. The
-// strings are part of the config-file format; renaming any of them
-// is a breaking change for downstream operator YAML files.
-func TestPermissionModeValuesAreStable(t *testing.T) {
-	cases := []struct {
-		constant string
-		want     string
-	}{
-		{core.PERMISSION_MODE_DEFAULT, "default"},
-		{core.PERMISSION_MODE_ACCEPT_EDITS, "acceptEdits"},
-		{core.PERMISSION_MODE_PLAN, "plan"},
-		{core.PERMISSION_MODE_BYPASS, "bypassPermissions"},
-	}
-	for _, c := range cases {
-		assert.Equal(t, c.want, c.constant,
-			"%s spelling must match the historical config vocabulary", c.constant)
-	}
-
-	// Three-layer reduction check: spec re-exports the same literals.
-	assert.Equal(t, spec.MODE_DEFAULT, core.PERMISSION_MODE_DEFAULT)
-	assert.Equal(t, spec.MODE_ACCEPT_EDITS, core.PERMISSION_MODE_ACCEPT_EDITS)
-	assert.Equal(t, spec.MODE_PLAN, core.PERMISSION_MODE_PLAN)
-	assert.Equal(t, spec.MODE_BYPASS, core.PERMISSION_MODE_BYPASS)
-}
-
 // TestStyleDefaultTracesToCore pins the spec style default against
 // the runtime contract. A future change renaming REASON_REACT in core
 // would silently desync spec unless this is asserted.

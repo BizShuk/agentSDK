@@ -14,8 +14,8 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/preset"
-	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/prompt"
+	"github.com/bizshuk/agentsdk/reasoning"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/skill"
 	"github.com/bizshuk/agentsdk/tool"
@@ -31,7 +31,7 @@ func NewEngine(decide core.Decide, provider core.Provider, tools core.ToolRegist
 // ReActStep returns the default think-then-act dispatcher.
 func ReActStep() core.Decide {
 	return core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 }
 
@@ -153,7 +153,10 @@ func (a *Agent) buildTools(cwd, userDir string, prov core.Provider) (core.ToolRe
 	}
 
 	if a.cfg.Subagents != nil {
-		defs := discoverSubagentDefs(a.cfg, userDir, cwd)
+		defs, err := discoverSubagentDefs(a.cfg, userDir, cwd)
+		if err != nil {
+			return nil, err
+		}
 		if len(defs) > 0 {
 			reg.Register(skill.NewSpawner(a.subagentRunner(prov), defs...))
 		}
@@ -174,31 +177,31 @@ func registerBuiltins(reg *tool.Registry, allow []string, workDir string) error 
 		switch name {
 		case builtin.NAME_READ:
 			r := builtin.NewRead(policy, workDir)
-			tool.RegisterTyped(reg, r)
+			reg.Register(r)
 		case builtin.NAME_GLOB:
 			g := builtin.NewGlob(policy, workDir)
-			tool.RegisterTyped(reg, g)
+			reg.Register(g)
 		case builtin.NAME_GREP:
 			gr := builtin.NewGrep(policy, workDir)
-			tool.RegisterTyped(reg, gr)
+			reg.Register(gr)
 		case builtin.NAME_WRITE:
 			w, err := builtin.NewWrite(policy, workDir)
 			if err != nil {
 				return fmt.Errorf("agent: write tool: %w", err)
 			}
-			tool.RegisterTyped(reg, w)
+			reg.Register(w)
 		case builtin.NAME_EDIT:
 			e, err := builtin.NewEdit(policy, workDir)
 			if err != nil {
 				return fmt.Errorf("agent: edit tool: %w", err)
 			}
-			tool.RegisterTyped(reg, e)
+			reg.Register(e)
 		case builtin.NAME_BASH:
 			b, err := builtin.NewBash(policy, workDir)
 			if err != nil {
 				return fmt.Errorf("agent: bash tool: %w", err)
 			}
-			tool.RegisterTyped(reg, b)
+			reg.Register(b)
 		default:
 			return fmt.Errorf("agent: unknown built-in tool %q", name)
 		}
@@ -207,27 +210,25 @@ func registerBuiltins(reg *tool.Registry, allow []string, workDir string) error 
 }
 
 // discoverSubagentDefs lets project definitions override user definitions.
-func discoverSubagentDefs(cfg Config, userDir, cwd string) []skill.Def {
+func discoverSubagentDefs(cfg Config, userDir, cwd string) ([]skill.SubAgent, error) {
 	dirs := cfg.Subagents.Dirs
 	if len(dirs) == 0 {
 		dirs = discoveryRoots(cfg, userDir, cwd, "agents")
 	}
-	var defs []skill.Def
+	reg := skill.NewRegistry()
 	for _, dir := range dirs {
-		found, err := skill.DiscoverDefs(dir)
-		if err != nil {
-			continue // a missing definitions directory is normal
+		if err := reg.DiscoverSubagents(dir); err != nil {
+			return nil, fmt.Errorf("discover subagents in %s: %w", dir, err)
 		}
-		defs = append(defs, found...)
 	}
-	return defs
+	return reg.Subagents(), nil
 }
 
 // subagentRunner uses an ephemeral engine with the shared provider and its
 // own turn budget.
 func (a *Agent) subagentRunner(prov core.Provider) skill.RunFunc {
 	maxTurns := a.cfg.Subagents.MaxTurns
-	return func(ctx context.Context, def skill.Def, promptText string) (string, error) {
+	return func(ctx context.Context, def skill.SubAgent, promptText string) (string, error) {
 		reg := tool.NewRegistry()
 		if a.cfg.Tools != nil {
 			workDir := a.cfg.Tools.WorkingDir
@@ -245,7 +246,7 @@ func (a *Agent) subagentRunner(prov core.Provider) skill.RunFunc {
 			}
 		}
 		step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-			core.REASON_REACT: planning.NewThinkThenAct(),
+			core.REASON_REACT: reasoning.NewThinkThenAct(),
 		})
 		sub := NewEngine(step, prov, reg)
 		perm, sandbox := a.buildSafety()
@@ -295,17 +296,17 @@ func (a *Agent) buildDecide() (core.Decide, error) {
 func ruleFor(style core.ReasoningStyle) (core.DecisionRule, error) {
 	switch style {
 	case core.REASON_REACT:
-		return planning.NewThinkThenAct(), nil
+		return reasoning.NewThinkThenAct(), nil
 	case core.REASON_PLAN_THEN_RUN:
-		return planning.NewPlanThenRun(), nil
+		return reasoning.NewPlanThenRun(), nil
 	case core.REASON_DO_THEN_REVIEW:
-		return planning.NewRunThenReview(), nil
+		return reasoning.NewRunThenReview(), nil
 	case core.REASON_ONE_SHOT:
-		return planning.NewOneShotReasoning(), nil
+		return reasoning.NewOneShotReasoning(), nil
 	case core.REASON_LEARN_FROM_FAILURE:
-		return planning.NewLearnFromFailure(), nil
+		return reasoning.NewLearnFromFailure(), nil
 	case core.REASON_PICK_AGENT:
-		return planning.NewChooseAgent(), nil
+		return reasoning.NewChooseAgent(), nil
 	default:
 		return nil, fmt.Errorf("agent: no rule for reasoning style %q", style)
 	}

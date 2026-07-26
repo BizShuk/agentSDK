@@ -25,10 +25,10 @@ const (
 
 // CallModelInstruction is dispatched to Provider.Generate / Stream.
 type CallModelInstruction struct {
-	RequestID string      `json:"request_id"`
-	Messages  []Message   `json:"messages"`
-	Tools     []ToolSpec  `json:"tools,omitempty"`
-	MaxTokens int         `json:"max_tokens,omitempty"`
+	RequestID string     `json:"request_id"`
+	Messages  []Message  `json:"messages"`
+	Tools     []ToolSpec `json:"tools,omitempty"`
+	MaxTokens int        `json:"max_tokens,omitempty"`
 }
 
 // CallToolInstruction is dispatched to the tool Registry.
@@ -66,11 +66,11 @@ type EmitInstruction struct {
 // Decoders in JSON-land can rehydrate using the Kind field as a discriminator.
 // In-process dispatch is a type switch on the active pointer.
 type Instruction struct {
-	Kind            InstructionKind              `json:"kind"`
-	CallModel       *CallModelInstruction        `json:"call_model,omitempty"`
-	CallTool        *CallToolInstruction         `json:"call_tool,omitempty"`
-	RequestApproval *RequestApprovalInstruction  `json:"request_approval,omitempty"`
-	Notify          *NotifyInstruction           `json:"notify,omitempty"`
-	Checkpoint      *CheckpointInstruction       `json:"checkpoint,omitempty"`
-	Emit            *EmitInstruction             `json:"emit,omitempty"`
+	Kind            InstructionKind             `json:"kind"`
+	CallModel       *CallModelInstruction       `json:"call_model,omitempty"`
+	CallTool        *CallToolInstruction        `json:"call_tool,omitempty"`
+	RequestApproval *RequestApprovalInstruction `json:"request_approval,omitempty"`
+	Notify          *NotifyInstruction          `json:"notify,omitempty"`
+	Checkpoint      *CheckpointInstruction      `json:"checkpoint,omitempty"`
+	Emit            *EmitInstruction            `json:"emit,omitempty"`
 }

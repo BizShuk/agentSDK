@@ -16,7 +16,7 @@ func TestProposeFixIsHighRisk(t *testing.T) {
 	tool.NewProposeFix().Register(reg)
 	tl, ok := reg.Get("propose_fix")
 	require.True(t, ok)
-	assert.Equal(t, core.RISK_LEVEL_HIGH, tl.Risk(),
+	assert.Equal(t, core.RISK_LEVEL_HIGH, tl.Spec().Risk,
 		"propose_fix must be HIGH risk so the ApprovalGate intercepts it")
 }
 

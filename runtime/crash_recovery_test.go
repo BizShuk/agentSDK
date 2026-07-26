@@ -12,7 +12,7 @@ import (
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/harness"
 	"github.com/bizshuk/agentsdk/middleware/loopguard"
-	"github.com/bizshuk/agentsdk/planning"
+	"github.com/bizshuk/agentsdk/reasoning"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
@@ -41,7 +41,7 @@ func TestCrashRecoveryFullCycle(t *testing.T) {
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, reg)
 	loop.Approval = stubApproval{}

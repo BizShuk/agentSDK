@@ -17,7 +17,7 @@ func TestGlob_MatchFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "c.txt"), []byte("text"), 0o644))
 
 	g := NewGlob(nil, dir)
-	out, err := g.Handle(context.Background(), GlobArgs{Pattern: "*.go", Cwd: dir})
+	out, err := g.execute(context.Background(), GlobArgs{Pattern: "*.go", Cwd: dir})
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, out.Count)
@@ -33,7 +33,7 @@ func TestGlob_Truncated(t *testing.T) {
 	}
 
 	g := NewGlob(nil, dir, WithGlobMaxMatches(2))
-	out, err := g.Handle(context.Background(), GlobArgs{Pattern: "*.tmp", Cwd: dir})
+	out, err := g.execute(context.Background(), GlobArgs{Pattern: "*.tmp", Cwd: dir})
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, out.Count)
@@ -42,7 +42,7 @@ func TestGlob_Truncated(t *testing.T) {
 
 func TestGlob_EmptyPattern_Error(t *testing.T) {
 	g := NewGlob(nil, t.TempDir())
-	_, err := g.Handle(context.Background(), GlobArgs{Pattern: ""})
+	_, err := g.execute(context.Background(), GlobArgs{Pattern: ""})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must not be empty")
 }
@@ -50,7 +50,7 @@ func TestGlob_EmptyPattern_Error(t *testing.T) {
 func TestGlob_NoMatches(t *testing.T) {
 	dir := t.TempDir()
 	g := NewGlob(nil, dir)
-	out, err := g.Handle(context.Background(), GlobArgs{Pattern: "*.nonexistent", Cwd: dir})
+	out, err := g.execute(context.Background(), GlobArgs{Pattern: "*.nonexistent", Cwd: dir})
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, out.Count)
@@ -59,5 +59,5 @@ func TestGlob_NoMatches(t *testing.T) {
 func TestGlob_RiskLevel(t *testing.T) {
 	dir := t.TempDir()
 	g := NewGlob(testPolicy(dir), dir)
-	assert.Equal(t, "low", string(g.Risk()))
+	assert.Equal(t, "low", string(g.Spec().Risk))
 }

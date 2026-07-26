@@ -8,13 +8,13 @@ Go Agentic Loop SDK：以`宣告式設定`組裝目標導向控制迴圈 (Goal-d
 
 | 支柱        | 套件                       | 角色                                                                                         |
 | ----------- | -------------------------- | -------------------------------------------------------------------------------------------- |
-| 1. 認知架構 | `core` (ObservationSource) | 觀察來源 port (Percepts channel);原 `perception/` 套件無 consumer 已移除                     |
+| 1. 認知架構 | `core` (ObservationSource) | 觀察來源 port (Observations channel);原 `perception/` 套件無 consumer 已移除                 |
 | 2. 系統韌性 | `memory/`                  | Window / Compactor / Checkpoint (M2)                                                         |
-| 3. 工具生態 | `action/`                  | `RegisterFunc` / Registry / Sandbox / ApprovalPolicy                                         |
-| 4. 規劃     | `planning/`                | 6 種 ThinkingPattern (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router) |
+| 3. 工具生態 | `tool/`                    | `core.Tool` / RawMessage converter / Registry / 內建工具 / Sandbox                           |
+| 4. 推理     | `reasoning/`               | 6 種 DecisionRule (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router)    |
 | 5. 組裝     | `agent/` + `agent/spec/`   | 宣告式 `Config` → 8 stage pipeline → `*agent.Engine`；`prompt/` 管進 context window 的內容   |
 
-`core/` 是純狀態機 (state + event + instruction + step),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
+`core/` 是純狀態機 (state + event + instruction + reasoning),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
 
 ## 怎麼用 (Getting Started)
 
@@ -80,7 +80,7 @@ go run . w --list model.provider # 列出單一欄位的選項
 層 2 variant：block 內的具名欄位 —— 空字串 = 該 feature 的預設實作
 ```
 
-`planning` 再多一層正交軸：`reasoning.enable` 決定`註冊哪些`策略，`reasoning.style` 決定`這次跑哪個`——需要跑到一半換策略（`choose_agent` 當 router）時才註冊多個。
+`reasoning` 再多一層正交軸：`reasoning.enable` 決定`註冊哪些`策略，`reasoning.style` 決定`這次跑哪個`——需要跑到一半換策略（`choose_agent` 當 router）時才註冊多個。
 
 ### 什麼要用注入 (Option)
 
@@ -113,13 +113,13 @@ agentsdk/
 ├── prompt/                    # content management：Slot(system/user/reminder)、Source、Builder、LoadContextFiles（AGENTS.md/CLAUDE.md 階層載入）
 ├── core/                      # 純狀態機 (stdlib only, 含 ObservationSource port)
 ├── memory/                    # 支柱 2 (M2)
-├── planning/                  # 6 thinking patterns
-├── action/                    # RegisterFunc + Registry
+├── reasoning/                 # 6 thinking patterns
+├── tool/                      # core.Tool bridge、RegisterFunc、Registry、Sandbox
+│   └── builtin/              # Read/Write/Edit/Bash/Glob/Grep
 ├── middleware/                # (M2 鏈)
 │   └── hook/                  # lifecycle hooks (PreToolUse/PostToolUse/...; command hook exit 2 = block)
 ├── runtime/                   # Loop: dispatch + checkpoint + WAL
-├── tool/                      # 6 個內建工具
-├── skill/                     # SKILL.md skills + slash commands + prompt templates (progressive disclosure) + subagent Def/Spawner ("task" tool)
+├── skill/                     # SKILL.md skills + slash commands + prompt templates (progressive disclosure) + SubAgent/Spawner ("task" tool)
 ├── provider/                  # 7 個 adapter（已併回 root module）
 │   └── registry.go            # name → adapter 的唯一真相；env 查詢用注入，CLI 與 agent 共用
 ├── auth / proxy               # 外部獨立 repo，本 repo 無此目錄（auth 為 go.mod require，proxy 已完全脫離）
@@ -155,7 +155,7 @@ client response ← reverse directed pair transform ← provider response
 - **六種 ThinkingPattern**:透過 `core.NewDecide` 與純函式 DecisionRule dispatch;working memory 作為 pattern 與 runtime 間的通訊介面
 - **Tagged union Instruction**:7 種 instruction kind 透過 Kind discriminator + optional pointer 欄位表達,JSON round-trip 透過 `omitempty` 精簡
 - **Notifier 結構性相容**: `core.Notifier` 介面方法集與 `gosdk/notify.Notifier` 完全相同,gosdk 的 Multi / Stdout / Slack 直接傳入,無需 adapter
-- **Harness 能力可插拔**: hooks / permission / session / skill（內含 subagent Def/Spawner）/ wire / prompt 各自為只依賴 `core` 的 package,`runtime.Engine` 持有 nil 即 no-op 的 port,全部由 `agent` (composition root) 注入 — 借鏡 pi 的單向依賴與 claude-code 的 harness 事件面
+- **Harness 能力可插拔**: hooks / permission / session / skill（內含 `SubAgent`/`Spawner`）/ wire / prompt 各自為只依賴 `core` 的 package,`runtime.Engine` 持有 nil 即 no-op 的 port,全部由 `agent` (composition root) 注入 — 借鏡 pi 的單向依賴與 claude-code 的 harness 事件面
 - **宣告與組裝分離**: `agent/spec` 是純資料 (只 import `core`),任何只想`讀`或`產生`設定的工具 (wizard / schema generator / web 表單) 不必背上 provider SDK 與 harness 的重量;`agent` 才是知道那些實作存在的組裝層
 - **presets, not walls**: 設定挑 preset 而非組合細節 (middleware 鏈的順序是正確性,不是偏好);`WithCustomize` 在全部 stage 之後拿到組好的 `*runtime.Engine`,任何設定詞彙沒覆蓋的都還做得到
 

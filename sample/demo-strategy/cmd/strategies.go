@@ -2,12 +2,12 @@ package cmd
 
 import (
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/planning"
+	"github.com/bizshuk/agentsdk/reasoning"
 )
 
 // strategies 回傳六條策略的 catalog,順序即展示順序。
 //
-// 每一條的 rule / seed 都是真實 SDK code(與 planning 單元測試相同的
+// 每一條的 rule / seed 都是真實 SDK code(與 reasoning 單元測試相同的
 // 進入點),fold 只腳本化「環境」的回饋。
 func strategies() []strategy {
 	return []strategy{
@@ -28,14 +28,14 @@ func reactStrategy() strategy {
 		title:     "ThinkThenAct (ReAct)",
 		style:     core.REASON_REACT,
 		blurb:     "推理→挑工具→觀察結果→再推理;由 model 的 end_turn 結束(runtime 短路)。",
-		phaseKey:  planning.THINK_THEN_ACT_PHASE,
-		initPhase: planning.THINK_THEN_ACT_REASON,
+		phaseKey:  reasoning.THINK_THEN_ACT_PHASE,
+		initPhase: reasoning.THINK_THEN_ACT_REASON,
 		prompt:    "Watch the log and tell me if there are errors.",
-		rule:      planning.NewThinkThenAct(),
+		rule:      reasoning.NewThinkThenAct(),
 		fold: func(s *core.State, step int) bool {
 			switch step {
 			case 1: // model 回 tool_use → runtime 把 pending_call 播進 scratch
-				scratchPut(s, planning.THINK_THEN_ACT_PENDING_CALL, core.ToolCall{
+				scratchPut(s, reasoning.THINK_THEN_ACT_PENDING_CALL, core.ToolCall{
 					ID: "c1", Name: "read_log_tail",
 					Args: map[string]any{"n": 20}, Risk: core.RISK_LEVEL_LOW,
 				})
@@ -59,12 +59,12 @@ func planThenRunStrategy() strategy {
 		title:     "PlanThenRun",
 		style:     core.REASON_PLAN_THEN_RUN,
 		blurb:     "先產出 blueprint(此處 seed 三步),再依序 dispatch,用盡即 DONE。",
-		phaseKey:  planning.PLAN_THEN_RUN_PHASE,
-		initPhase: planning.RUN_PHASE_PTR,
+		phaseKey:  reasoning.PLAN_THEN_RUN_PHASE,
+		initPhase: reasoning.RUN_PHASE_PTR,
 		prompt:    "Triage the incident: read log, open ticket, page on-call.",
-		rule:      planning.NewPlanThenRun(),
+		rule:      reasoning.NewPlanThenRun(),
 		seed: func(s *core.State) {
-			planning.SeedBlueprint(s, []core.ToolCall{
+			reasoning.SeedBlueprint(s, []core.ToolCall{
 				{ID: "s1", Name: "read_log_tail", Args: map[string]any{"n": 50}},
 				{ID: "s2", Name: "open_ticket", Args: map[string]any{"severity": "high"}},
 				{ID: "s3", Name: "page_oncall", Args: map[string]any{"team": "infra"}},
@@ -82,16 +82,16 @@ func doThenReviewStrategy() strategy {
 		title:     "DoThenReview (Self-Refine)",
 		style:     core.REASON_DO_THEN_REVIEW,
 		blurb:     "執行→自我批判;評語非 'OK:' 就重來一輪。環境先 FAIL、再 PASS。",
-		phaseKey:  planning.RUN_THEN_REVIEW_PHASE,
-		initPhase: planning.RUN_PHASE,
+		phaseKey:  reasoning.RUN_THEN_REVIEW_PHASE,
+		initPhase: reasoning.RUN_PHASE,
 		prompt:    "Draft a fix for the null-pointer crash.",
-		rule:      planning.NewRunThenReview(),
+		rule:      reasoning.NewRunThenReview(),
 		fold: func(s *core.State, step int) bool {
 			switch step {
 			case 1: // 第一次 execute 後,reviewer 給 FAIL
-				scratchPut(s, planning.RUN_THEN_REVIEW_NOTE, "missing null-check on line 42")
+				scratchPut(s, reasoning.RUN_THEN_REVIEW_NOTE, "missing null-check on line 42")
 			case 3: // 第二次 execute 後,reviewer 給 PASS
-				scratchPut(s, planning.RUN_THEN_REVIEW_NOTE, "OK: null-check added, all tests green")
+				scratchPut(s, reasoning.RUN_THEN_REVIEW_NOTE, "OK: null-check added, all tests green")
 			}
 			return false
 		},
@@ -105,10 +105,10 @@ func oneShotStrategy() strategy {
 		title:     "OneShotReasoning (Chain-of-Thought)",
 		style:     core.REASON_ONE_SHOT,
 		blurb:     "一次推理就結束的雙相 FSM:think → done。",
-		phaseKey:  planning.ONE_SHOT_PHASE,
-		initPhase: planning.ONE_SHOT_THINK,
+		phaseKey:  reasoning.ONE_SHOT_PHASE,
+		initPhase: reasoning.ONE_SHOT_THINK,
 		prompt:    "What is 17 * 23? Show your reasoning.",
-		rule:      planning.NewOneShotReasoning(),
+		rule:      reasoning.NewOneShotReasoning(),
 		fold: func(s *core.State, step int) bool {
 			if step == 1 {
 				appendAssistant(s, "17*23 = 17*20 + 17*3 = 340 + 51 = 391")
@@ -126,10 +126,10 @@ func learnFromFailureStrategy() strategy {
 		title:     "LearnFromFailure (Reflexion)",
 		style:     core.REASON_LEARN_FROM_FAILURE,
 		blurb:     "act→reflect→retry;失敗評語累積成 verbal reinforcement,直到評語 'OK:'。",
-		phaseKey:  planning.LEARN_FROM_FAILURE_PHASE,
-		initPhase: planning.LFF_ACT,
+		phaseKey:  reasoning.LEARN_FROM_FAILURE_PHASE,
+		initPhase: reasoning.LFF_ACT,
 		prompt:    "Write a regex that matches all ERROR log lines.",
-		rule:      planning.NewLearnFromFailure(),
+		rule:      reasoning.NewLearnFromFailure(),
 		fold: func(s *core.State, step int) bool {
 			switch step {
 			case 1: // act 後 → 第一次嘗試
@@ -151,12 +151,12 @@ func chooseAgentStrategy() strategy {
 		title:     "ChooseAgent (Router)",
 		style:     core.REASON_PICK_AGENT,
 		blurb:     "從 agent 清單挑一個(此處 seed 兩個)→ 以該 agent 身分 delegate → done。",
-		phaseKey:  planning.CHOOSE_AGENT_PHASE,
-		initPhase: planning.CA_SELECT,
+		phaseKey:  reasoning.CHOOSE_AGENT_PHASE,
+		initPhase: reasoning.CA_SELECT,
 		prompt:    "The service is down — figure out why.",
-		rule:      planning.NewChooseAgent(),
+		rule:      reasoning.NewChooseAgent(),
 		seed: func(s *core.State) {
-			planning.SeedAgents(s, []string{"log-analyst", "patch-writer"})
+			reasoning.SeedAgents(s, []string{"log-analyst", "patch-writer"})
 		},
 		fold: func(s *core.State, step int) bool {
 			if step == 2 { // delegate 後 → 被選中的 agent 回覆

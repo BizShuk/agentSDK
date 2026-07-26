@@ -13,7 +13,7 @@
 
 ## 為什麼需要 skeleton
 
-`agentSDK` 是一個目標導向控制迴圈 (`Goal-directed Control Loop`) SDK。它分成兩半：底層是 `core/` + `runtime/`（純狀態機與 shell），上層是 `action/` + `permission/` + `session/` + `skill/` + `subagent/` + `hook/` + `wire/`（harness 能力）。
+`agentSDK` 是一個目標導向控制迴圈 (`Goal-directed Control Loop`) SDK。它分成兩半：底層是 `core/` + `runtime/`（純狀態機與 shell），上層是 `tool/` + `permission/` + `session/` + `skill/` + `subagent/` + `hook/` + `wire/`（harness 能力）。
 
 上層能力很多，接線順序很多；應用層只想說「我要什麼」。
 
@@ -74,7 +74,7 @@ newState(MaxTurns=20, Autonomy=L2, Budget, system prompt)
 層 2 variant — block 內的具名字串：空字串 = 該 feature 的預設實作
 ```
 
-`planning` 再多一層正交軸：`reasoning.enable`（註冊哪些策略進 `core.NewDecide`）vs `reasoning.style`（這次跑哪個）。
+`reasoning` 再多一層正交軸：`reasoning.enable`（註冊哪些策略進 `core.NewDecide`）vs `reasoning.style`（這次跑哪個）。
 
 把這條規則記住，後面所有的 block 都不用單獨說明。
 
@@ -353,7 +353,7 @@ YAML 與 JSON 共用同一份 `json` tag（轉譯在中間發生，`agent/load.g
 | Option | 用途 | 例子 |
 | --- | --- | --- |
 | `WithProvider` | 注入 fake provider 跑測試 | `agent.WithProvider(testutil.NewScriptedProvider())` |
-| `WithTools` | 加應用自有工具（部署、回滾、custom API call） | `agent.WithTools(myDeployTool)` —— 實作 `core.Tool` 介面的 5 個方法即可 |
+| `WithTools` | 加應用自有工具（部署、回滾、custom API call） | `agent.WithTools(myDeployTool)` —— 實作 `core.Tool` 的 `Name`、`Spec`、`Call` |
 | `WithHooks` | 阻擋高風險呼叫 | 見下面完整範例 |
 | `WithSources` | 自訂 prompt 來源 | `agent.WithSources(prompt.Static(prompt.SLOT_SYSTEM, "brand", "語氣：簡潔", prompt.ORDER_PERSONA))` |
 | `WithRules` | 註冊自訂推理策略 | 實作 `core.DecisionRule`（`Kind() ReasoningStyle` + `NextStep(state)`），`Kind` 會贏過同名的內建 rule |
@@ -473,7 +473,7 @@ for {
 - **presets, not walls**：設定挑 preset 而非組合細節（middleware 鏈順序是正確性）；`WithCustomize` 是逃生艙
 - **宣告與組裝分離**：宣告層只看 core，組裝層才知道有那些實作
 - **`prompt` vs `memory`**：`prompt` 決定`放什麼進 context window`（policy），`memory` 決定`放不下時砍什麼`（mechanism）；合在一起會遞迴
-- **`T0` 走 Engine**：不要為 `oneshot` 寫 no-op Decide——`planning.OneShotReasoning` 已經是這個東西，且不違反 `core.Decide` 的純函式不變式
+- **`T0` 走 Engine**：不要為 `oneshot` 寫 no-op Decide——`reasoning.OneShotReasoning` 已經是這個東西，且不違反 `core.Decide` 的純函式不變式
 - **`tier × reasoning` 正交**：`oneshot` 同時給 `reasoning` 是合法的；無工具 → model 不發 tool call → engine short-circuit 後，無論哪個 strategy 都退化成一次呼叫
 
 ## 常見錯誤 (Common Mistakes)
@@ -562,29 +562,29 @@ agent.WithCustomize(func(e *runtime.Engine) error {
 ### 5. 加了策略但忘了 wizard 同步
 
 ```text
-// 失敗：在 core 與 planning 加完，回 spec 加 Choice，忘記更新 wizard
-// core/thinking.go: REASON_REFLECT = "reflect"
-// planning/reflect.go: NewReflectiveReasoning()
+// 失敗：在 core 與 reasoning 加完，回 spec 加 Choice，忘記更新 wizard
+// core/reasoning.go: REASON_REFLECT = "reflect"
+// reasoning/reflect.go: NewReflectiveReasoning()
 // agent/spec/choice.go: StyleChoices() 不含 "reflect"
 ```
 
 ```bash
 # 症狀：wizard --list reasoning.style 看不到新策略，但 NewDecide 不報錯
-# 因為 core/thinking.go 已宣告，Validate 通過，但 wizard 給人選的清單少一項
+# 因為 core/reasoning.go 已宣告，Validate 通過，但 wizard 給人選的清單少一項
 ```
 
 ```text
 // 正確：三處同步（且 TestStyleChoicesMatchCoreConstants 防呆）
-// 1. core/thinking.go：新增 ReasoningStyle 常數
-// 2. planning/reflect.go：實作 DecisionRule
+// 1. core/reasoning.go：新增 ReasoningStyle 常數
+// 2. reasoning/reflect.go：實作 DecisionRule
 // 3. agent/spec/choice.go：StyleChoices() 加一筆 Choice
 ```
 
-骨架的三層（`core` enum → `planning` 實作 → `spec` Choice）必須同時加，缺一就漂移。`TestStyleChoicesMatchCoreConstants` 是這條的編譯期契約。
+骨架的三層（`core` enum → `reasoning` 實作 → `spec` Choice）必須同時加，缺一就漂移。`TestStyleChoicesMatchCoreConstants` 是這條的編譯期契約。
 
 ## 後續閱讀
 
-- [`docs/tutorials/01-getting-started.md`](01-getting-started.md)：core / runtime / planning / action 的底層概觀
+- [`docs/tutorials/01-getting-started.md`](01-getting-started.md)：core / runtime / reasoning / tool 的底層概觀
 - [`plans/2026-07-22-agent-skeleton-config-opt-in.md`](../../plans/2026-07-22-agent-skeleton-config-opt-in.md)：骨架的設計權衡與決策紀錄
 - [`docs/terminology.md`](../terminology.md)：本教學出現的所有術語的單一定義
 - `agent/spec/spec_test.go`：所有不變式的測試（62 個 subtest）

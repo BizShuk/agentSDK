@@ -9,18 +9,13 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 )
 
-// entry is the internal storage unit — metadata plus a typed dispatch
-// function. The dispatch function is set by RegisterFunc (typed path) or
-// RegisterCallable (self-dispatch path for Spawner-like tools).
+// entry is the internal storage unit — metadata plus raw JSON dispatch.
 type entry struct {
 	spec core.ToolSpec
-	risk core.RiskLevel
-	desc string
 	call func(ctx context.Context, raw json.RawMessage) (core.ToolResult, error)
 }
 
-// Registry is the in-memory tool registry. Tools are registered via
-// RegisterFunc (typed, schema-reflected) or RegisterCallable (self-dispatch).
+// Registry is the in-memory tool registry.
 type Registry struct {
 	mu      sync.RWMutex
 	entries map[string]entry
@@ -31,77 +26,43 @@ func NewRegistry() *Registry {
 	return &Registry{entries: make(map[string]entry, 8)}
 }
 
+// funcTool adapts a typed Go function to core.Tool.
+type funcTool[TArgs any, TOut any] struct {
+	spec core.ToolSpec
+	call func(ctx context.Context, args TArgs) (TOut, error)
+}
+
+func (f funcTool[TArgs, TOut]) Name() string        { return f.spec.Name }
+func (f funcTool[TArgs, TOut]) Spec() core.ToolSpec { return f.spec }
+func (f funcTool[TArgs, TOut]) Call(
+	ctx context.Context,
+	raw json.RawMessage,
+) (core.ToolResult, error) {
+	return CallWithRawMessage(ctx, f.Name(), raw, f.call)
+}
+
 // RegisterFunc registers a typed Go function as a tool. Schema is
-// auto-reflected from TArgs; JSON unmarshal/marshal is handled by
-// the registry — the function never touches json.RawMessage.
-//
-// This is the primary registration path for tools whose args are a
-// static Go struct (all 6 built-ins, sample tools, test tools).
+// auto-reflected from TArgs; the function never touches json.RawMessage.
 func RegisterFunc[TArgs any, TOut any](
 	r *Registry,
 	name, desc string,
 	risk core.RiskLevel,
-	fn func(ctx context.Context, args TArgs) (TOut, error),
+	call func(ctx context.Context, args TArgs) (TOut, error),
 ) {
 	spec, err := SchemaForTool[TArgs](name, desc, risk)
 	if err != nil {
-		// Schema reflection failure at registration time is a programming
-		// error — panic like a nil map assignment would.
 		panic(fmt.Sprintf("tool.RegisterFunc(%q): schema: %v", name, err))
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.entries[name] = entry{
-		spec: spec,
-		risk: risk,
-		desc: desc,
-		call: typedCall[TArgs, TOut](name, fn),
-	}
+	r.Register(funcTool[TArgs, TOut]{spec: spec, call: call})
 }
 
-// RegisterTyped registers a strongly-typed Tool[TArgs, TOut] into the registry.
-// Schema is auto-reflected from TArgs.
-func RegisterTyped[TArgs any, TOut any](r *Registry, t Tool[TArgs, TOut]) {
-	RegisterFunc(r, t.Name(), t.Desc(), t.Risk(), t.Handle)
-}
-
-// RegisterCallable registers a tool that manages its own JSON dispatch.
-// Used by composite tools like skill.Spawner where the registry cannot
-// reflect args from a static Go type.
-func (r *Registry) RegisterCallable(t core.CallableTool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.entries[t.Name()] = entry{
-		spec: t.Schema(),
-		risk: t.Risk(),
-		desc: t.Description(),
-		call: t.Call,
-	}
-}
-
-// Register registers a metadata-only Tool with a pre-registered call
-// function. This is a convenience for tools that assemble their own
-// ToolSpec but still want registry dispatch. If the tool also implements
-// CallableTool, its Call method is used directly.
+// Register adds an executable tool to the registry.
 func (r *Registry) Register(t core.Tool) {
-	if ct, ok := t.(core.CallableTool); ok {
-		r.RegisterCallable(ct)
-		return
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// Metadata-only registration — Call will panic if invoked.
 	r.entries[t.Name()] = entry{
-		spec: t.Schema(),
-		risk: t.Risk(),
-		desc: t.Description(),
-		call: func(_ context.Context, _ json.RawMessage) (core.ToolResult, error) {
-			return core.ToolResult{
-				Name:  t.Name(),
-				OK:    false,
-				Error: fmt.Sprintf("tool %q was registered without a call function", t.Name()),
-			}, nil
-		},
+		spec: t.Spec(),
+		call: t.Call,
 	}
 }
 
@@ -113,7 +74,7 @@ func (r *Registry) Get(name string) (core.Tool, bool) {
 	if !ok {
 		return nil, false
 	}
-	return &staticTool{spec: e.spec, risk: e.risk, desc: e.desc}, ok
+	return &staticTool{spec: e.spec, call: e.call}, ok
 }
 
 // List returns schemas of all registered tools (copy).
@@ -144,7 +105,15 @@ func (r *Registry) Call(ctx context.Context, call core.ToolCall) core.ToolResult
 	if err != nil {
 		return core.ToolResult{CallID: call.ID, Name: call.Name, OK: false, Error: err.Error()}
 	}
-	res, _ := e.call(ctx, raw)
+	res, err := e.call(ctx, raw)
+	if err != nil {
+		return core.ToolResult{
+			CallID: call.ID,
+			Name:   call.Name,
+			OK:     false,
+			Error:  err.Error(),
+		}
+	}
 	if res.CallID == "" {
 		res.CallID = call.ID
 	}
@@ -161,45 +130,20 @@ func marshalArgs(args map[string]any) (json.RawMessage, error) {
 	return json.Marshal(args)
 }
 
-// typedCall builds the dispatch closure for RegisterFunc — unmarshal,
-// validate, call fn, marshal result.
-func typedCall[TArgs any, TOut any](
-	name string,
-	fn func(ctx context.Context, args TArgs) (TOut, error),
-) func(ctx context.Context, raw json.RawMessage) (core.ToolResult, error) {
-	return func(ctx context.Context, raw json.RawMessage) (core.ToolResult, error) {
-		if ok, err := ValidateArgs[TArgs](name, raw); !ok {
-			return core.ToolResult{Name: name, OK: false, Error: err.Error()}, nil
-		}
-		var args TArgs
-		if len(raw) > 0 && string(raw) != "null" {
-			if err := json.Unmarshal(raw, &args); err != nil {
-				return core.ToolResult{Name: name, OK: false, Error: "invalid args: " + err.Error()}, nil
-			}
-		}
-		out, err := fn(ctx, args)
-		if err != nil {
-			return core.ToolResult{Name: name, OK: false, Error: err.Error()}, nil
-		}
-		encoded, mErr := json.Marshal(out)
-		if mErr != nil {
-			return core.ToolResult{Name: name, OK: true, Output: fmt.Sprintf("%v", out)}, nil
-		}
-		return core.ToolResult{Name: name, OK: true, Output: json.RawMessage(encoded)}, nil
-	}
-}
-
-// staticTool is a read-only core.Tool returned by Get.
+// staticTool is a core.Tool view returned by Get.
 type staticTool struct {
 	spec core.ToolSpec
-	risk core.RiskLevel
-	desc string
+	call func(context.Context, json.RawMessage) (core.ToolResult, error)
 }
 
-func (s *staticTool) Name() string          { return s.spec.Name }
-func (s *staticTool) Description() string   { return s.desc }
-func (s *staticTool) Risk() core.RiskLevel  { return s.risk }
-func (s *staticTool) Schema() core.ToolSpec { return s.spec }
+func (s *staticTool) Name() string        { return s.spec.Name }
+func (s *staticTool) Spec() core.ToolSpec { return s.spec }
+func (s *staticTool) Call(
+	ctx context.Context,
+	raw json.RawMessage,
+) (core.ToolResult, error) {
+	return s.call(ctx, raw)
+}
 
 // ToolSource is the dynamic discovery interface (MCP shape).
 //

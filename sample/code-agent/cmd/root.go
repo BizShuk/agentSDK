@@ -25,72 +25,72 @@ const (
 	appName = "code-agent"
 )
 
-// NewRoot builds the single root command.
-func NewRoot() *cobra.Command {
-	var (
-		prompt       string
-		jsonMode     bool
-		fake         bool
-		providerName string
-		model        string
-		apiKey       string
-		baseURL      string
-		maxTurns     int
-		permMode     string
-		contFlag     bool
-		resumeID     string
-		forkID       string
-		listSessions bool
-	)
+var (
+	prompt       string
+	jsonMode     bool
+	fake         bool
+	providerName string
+	model        string
+	apiKey       string
+	baseURL      string
+	maxTurns     int
+	permMode     string
+	contFlag     bool
+	resumeID     string
+	forkID       string
+	listSessions bool
+)
 
-	cmd := &cobra.Command{
-		Use:     "code-agent",
-		Short:   "Full-harness agentsdk demo: tui + wire + hooks/permission/session/skill/subagent",
-		Version: Version,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := cli.MustOpenForCLI(appName, slog.LevelInfo)
-			ctx := cmd.Context()
-			if ctx == nil {
-				ctx = context.Background()
-			}
+// RootCmd builds the single root command.
+var RootCmd = &cobra.Command{
+	Use:     "code-agent",
+	Short:   "Full-harness agentsdk demo: tui + wire + hooks/permission/session/skill/subagent",
+	Version: Version,
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		cfg := cli.MustOpenForCLI(appName, slog.LevelInfo)
+		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
 
-			parts, err := compose(composeOptions{
-				cfg: cfg, fake: fake, provider: providerName, model: model, apiKey: apiKey,
-				baseURL: baseURL, maxTurns: maxTurns, permissionMode: permMode,
-			})
-			if err != nil {
-				return err
-			}
+		parts, err := compose(composeOptions{
+			cfg: cfg, fake: fake, provider: providerName, model: model, apiKey: apiKey,
+			baseURL: baseURL, maxTurns: maxTurns, permissionMode: permMode,
+		})
+		if err != nil {
+			return err
+		}
 
-			if listSessions {
-				return printSessions(cmd.OutOrStdout(), parts)
-			}
+		if listSessions {
+			return printSessions(cmd.OutOrStdout(), parts)
+		}
 
-			state, err := parts.openState(ctx, sessionRequest{
-				continueLatest: contFlag, resumeID: resumeID, forkID: forkID,
-			})
-			if err != nil {
-				return err
-			}
+		state, err := parts.openState(ctx, sessionRequest{
+			continueLatest: contFlag, resumeID: resumeID, forkID: forkID,
+		})
+		if err != nil {
+			return err
+		}
 
-			// Headless when -p given or stdin is piped; interactive otherwise.
-			task := strings.TrimSpace(prompt)
-			if task == "" && stdinIsPipe() {
-				raw, _ := io.ReadAll(os.Stdin)
-				task = strings.TrimSpace(string(raw))
-			}
-			if task != "" {
-				return runOnce(ctx, cmd.OutOrStdout(), parts, state, task, jsonMode)
-			}
-			if jsonMode {
-				return fmt.Errorf("--json needs -p or piped stdin (interactive json is not supported)")
-			}
-			return runInteractive(ctx, parts, state)
-		},
-	}
+		// Headless when -p given or stdin is piped; interactive otherwise.
+		task := strings.TrimSpace(prompt)
+		if task == "" && stdinIsPipe() {
+			raw, _ := io.ReadAll(os.Stdin)
+			task = strings.TrimSpace(string(raw))
+		}
+		if task != "" {
+			return runOnce(ctx, cmd.OutOrStdout(), parts, state, task, jsonMode)
+		}
+		if jsonMode {
+			return fmt.Errorf("--json needs -p or piped stdin (interactive json is not supported)")
+		}
+		return runInteractive(ctx, parts, state)
+	},
+}
 
-	cmd.SetVersionTemplate("code-agent {{.Version}}\n")
-	f := cmd.Flags()
+func init() {
+	RootCmd.SetVersionTemplate("code-agent {{.Version}}\n")
+	f := RootCmd.Flags()
 	f.StringVarP(&prompt, "print", "p", "", "One-shot prompt: run headless and print the final answer.")
 	f.BoolVar(&jsonMode, "json", false, "Emit stream-json envelopes (wire) instead of text; implies headless.")
 	f.BoolVar(&fake, "fake", false, "Use the scripted fake provider (no network, echoes after the script).")
@@ -104,7 +104,6 @@ func NewRoot() *cobra.Command {
 	f.StringVarP(&resumeID, "resume", "r", "", "Resume a session by ID.")
 	f.StringVar(&forkID, "fork", "", "Fork a session by ID and continue on the copy.")
 	f.BoolVar(&listSessions, "sessions", false, "List sessions for this directory and exit.")
-	return cmd
 }
 
 // runOnce is the headless surface: print mode writes progress to stderr and

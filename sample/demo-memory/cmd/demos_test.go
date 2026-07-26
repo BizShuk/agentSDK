@@ -47,7 +47,7 @@ func TestCheckpointReplaysOnlyNewEvents(t *testing.T) {
 
 // TestRunCmdUnknownIDErrors 確認未知 id 回報錯誤。
 func TestRunCmdUnknownIDErrors(t *testing.T) {
-	root := NewRoot()
+	root := RootCmd
 	root.SetArgs([]string{"run", "nope"})
 	root.SetOut(&bytes.Buffer{})
 	root.SetErr(&bytes.Buffer{})

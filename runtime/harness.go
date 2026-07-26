@@ -168,11 +168,8 @@ func appendToolResultMessage(s core.State, res core.ToolResult) core.State {
 	s.Messages = append(s.Messages, core.Message{
 		Role: core.ROLE_TOOL,
 		Parts: []core.Part{{
-			Kind: core.PART_KIND_TOOL_RESULT,
-			ToolResult: &core.ToolResultPart{
-				CallID: res.CallID, Name: res.Name, OK: res.OK,
-				Output: res.Output, Error: res.Error,
-			},
+			Kind:       core.PART_KIND_TOOL_RESULT,
+			ToolResult: &res,
 		}},
 		Ts: time.Now().UTC(),
 	})

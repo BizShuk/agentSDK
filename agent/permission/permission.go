@@ -6,9 +6,9 @@
 //   - Rules — allow / ask / deny entries with tool specifiers such as
 //     "Bash(git:*)" or "Edit(src/**)", evaluated deny > ask > allow.
 //
-// What a tool may touch (sandbox) stays a separate axis in action/sandbox.
-// The package depends only on core; wiring replaces action.DefaultApprovalPolicy
-// at the composition root:
+// What a tool may touch (sandbox) stays a separate axis in tool/sandbox.
+// The package depends only on core; wiring selects DefaultApprovalPolicy at
+// the composition root:
 //
 //	engine.Approval = &permission.Engine{Mode: permission.MODE_DEFAULT, Rules: rules}
 package permission
@@ -17,23 +17,6 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
-)
-
-// Mode is the claude-code style permission mode. The set of valid
-// values lives in core so spec (config vocabulary) and permission
-// (runtime engine) cannot drift apart — a PermissionMode that is not
-// one of core's PERMISSION_MODE_* constants is a configuration
-// vocabulary error.
-type Mode = core.PermissionMode
-
-// MODE_* are preserved on this package for callers that already import
-// agent/permission rather than core. The values are the untyped string
-// literals declared in core, identical to core.PERMISSION_MODE_*.
-const (
-	MODE_DEFAULT      = core.PERMISSION_MODE_DEFAULT
-	MODE_ACCEPT_EDITS = core.PERMISSION_MODE_ACCEPT_EDITS
-	MODE_PLAN         = core.PERMISSION_MODE_PLAN
-	MODE_BYPASS       = core.PERMISSION_MODE_BYPASS
 )
 
 // Behavior is what a matched rule yields.

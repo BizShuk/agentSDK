@@ -26,23 +26,27 @@ type runFlags struct {
 	dataDir string
 }
 
-// RegisterRun attaches the run subcommand to root. Call from main.go.
-func RegisterRun(root *cobra.Command) {
-	f := &runFlags{}
-	cmd := &cobra.Command{
+var (
+	runCmdFlags runFlags
+
+	// RunCmd executes a single log-doctor pass.
+	RunCmd = &cobra.Command{
 		Use:   "run",
 		Short: "Run a single log-doctor pass against a log file",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runExecute(cmd, f)
+			return runExecute(cmd, &runCmdFlags)
 		},
 	}
-	cmd.Flags().BoolVar(&f.once, "once", false,
+)
+
+func init() {
+	RunCmd.Flags().BoolVar(&runCmdFlags.once, "once", false,
 		"Read existing log lines once and exit (no watcher loop).")
-	cmd.Flags().StringVar(&f.fixture, "fixture", "",
+	RunCmd.Flags().StringVar(&runCmdFlags.fixture, "fixture", "",
 		"Path to a log file. Required when --once is set.")
-	cmd.Flags().StringVar(&f.dataDir, "data-dir", "",
+	RunCmd.Flags().StringVar(&runCmdFlags.dataDir, "data-dir", "",
 		"Directory for StateStore + WAL (default: $LOGDOCTOR_DATA or ./data).")
-	root.AddCommand(cmd)
+	RootCmd.AddCommand(RunCmd)
 }
 
 func runExecute(cmd *cobra.Command, f *runFlags) error {

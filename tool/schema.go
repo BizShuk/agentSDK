@@ -27,7 +27,7 @@ func SchemaFor[T any]() *jsonschema.Schema {
 }
 
 // SchemaJSON returns the JSON-encoded representation of SchemaFor[T]().
-// The output is suitable for inclusion in core.ToolSchema.Parameters.
+// The output is suitable for inclusion in core.ToolSpec.Parameters.
 func SchemaJSON[T any]() (json.RawMessage, error) {
 	s := SchemaFor[T]()
 	return json.Marshal(s)
@@ -47,6 +47,16 @@ func SchemaForTool[T any](name, desc string, risk core.RiskLevel) (core.ToolSpec
 		Risk:        risk,
 		Parameters:  json.RawMessage(raw),
 	}, nil
+}
+
+// MustSchemaForTool returns the reflected tool spec or panics when the
+// argument type cannot be represented as JSON Schema.
+func MustSchemaForTool[T any](name, desc string, risk core.RiskLevel) core.ToolSpec {
+	spec, err := SchemaForTool[T](name, desc, risk)
+	if err != nil {
+		panic(fmt.Sprintf("tool.MustSchemaForTool(%q): %v", name, err))
+	}
+	return spec
 }
 
 // SchemaError is returned by ValidateArgs when raw JSON does not match

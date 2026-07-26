@@ -4,6 +4,7 @@ package tool
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	sdkcore "github.com/bizshuk/agentsdk/core"
@@ -36,13 +37,37 @@ func NewReadLogTail(src Source) *ReadLogTail {
 	return &ReadLogTail{src: src}
 }
 
+var _ sdktool.Tool = (*ReadLogTail)(nil)
+
 // Register registers ReadLogTail into the given sdktool.Registry.
 func (r *ReadLogTail) Register(reg *sdktool.Registry) {
-	sdktool.RegisterFunc(reg, "read_log_tail", "Read up to N lines from the watched log file", sdkcore.RISK_LEVEL_LOW, r.Handle)
+	reg.Register(r)
 }
 
-// Handle is pure business logic.
-func (r *ReadLogTail) Handle(ctx context.Context, args ReadLogTailArgs) (ReadLogTailOutput, error) {
+// Name returns the registry name.
+func (r *ReadLogTail) Name() string { return "read_log_tail" }
+
+// Spec returns metadata and the reflected argument schema.
+func (r *ReadLogTail) Spec() sdkcore.ToolSpec {
+	return sdktool.MustSchemaForTool[ReadLogTailArgs](
+		r.Name(),
+		"Read up to N lines from the watched log file",
+		sdkcore.RISK_LEVEL_LOW,
+	)
+}
+
+// Call converts raw JSON arguments and executes the tail operation.
+func (r *ReadLogTail) Call(
+	ctx context.Context,
+	raw json.RawMessage,
+) (sdkcore.ToolResult, error) {
+	return sdktool.CallWithRawMessage(ctx, r.Name(), raw, r.execute)
+}
+
+func (r *ReadLogTail) execute(
+	ctx context.Context,
+	args ReadLogTailArgs,
+) (ReadLogTailOutput, error) {
 	if args.N <= 0 {
 		args.N = 20
 	}

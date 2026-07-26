@@ -2,6 +2,7 @@ package tool
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -30,13 +31,34 @@ func NewNotify(w io.Writer) *Notify {
 	return &Notify{w: w}
 }
 
+var _ sdktool.Tool = (*Notify)(nil)
+
 // Register registers Notify into the given sdktool.Registry.
 func (n *Notify) Register(reg *sdktool.Registry) {
-	sdktool.RegisterFunc(reg, "notify", "Print a notification line to the operator", sdkcore.RISK_LEVEL_LOW, n.Handle)
+	reg.Register(n)
 }
 
-// Handle is pure business logic.
-func (n *Notify) Handle(_ context.Context, args NotifyArgs) (NotifyOutput, error) {
+// Name returns the registry name.
+func (n *Notify) Name() string { return "notify" }
+
+// Spec returns metadata and the reflected argument schema.
+func (n *Notify) Spec() sdkcore.ToolSpec {
+	return sdktool.MustSchemaForTool[NotifyArgs](
+		n.Name(),
+		"Print a notification line to the operator",
+		sdkcore.RISK_LEVEL_LOW,
+	)
+}
+
+// Call converts raw JSON arguments and executes the notification operation.
+func (n *Notify) Call(
+	ctx context.Context,
+	raw json.RawMessage,
+) (sdkcore.ToolResult, error) {
+	return sdktool.CallWithRawMessage(ctx, n.Name(), raw, n.execute)
+}
+
+func (n *Notify) execute(_ context.Context, args NotifyArgs) (NotifyOutput, error) {
 	level := args.Level
 	if level == "" {
 		level = "info"

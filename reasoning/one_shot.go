@@ -1,4 +1,4 @@
-package planning
+package reasoning
 
 import "github.com/bizshuk/agentsdk/core"
 

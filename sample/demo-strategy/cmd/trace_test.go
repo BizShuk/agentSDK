@@ -37,7 +37,7 @@ func TestStrategiesHaveUniqueIDs(t *testing.T) {
 
 // TestRunCmdUnknownIDErrors 確認 run 對未知 id 回報錯誤而非默默成功。
 func TestRunCmdUnknownIDErrors(t *testing.T) {
-	root := NewRoot()
+	root := RootCmd
 	root.SetArgs([]string{"run", "nope"})
 	root.SetOut(&bytes.Buffer{})
 	root.SetErr(&bytes.Buffer{})

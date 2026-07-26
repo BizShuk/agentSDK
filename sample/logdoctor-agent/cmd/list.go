@@ -11,17 +11,19 @@ import (
 // RegisterList attaches the `list` subcommand to root. It enumerates
 // the runs persisted under $LOGDOCTOR_DATA/states and prints a
 // one-line summary per run-id. Useful as an `ls`-style operator view.
-func RegisterList(root *cobra.Command) {
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List persisted runs (read StateStore metadata)",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return listExecute(cmd)
-		},
-	}
-	cmd.Flags().String("data-dir", "",
+// ListCmd lists persisted runs.
+var ListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List persisted runs (read StateStore metadata)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return listExecute(cmd)
+	},
+}
+
+func init() {
+	ListCmd.Flags().String("data-dir", "",
 		"Directory containing states/ (default: $LOGDOCTOR_DATA or ./data).")
-	root.AddCommand(cmd)
+	RootCmd.AddCommand(ListCmd)
 }
 
 func listExecute(cmd *cobra.Command) error {

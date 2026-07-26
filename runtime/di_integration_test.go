@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/planning"
+	"github.com/bizshuk/agentsdk/reasoning"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
@@ -23,7 +23,7 @@ func TestDIProviderSwap(t *testing.T) {
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 
 	state := func() core.State {
@@ -73,7 +73,7 @@ func TestImageChunkSurvivesRunLoop(t *testing.T) {
 	prov.EnqueueEndTurn("seen")
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
 	loop.Emitter = func(eff core.Instruction) {}

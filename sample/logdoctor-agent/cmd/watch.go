@@ -16,28 +16,33 @@ import (
 //
 // M4 keeps the implementation simple — one agent + one loop, polls
 // every N seconds. M5+ may add concurrent runs and a scheduler.
-func RegisterWatch(root *cobra.Command) {
-	f := &watchFlags{}
-	cmd := &cobra.Command{
-		Use:   "watch",
-		Short: "Continuously tail the log and dispatch runs (M4 + provider required)",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return watchExecute(cmd, f)
-		},
-	}
-	cmd.Flags().StringVar(&f.fixture, "fixture", "",
-		"Path to a log file to tail.")
-	cmd.Flags().DurationVar(&f.interval, "interval", 5*time.Second,
-		"Poll interval.")
-	cmd.Flags().IntVar(&f.maxRuns, "max-runs", 0,
-		"Stop after N runs (0 = forever).")
-	root.AddCommand(cmd)
-}
-
 type watchFlags struct {
 	fixture  string
 	interval time.Duration
 	maxRuns  int
+}
+
+var (
+	watchCmdFlags watchFlags
+
+	// WatchCmd continuously tails the log and dispatches runs.
+	WatchCmd = &cobra.Command{
+		Use:   "watch",
+		Short: "Continuously tail the log and dispatch runs (M4 + provider required)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return watchExecute(cmd, &watchCmdFlags)
+		},
+	}
+)
+
+func init() {
+	WatchCmd.Flags().StringVar(&watchCmdFlags.fixture, "fixture", "",
+		"Path to a log file to tail.")
+	WatchCmd.Flags().DurationVar(&watchCmdFlags.interval, "interval", 5*time.Second,
+		"Poll interval.")
+	WatchCmd.Flags().IntVar(&watchCmdFlags.maxRuns, "max-runs", 0,
+		"Stop after N runs (0 = forever).")
+	RootCmd.AddCommand(WatchCmd)
 }
 
 func watchExecute(cmd *cobra.Command, f *watchFlags) error {

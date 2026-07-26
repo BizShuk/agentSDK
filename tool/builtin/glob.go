@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -51,19 +52,29 @@ func NewGlob(policy tool.Sandbox, rootDir string, opts ...GlobOption) *Glob {
 	return g
 }
 
-var _ tool.Tool[GlobArgs, GlobOutput] = (*Glob)(nil)
+var _ tool.Tool = (*Glob)(nil)
 
 // Name returns the tool's registry name.
 func (g *Glob) Name() string { return NAME_GLOB }
 
-// Risk returns the risk level.
-func (g *Glob) Risk() core.RiskLevel { return core.RISK_LEVEL_LOW }
+// Spec returns the tool's metadata and reflected argument schema.
+func (g *Glob) Spec() core.ToolSpec {
+	return tool.MustSchemaForTool[GlobArgs](
+		NAME_GLOB,
+		GlobDesc,
+		core.RISK_LEVEL_LOW,
+	)
+}
 
-// Desc returns the tool description.
-func (g *Glob) Desc() string { return GlobDesc }
+// Call converts raw JSON arguments and executes the glob operation.
+func (g *Glob) Call(
+	ctx context.Context,
+	raw json.RawMessage,
+) (core.ToolResult, error) {
+	return tool.CallWithRawMessage(ctx, g.Name(), raw, g.execute)
+}
 
-// Handle is the pure business logic — no JSON, no schema.
-func (g *Glob) Handle(_ context.Context, a GlobArgs) (GlobOutput, error) {
+func (g *Glob) execute(_ context.Context, a GlobArgs) (GlobOutput, error) {
 	if a.Pattern == "" {
 		return GlobOutput{}, fmt.Errorf("glob: pattern must not be empty")
 	}

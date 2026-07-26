@@ -2,6 +2,7 @@ package tool
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -29,13 +30,37 @@ func NewProposeFix() *ProposeFix {
 	return &ProposeFix{}
 }
 
+var _ sdktool.Tool = (*ProposeFix)(nil)
+
 // Register registers ProposeFix into the given sdktool.Registry.
 func (p *ProposeFix) Register(reg *sdktool.Registry) {
-	sdktool.RegisterFunc(reg, "propose_fix", "Propose a fix for the operator to approve", sdkcore.RISK_LEVEL_HIGH, p.Handle)
+	reg.Register(p)
 }
 
-// Handle is pure business logic.
-func (p *ProposeFix) Handle(_ context.Context, args ProposeFixArgs) (ProposeFixOutput, error) {
+// Name returns the registry name.
+func (p *ProposeFix) Name() string { return "propose_fix" }
+
+// Spec returns metadata and the reflected argument schema.
+func (p *ProposeFix) Spec() sdkcore.ToolSpec {
+	return sdktool.MustSchemaForTool[ProposeFixArgs](
+		p.Name(),
+		"Propose a fix for the operator to approve",
+		sdkcore.RISK_LEVEL_HIGH,
+	)
+}
+
+// Call converts raw JSON arguments and executes the proposal operation.
+func (p *ProposeFix) Call(
+	ctx context.Context,
+	raw json.RawMessage,
+) (sdkcore.ToolResult, error) {
+	return sdktool.CallWithRawMessage(ctx, p.Name(), raw, p.execute)
+}
+
+func (p *ProposeFix) execute(
+	_ context.Context,
+	args ProposeFixArgs,
+) (ProposeFixOutput, error) {
 	if args.Title == "" {
 		return ProposeFixOutput{}, fmt.Errorf("propose_fix: title is required")
 	}

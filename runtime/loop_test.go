@@ -12,7 +12,7 @@ import (
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/harness"
 	"github.com/bizshuk/agentsdk/middleware/security"
-	"github.com/bizshuk/agentsdk/planning"
+	"github.com/bizshuk/agentsdk/reasoning"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
@@ -44,7 +44,7 @@ func TestReActEndTurnExitsLoop(t *testing.T) {
 	prov.EnqueueEndTurn("done")
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 
 	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
@@ -78,7 +78,7 @@ func TestReActOneToolCallThenEnd(t *testing.T) {
 		})
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 
 	loop := runtime.NewEngine(step, prov, reg)
@@ -121,7 +121,7 @@ func TestPlannerExecutorDispatchesBlueprint(t *testing.T) {
 		func(_ context.Context, a addArgs) (addOut, error) { return addOut{}, nil })
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_PLAN_THEN_RUN: planning.NewPlanThenRun(),
+		core.REASON_PLAN_THEN_RUN: reasoning.NewPlanThenRun(),
 	})
 
 	state := core.State{
@@ -129,7 +129,7 @@ func TestPlannerExecutorDispatchesBlueprint(t *testing.T) {
 		ReasoningStyle: core.REASON_PLAN_THEN_RUN,
 		Budget:         core.Budget{MaxTurns: 5},
 	}
-	planning.SeedBlueprint(&state, []core.ToolCall{
+	reasoning.SeedBlueprint(&state, []core.ToolCall{
 		{ID: "s1", Name: "noop", Args: map[string]any{}},
 		{ID: "s2", Name: "noop", Args: map[string]any{}},
 	})
@@ -162,7 +162,7 @@ func TestBudgetExceededStopsLoop(t *testing.T) {
 		func(_ context.Context, a addArgs) (addOut, error) { return addOut{}, nil })
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 
 	loop := runtime.NewEngine(step, prov, reg)
@@ -190,7 +190,7 @@ func TestStoreAndWAL(t *testing.T) {
 	wal := testutil.NewMemWAL()
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
 	loop.Emitter = func(eff core.Instruction) {}
@@ -227,7 +227,7 @@ func TestNotifyIsCalled(t *testing.T) {
 	// seeded, then a CALL_MODEL in delegate; the scripted end_turn short-
 	// circuits the run to COMPLETED.
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_PICK_AGENT: planning.NewChooseAgent(),
+		core.REASON_PICK_AGENT: reasoning.NewChooseAgent(),
 	})
 
 	notifier := &testutil.RecordingNotifier{}
@@ -241,7 +241,7 @@ func TestNotifyIsCalled(t *testing.T) {
 		Budget:         core.Budget{MaxTurns: 3},
 	}
 	// Seed an agent list so the select phase emits NOTIFY ("router chose agent: x").
-	planning.SeedAgents(&state, []string{"x"})
+	reasoning.SeedAgents(&state, []string{"x"})
 	_, err := loop.Run(context.Background(), state)
 	require.NoError(t, err)
 	assert.NotEmpty(t, notifier.Messages())
@@ -254,7 +254,7 @@ func TestRunWithInputSeedsFirstTurn(t *testing.T) {
 	prov.EnqueueEndTurn("ack")
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
 	loop.Emitter = func(eff core.Instruction) {}
@@ -288,8 +288,8 @@ var _ = harness.IsBudgetExceeded
 // is the only view that matters for the settlement invariant: an
 // assistant turn carrying N tool_use parts must be followed by N
 // tool_result messages before the next CALL_MODEL.
-func toolResultsOf(s core.State) []core.ToolResultPart {
-	var out []core.ToolResultPart
+func toolResultsOf(s core.State) []core.ToolResult {
+	var out []core.ToolResult
 	for _, m := range s.Messages {
 		if m.Role != core.ROLE_TOOL {
 			continue
@@ -314,7 +314,7 @@ func batchEngine(t *testing.T, prov *testutil.ScriptedProvider) *runtime.Engine 
 		})
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	eng := runtime.NewEngine(step, prov, reg)
 	eng.Approval = stubApproval{}

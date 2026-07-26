@@ -69,7 +69,7 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, erro
 					select {
 					case out <- core.ModelChunk{
 						Kind: core.PART_KIND_TOOL_USE,
-						ToolUse: &core.ToolUseChunk{
+						ToolUse: &core.ToolCall{
 							ID:   tc.ID,
 							Name: tc.Function.Name,
 							Args: parseArgs(tc.Function.Arguments),

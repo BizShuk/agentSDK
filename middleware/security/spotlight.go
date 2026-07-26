@@ -30,7 +30,7 @@ const (
 //     → wrapped at the JSON layer as
 //     {"untrusted": true, "content": <original>}, which stays a single
 //     valid JSON value. This is the path registered tools hit, since
-//     action.RegisterFunc returns Output as json.RawMessage (i.e. []byte).
+//     tool.CallWithRawMessage returns Output as json.RawMessage (i.e. []byte).
 //
 // Plain []byte that happens to be valid JSON is treated as structured
 // output (JSON layer); a non-JSON byte slice is treated as opaque text

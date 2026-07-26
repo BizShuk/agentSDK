@@ -10,14 +10,7 @@ import (
 )
 
 func main() {
-	root := cmd.NewRoot()
-	cmd.RegisterRun(root)
-	cmd.RegisterResume(root)
-	cmd.RegisterList(root)
-	cmd.RegisterWatch(root)
-	cmd.RegisterApprove(root)
-
-	if err := root.Execute(); err != nil {
+	if err := cmd.RootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

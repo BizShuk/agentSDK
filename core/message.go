@@ -23,33 +23,24 @@ const (
 	PART_KIND_TOOL_RESULT PartKind = "tool_result"
 )
 
-// ToolResultPart is an embedded tool result inside an assistant-style message.
-type ToolResultPart struct {
-	CallID string `json:"call_id"`
-	Name   string `json:"name"`
-	OK     bool   `json:"ok"`
-	Output any    `json:"output,omitempty"`
-	Error  string `json:"error,omitempty"`
-}
-
 // Part is one fragment of a Message — text, audio, image, tool_use, or tool_result.
 // Decide does not inspect Parts directly; the LLM provider deals with conversion.
 // runtime passes Parts through unchanged so providers see a faithful transcript.
 type Part struct {
-	Kind       PartKind        `json:"kind"`
-	Text       string          `json:"text,omitempty"`
-	Audio      []byte          `json:"audio,omitempty"`
-	AudioMIME  string          `json:"audio_mime,omitempty"`
-	Image      []byte          `json:"image,omitempty"`
-	ImageMIME  string          `json:"image_mime,omitempty"`
-	ToolUse    *ToolUseChunk   `json:"tool_use,omitempty"`
-	ToolResult *ToolResultPart `json:"tool_result,omitempty"`
+	Kind       PartKind    `json:"kind"`
+	Text       string      `json:"text,omitempty"`
+	Audio      []byte      `json:"audio,omitempty"`
+	AudioMIME  string      `json:"audio_mime,omitempty"`
+	Image      []byte      `json:"image,omitempty"`
+	ImageMIME  string      `json:"image_mime,omitempty"`
+	ToolUse    *ToolCall   `json:"tool_use,omitempty"`
+	ToolResult *ToolResult `json:"tool_result,omitempty"`
 }
 
 // Message is a turn of the conversation — one role, many parts.
 type Message struct {
-	Role  Role     `json:"role"`
-	Parts []Part   `json:"parts"`
+	Role  Role      `json:"role"`
+	Parts []Part    `json:"parts"`
 	Ts    time.Time `json:"ts"`
 }
 

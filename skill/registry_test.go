@@ -72,3 +72,36 @@ func TestProjectOverridesUser(t *testing.T) {
 	require.Len(t, skills, 2)
 	assert.Equal(t, "Project-specific deploy", skills[0].Description, "later discovery wins")
 }
+
+func TestDiscoverSubagentsAndList(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "reviewer.md"), defMarkdown)
+	writeFile(t, filepath.Join(dir, "explore.md"), "go explore")
+
+	r := NewRegistry()
+	require.NoError(t, r.DiscoverSubagents(dir))
+	require.NoError(t, r.DiscoverSubagents(filepath.Join(dir, "missing")))
+
+	subagents := r.Subagents()
+	require.Len(t, subagents, 2)
+	assert.Equal(t, "explore", subagents[0].Name, "sorted by name")
+	assert.Equal(t, "reviewer", subagents[1].Name)
+	assert.Equal(t, "Reviews diffs for bugs", subagents[1].Description)
+}
+
+func TestProjectOverridesUserSubagent(t *testing.T) {
+	user := t.TempDir()
+	project := t.TempDir()
+	writeFile(t, filepath.Join(user, "reviewer.md"), defMarkdown)
+	writeFile(t, filepath.Join(project, "reviewer.md"),
+		"---\nname: reviewer\ndescription: Project reviewer\n---\nproject prompt")
+
+	r := NewRegistry()
+	require.NoError(t, r.DiscoverSubagents(user))
+	require.NoError(t, r.DiscoverSubagents(project))
+
+	subagents := r.Subagents()
+	require.Len(t, subagents, 1)
+	assert.Equal(t, "Project reviewer", subagents[0].Description, "later discovery wins")
+	assert.Equal(t, "project prompt", subagents[0].Prompt)
+}

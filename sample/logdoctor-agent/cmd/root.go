@@ -14,25 +14,23 @@ import (
 // Version / build info — populated via -ldflags in later milestones.
 const Version = "0.1.0-m1"
 
-// NewRoot constructs the root command. Subcommands register themselves
-// on it via AddCommand. Caller is responsible for Execute().
-//
-// In M1 only `run` is wired; other verbs hang off this same root.
-func NewRoot() *cobra.Command {
-	root := &cobra.Command{
-		Use:     "logdoctor",
-		Short:   "Watch a log, diagnose errors, queue fixes",
-		Version: Version,
-	}
-	root.SetVersionTemplate("logdoctor {{.Version}}\n")
-	root.PersistentFlags().Bool("fake", false,
+// RootCmd constructs the root command. Subcommands register themselves
+// on it via AddCommand.
+var RootCmd = &cobra.Command{
+	Use:     "logdoctor",
+	Short:   "Watch a log, diagnose errors, queue fixes",
+	Version: Version,
+}
+
+func init() {
+	RootCmd.SetVersionTemplate("logdoctor {{.Version}}\n")
+	RootCmd.PersistentFlags().Bool("fake", false,
 		"Use the deterministic FakeProvider for offline E2E testing. "+
 			"No network or API key required. Mutually exclusive with --provider.")
-	root.PersistentFlags().String("provider", "",
+	RootCmd.PersistentFlags().String("provider", "",
 		"LLM provider: anthropic | ollama | google. "+
 			"Mutually exclusive with --fake. Credentials are read from the "+
 			"provider's env var (ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY).")
-	root.PersistentFlags().Int("max-turns", 5,
+	RootCmd.PersistentFlags().Int("max-turns", 5,
 		"Maximum steps the agent can take before being killed.")
-	return root
 }

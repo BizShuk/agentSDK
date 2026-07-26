@@ -3,6 +3,7 @@ package tool
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	sdkcore "github.com/bizshuk/agentsdk/core"
@@ -30,16 +31,37 @@ func NewGreet() *Greet {
 	return &Greet{risk: sdkcore.RISK_LEVEL_LOW}
 }
 
+var _ sdktool.Tool = (*Greet)(nil)
+
 // SetRisk lets the caller mark this tool as high-risk (triggers HITL approval).
 func (g *Greet) SetRisk(r sdkcore.RiskLevel) { g.risk = r }
 
 // Register registers Greet into the given sdktool.Registry.
 func (g *Greet) Register(reg *sdktool.Registry) {
-	sdktool.RegisterFunc(reg, "greet", "Greet someone by name and return a friendly reply", g.risk, g.Handle)
+	reg.Register(g)
 }
 
-// Handle is pure business logic.
-func (g *Greet) Handle(_ context.Context, a GreetArgs) (GreetOutput, error) {
+// Name returns the registry name.
+func (g *Greet) Name() string { return "greet" }
+
+// Spec returns metadata and the reflected argument schema.
+func (g *Greet) Spec() sdkcore.ToolSpec {
+	return sdktool.MustSchemaForTool[GreetArgs](
+		g.Name(),
+		"Greet someone by name and return a friendly reply",
+		g.risk,
+	)
+}
+
+// Call converts raw JSON arguments and executes the greet operation.
+func (g *Greet) Call(
+	ctx context.Context,
+	raw json.RawMessage,
+) (sdkcore.ToolResult, error) {
+	return sdktool.CallWithRawMessage(ctx, g.Name(), raw, g.execute)
+}
+
+func (g *Greet) execute(_ context.Context, a GreetArgs) (GreetOutput, error) {
 	if a.Name == "" {
 		return GreetOutput{}, fmt.Errorf("name is required")
 	}

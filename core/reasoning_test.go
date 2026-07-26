@@ -61,25 +61,3 @@ func TestNewDecideDispatchesByKind(t *testing.T) {
 		assert.Equal(t, "error", instrs[0].Notify.Level)
 	})
 }
-
-func TestInstructionTaggedUnionJSON(t *testing.T) {
-	inst := core.Instruction{
-		Kind: core.INSTRUCTION_CALL_TOOL,
-		CallTool: &core.CallToolInstruction{
-			Call: core.ToolCall{ID: "c1", Name: "read_log_tail", Args: map[string]any{"n": 10}},
-		},
-	}
-	raw, err := jsonMarshal(inst)
-	require.NoError(t, err)
-	assert.Contains(t, string(raw), `"call_tool"`)
-	assert.Contains(t, string(raw), `"c1"`)
-}
-
-func TestEventKinds(t *testing.T) {
-	// Discriminator strings must be stable; downstream runtimes / CLI depend on them.
-	assert.Equal(t, "observation", string(core.EVENT_OBSERVATION))
-	assert.Equal(t, "model_reply", string(core.EVENT_MODEL_REPLY))
-	assert.Equal(t, "tool_result", string(core.EVENT_TOOL_RESULT))
-	assert.Equal(t, "human_decision", string(core.EVENT_HUMAN_DECISION))
-	assert.Equal(t, "resume", string(core.EVENT_RESUME))
-}

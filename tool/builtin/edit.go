@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -54,19 +55,29 @@ func NewEdit(policy tool.Sandbox, rootDir string, opts ...EditOption) (*Edit, er
 	return e, nil
 }
 
-var _ tool.Tool[EditArgs, EditOutput] = (*Edit)(nil)
+var _ tool.Tool = (*Edit)(nil)
 
 // Name returns the tool's registry name.
 func (e *Edit) Name() string { return NAME_EDIT }
 
-// Risk returns the risk level.
-func (e *Edit) Risk() core.RiskLevel { return core.RISK_LEVEL_HIGH }
+// Spec returns the tool's metadata and reflected argument schema.
+func (e *Edit) Spec() core.ToolSpec {
+	return tool.MustSchemaForTool[EditArgs](
+		NAME_EDIT,
+		EditDesc,
+		core.RISK_LEVEL_HIGH,
+	)
+}
 
-// Desc returns the tool description.
-func (e *Edit) Desc() string { return EditDesc }
+// Call converts raw JSON arguments and executes the edit operation.
+func (e *Edit) Call(
+	ctx context.Context,
+	raw json.RawMessage,
+) (core.ToolResult, error) {
+	return tool.CallWithRawMessage(ctx, e.Name(), raw, e.execute)
+}
 
-// Handle is the pure business logic — no JSON, no schema.
-func (e *Edit) Handle(_ context.Context, a EditArgs) (EditOutput, error) {
+func (e *Edit) execute(_ context.Context, a EditArgs) (EditOutput, error) {
 	if a.OldText == "" {
 		return EditOutput{}, fmt.Errorf("edit: old_text must not be empty")
 	}

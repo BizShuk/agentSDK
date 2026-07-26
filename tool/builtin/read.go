@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -53,19 +54,29 @@ func NewRead(policy tool.Sandbox, rootDir string, opts ...ReadOption) *Read {
 	return r
 }
 
-var _ tool.Tool[ReadArgs, ReadOutput] = (*Read)(nil)
+var _ tool.Tool = (*Read)(nil)
 
 // Name returns the tool's registry name.
 func (r *Read) Name() string { return NAME_READ }
 
-// Risk returns the risk level.
-func (r *Read) Risk() core.RiskLevel { return core.RISK_LEVEL_LOW }
+// Spec returns the tool's metadata and reflected argument schema.
+func (r *Read) Spec() core.ToolSpec {
+	return tool.MustSchemaForTool[ReadArgs](
+		NAME_READ,
+		ReadDesc,
+		core.RISK_LEVEL_LOW,
+	)
+}
 
-// Desc returns the tool description.
-func (r *Read) Desc() string { return ReadDesc }
+// Call converts raw JSON arguments and executes the read operation.
+func (r *Read) Call(
+	ctx context.Context,
+	raw json.RawMessage,
+) (core.ToolResult, error) {
+	return tool.CallWithRawMessage(ctx, r.Name(), raw, r.execute)
+}
 
-// Handle is the pure business logic — no JSON, no schema.
-func (r *Read) Handle(_ context.Context, a ReadArgs) (ReadOutput, error) {
+func (r *Read) execute(_ context.Context, a ReadArgs) (ReadOutput, error) {
 	wd, err := safeCwd(r.rootDir)
 	if err != nil {
 		return ReadOutput{}, fmt.Errorf("read: working dir: %w", err)

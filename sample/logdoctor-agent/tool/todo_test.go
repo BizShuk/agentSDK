@@ -78,7 +78,7 @@ func TestAddTodoSchemaMarksTitleRequired(t *testing.T) {
 
 	tl, ok := reg.Get("add_todo")
 	require.True(t, ok)
-	ts := tl.Schema()
+	ts := tl.Spec()
 	assert.Equal(t, "add_todo", ts.Name)
 	params, ok := ts.Parameters.(json.RawMessage)
 	require.True(t, ok)
