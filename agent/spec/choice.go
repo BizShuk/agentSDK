@@ -85,11 +85,6 @@ func VariantChoices(key string) []Choice {
 				Note: "JSON state + JSONL WAL under ~/.config/<name>/data; enables resume"},
 			{Value: MEMORY_STORE_NONE, Label: "none", Note: "in-memory only; no resume, no crash recovery"},
 		}
-	case "memory.compaction":
-		return []Choice{
-			{Value: MEMORY_COMPACTION_NONE, Label: "none", Default: true},
-			{Value: MEMORY_COMPACTION_HEAD, Label: "headline", Note: "summarize older turns when the window fills"},
-		}
 	case "safety.mode":
 		return []Choice{
 			{Value: MODE_DEFAULT, Label: "default", Default: true, Note: "rules first, then the fallback grid"},
@@ -156,7 +151,6 @@ func VariantKeys() []string {
 		"model.credential_kind",
 		"middleware.preset",
 		"memory.store",
-		"memory.compaction",
 		"tools.builtin",
 		"safety.mode",
 		"safety.fallback",

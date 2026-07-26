@@ -2,7 +2,6 @@ limits:
     autonomy: L2
     max_turns: 20
 memory:
-    compaction: none
     store: file
 middleware:
     preset: default

@@ -106,10 +106,11 @@ agentsdk/
 
 ## 核心架構決策 (Core Decisions)
 
-- `core` 是純狀態與 transition contract。`core.Decide(state, event)` 不做 I/O，只回傳下一個 `State` 與 `[]Instruction`；runtime 才執行 model、tool、approval、notify、checkpoint。
+- `core` 是純狀態與 transition contract。`core.Decide(state, event)` 不做 I/O，只回傳下一個 `State` 與 `[]Instruction`；runtime 才執行 model、tool、approval、notify，並經 StateStore/WAL 自動持久化。
 - `core` 不拆成 domain 子套件：`State`、`Event`、`Instruction`、model/tool contracts 會彼此交叉引用，硬拆只會製造 import cycle 或 root alias facade。domain 邊界改由一檔一職責表達；檔名直接對應公開詞彙，不再用 `input`、`effect`、`step`、`thinking`、`port` 等需先讀內容才能理解的名稱。
 - `State` 的對話模型是 `Message{Role, Parts}`；`Part` 支援 text、audio、image、tool use、tool result。JSON tags `scratch` 與 `thinking_kind` 保留以相容舊 state。
-- `Instruction` 是 tagged union，透過 `Kind` + optional payload 表示 `call_model`、`call_tool`、`request_approval`、`notify`、`checkpoint`、`emit`、`done`；不建立 vendor-specific effect type。
+- `Instruction` 是 tagged union，只保留有 production producer/consumer 的 `call_model`、`call_tool`、`request_approval`、`notify`、`done`；持久化由 runtime 的 StateStore/WAL lifecycle 負責，presentation 由 `core.EventSink` / `Engine.Emitter` 負責，不另立 `checkpoint` / `emit` command。
+- 宣告式 `agent/spec` 只暴露 composition root 真正消費的設定；未接線的 `limits.max_wall_time` 與 `memory.compaction` 已移除。Process deadline 仍以 `agent.WithTimeout` 注入，`memory/compaction` mechanism 仍可由需要它的 caller 明確組裝。
 - `runtime.Engine` 是 shell，維護 `core.Provider`、`ToolRegistry`、`StateStore`、`WriteAheadLog`、`Notifier` 與 middleware。`Middleware == nil` 代表 no-op；`preset.Default()` 與 `preset.Secure()` 由 composition root 明確選用。
 - `config.DefaultMiddleware()` 順序為 `retry → timeout → budget → loopguard`；安全版本再加入 `sandbox → approval → spotlight → sanitizer`。工具輸出會被 spotlight 標為 untrusted，prompt injection 命中會被 sanitizer 改寫。
 - WAL recovery 先載入 snapshot，再依 `LastInputSeq` replay Event；replay 不重新呼叫模型，避免 crash recovery 產生重複副作用。`memory/filestore` 使用 atomic state write + JSONL append。

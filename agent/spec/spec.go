@@ -103,8 +103,7 @@ type Limits struct {
 	MaxTurns     int    `json:"max_turns,omitempty"`
 	MaxRounds    int    `json:"max_rounds,omitempty"`
 	MaxToolCalls int    `json:"max_tool_calls,omitempty"`
-	MaxWallTime  string `json:"max_wall_time,omitempty"` // Go duration string, e.g. "10m"
-	Autonomy     string `json:"autonomy,omitempty"`      // L0..L4; empty = L2
+	Autonomy     string `json:"autonomy,omitempty"` // L0..L4; empty = L2
 }
 
 // Middleware picks a preset chain rather than exposing chain assembly to
@@ -118,8 +117,7 @@ type Middleware struct {
 // recovery; it also makes Config.Name required, since the state and WAL
 // live under ~/.config/<Name>.
 type Memory struct {
-	Store      string `json:"store,omitempty"`      // none | file
-	Compaction string `json:"compaction,omitempty"` // none | headline
+	Store string `json:"store,omitempty"` // none | file
 }
 
 // Tools enables the built-in tool set. Builtin is an allowlist: empty

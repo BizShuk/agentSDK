@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 )
 
 // Validate checks an EXPANDED config. Run Expand first, or call Prepare
@@ -92,11 +91,6 @@ func (c Config) Validate() error {
 		add("spec: limits.max_turns (%d) is below limits.max_rounds (%d) — a round costs at least one turn, so the round budget could never be reached",
 			c.Limits.MaxTurns, c.Limits.MaxRounds)
 	}
-	if c.Limits.MaxWallTime != "" {
-		if _, err := time.ParseDuration(c.Limits.MaxWallTime); err != nil {
-			add("spec: limits.max_wall_time %q is not a Go duration: %v", c.Limits.MaxWallTime, err)
-		}
-	}
 	checkVariant(add, "limits.autonomy", c.Limits.Autonomy)
 
 	// --- blocks ---
@@ -105,7 +99,6 @@ func (c Config) Validate() error {
 	}
 	if c.Memory != nil {
 		checkVariant(add, "memory.store", c.Memory.Store)
-		checkVariant(add, "memory.compaction", c.Memory.Compaction)
 	}
 	if c.Tools != nil {
 		builtin := Values(VariantChoices("tools.builtin"))

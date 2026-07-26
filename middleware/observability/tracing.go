@@ -83,10 +83,6 @@ func spanName(eff core.Instruction) string {
 		return "notify"
 	case core.INSTRUCTION_DONE:
 		return "loop.done"
-	case core.INSTRUCTION_CHECKPOINT:
-		return "checkpoint"
-	case core.INSTRUCTION_EMIT:
-		return "emit"
 	}
 	return "effect." + string(eff.Kind)
 }

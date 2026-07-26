@@ -50,8 +50,6 @@ const (
 	MIDDLEWARE_SECURE           = "secure"
 	MEMORY_STORE_NONE           = "none"
 	MEMORY_STORE_FILE           = "file"
-	MEMORY_COMPACTION_NONE      = "none"
-	MEMORY_COMPACTION_HEAD      = "headline"
 	SAFETY_FALLBACK_NONE        = "none"
 	SAFETY_FALLBACK_AUTONOM     = "autonomy"
 	OUTPUT_TEXT                 = "text"
@@ -234,9 +232,6 @@ func applyBlockDefaults(c *Config, rank int) {
 	if c.Memory != nil {
 		if c.Memory.Store == "" {
 			c.Memory.Store = MEMORY_STORE_FILE
-		}
-		if c.Memory.Compaction == "" {
-			c.Memory.Compaction = MEMORY_COMPACTION_NONE
 		}
 	}
 	if c.Safety != nil {

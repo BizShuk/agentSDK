@@ -126,7 +126,6 @@ func (w *wizard) run(cfg agent.Config) (agent.Config, error) {
 	if cfg.Memory != nil {
 		w.section("7/9  memory — persistence and history")
 		cfg.Memory.Store = w.choose("state store", spec.VariantChoices("memory.store"), cfg.Memory.Store)
-		cfg.Memory.Compaction = w.choose("compaction", spec.VariantChoices("memory.compaction"), cfg.Memory.Compaction)
 	}
 
 	// --- stage 8: output and limits ---

@@ -21,13 +21,12 @@ import (
 	"github.com/bizshuk/agentsdk/middleware"
 )
 
-// Emitter is the callback for INSTRUCTION_EMIT — typically wired to a
-// websocket writer or other transport that consumes runtime effects.
+// Emitter observes every instruction immediately before dispatch.
 type Emitter func(core.Instruction)
 
 // Engine is the agent runtime. All fields are required except Middleware
 // (nil = middleware.Identity(), a no-op chain), Approval (nil = no approval
-// gate), and Emit (nil = drops emit instructions).
+// gate), Emitter (nil = no instruction observer), Hooks, and Sink.
 // Callers that want the M2 defaults should wire:
 //
 //	loop.Middleware = preset.Default()
@@ -170,16 +169,6 @@ func (e *Engine) runInstruction(ctx context.Context, s core.State, inst core.Ins
 		if inst.Notify != nil && e.Notifier != nil {
 			_ = e.Notifier.Notify(ctx, fmt.Sprintf("[%s] %s", inst.Notify.Level, inst.Notify.Message))
 		}
-		return s, nil, false, nil
-
-	case core.INSTRUCTION_CHECKPOINT:
-		if e.Store != nil {
-			_ = e.Store.Save(ctx, s)
-		}
-		return s, nil, false, nil
-
-	case core.INSTRUCTION_EMIT:
-		// Already emitted by Engine.Run before dispatch. Nothing to do.
 		return s, nil, false, nil
 
 	case core.INSTRUCTION_DONE:

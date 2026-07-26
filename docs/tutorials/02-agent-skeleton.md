@@ -199,7 +199,7 @@ model: {provider: minimax}                  # ⬇ 多了 middleware
 reasoning: {style: think_then_act, enable: [think_then_act]}
 limits: {autonomy: L2, max_turns: 20}       # ⬇ basic 給 20
 middleware: {preset: default}               # ⬇ 預設 chain（retry→timeout→budget→loopguard）
-memory: {store: file, compaction: none}     # ⬇ 開持久化 → name 現在必填
+memory: {store: file}                       # ⬇ 開持久化 → name 現在必填
 # ⬇ 仍無 tools / safety —— 沒有要管的東西
 
 # tier: standard（再 +）
@@ -327,7 +327,6 @@ safety:
   ask:  ["bash(git push:*)"]
 prompt:
   sources: [files, env]
-memory: {compaction: headline}
 ```
 
 YAML 與 JSON 共用同一份 `json` tag（轉譯在中間發生，`agent/load.go`），所以新增欄位時只需要在 `agent/spec/spec.go` 改一處。

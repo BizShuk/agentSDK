@@ -15,10 +15,6 @@ const (
 	INSTRUCTION_REQUEST_APPROVAL InstructionKind = "request_approval"
 	// INSTRUCTION_NOTIFY — emit a notification via the bound Notifier.
 	INSTRUCTION_NOTIFY InstructionKind = "notify"
-	// INSTRUCTION_CHECKPOINT — persist current State (called automatically before dispatch).
-	INSTRUCTION_CHECKPOINT InstructionKind = "checkpoint"
-	// INSTRUCTION_EMIT — push an external Envelope (CLI JSONL, websocket, etc.).
-	INSTRUCTION_EMIT InstructionKind = "emit"
 	// INSTRUCTION_DONE — terminal: no further work; run completes.
 	INSTRUCTION_DONE InstructionKind = "done"
 )
@@ -43,17 +39,8 @@ type NotifyInstruction struct {
 	Message string `json:"message"`
 }
 
-// CheckpointInstruction is dispatched to StateStore.Save.
-type CheckpointInstruction struct {
-	Reason string `json:"reason"`
-}
-
-// EmitInstruction is dispatched to runtime.Emitter so callers (CLI / websocket) see it.
-type EmitInstruction struct {
-	Envelope any `json:"envelope"`
-}
-
-// Instruction is a tagged union — exactly one pointer is non-nil for any Kind.
+// Instruction is a tagged union. Payload-bearing kinds set their matching
+// pointer; INSTRUCTION_DONE carries no payload.
 //
 // Decoders in JSON-land can rehydrate using the Kind field as a discriminator.
 // In-process dispatch is a type switch on the active pointer.
@@ -63,6 +50,4 @@ type Instruction struct {
 	CallTool        *CallToolInstruction        `json:"call_tool,omitempty"`
 	RequestApproval *RequestApprovalInstruction `json:"request_approval,omitempty"`
 	Notify          *NotifyInstruction          `json:"notify,omitempty"`
-	Checkpoint      *CheckpointInstruction      `json:"checkpoint,omitempty"`
-	Emit            *EmitInstruction            `json:"emit,omitempty"`
 }

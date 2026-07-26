@@ -68,9 +68,12 @@
 
 待補：
 
+- [ ] 恢復 `INSTRUCTION_CHECKPOINT` / `CheckpointInstruction`：先定義它與 runtime 每輪自動 `StateStore.Save` 的不同語意，接上真實 producer，並補 runtime、tracing 與 JSON round-trip tests
+- [ ] 恢復 `INSTRUCTION_EMIT` / `EmitInstruction`：先定義 envelope owner 與真實 consumer path，避免與 `core.EventSink` / `Engine.Emitter` 重疊，再補 wire-format tests
+- [ ] 恢復 `spec.Limits.MaxWallTime`：明確選定並接上 `core.Budget.MaxWallTime` 或 `agent.WithTimeout`，同步 builder、wizard、validation、examples 與 tests
+- [ ] 恢復 `spec.Memory.Compaction`：把 variant 真正接到 `memory.Window` / `Compactor` 的 agent composition path，再同步 choices、wizard、examples 與 tests
 - [ ] `Parts.Prompt.Turn()` 尚無 production caller —— `sample/code-agent` 的互動迴圈仍自己拼 user message，接上後 reminder slot 才會真的每回合注入
 - [ ] `agent/once.go` 的 `oneshot()` 仍是獨立小路徑（不需要 `AppConfig`，硬折進 `Bootstrap` 會逼它憑空造一個）；若日後 `Once` 要支援持久化再合併
-- [ ] `spec.Memory.Compaction` 已定義但 `agent` 尚未把 `memory.Window`/`Compactor` 接進 Engine
 - [ ] `wizard` 尚無 `--verify`（選了才在最後跑一次 `agent.Once` 做 smoke test）
 - [ ] `agent` 尚無 settings 檔階層載入（`~/.config/<app>/agent.yaml` → 專案 `agent.yaml` 的合併），與 hook/permission 的 settings 層一起做
 

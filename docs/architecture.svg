@@ -547,7 +547,7 @@
   <text x="846" y="1926" class="mm">spec.Config.Limits → 對應 §5.3 budget middleware</text>
   <text x="846" y="1950" class="sm" fill="#298029">回答：「最多能想多久」</text>
   <text x="846" y="1968" class="sm">· MaxTurns：turn budget（可覆寫 tier default）</text>
-  <text x="846" y="1984" class="sm">· MaxWallTime：process-level deadline</text>
+  <text x="846" y="1984" class="sm">· MaxRounds / MaxToolCalls：round 與 batch budget</text>
   <text x="846" y="2000" class="sm">· Autonomy L0..L4：給 Safety.Mode / Fallback</text>
   <text x="846" y="2022" class="sm" fill="#555">middleware/harness/budget.go</text>
   <text x="846" y="2038" class="sm" fill="#555">rule 自身不擋 iteration 上限</text>
@@ -579,6 +579,6 @@
 
   <!-- Extended footer -->
   <text x="620" y="2320" class="sm" text-anchor="middle" fill="#555">
-    三軸讀寫不同 block：tier 改 Config.{Tools,Safety,Memory,Skills,Subagents,Sessions} 指針、reasoning 改 Reasoning.{Style,Enable}、limits 改 Limits.{MaxTurns,MaxWallTime,Autonomy}
+    三軸讀寫不同 block：tier 改 Config.{Tools,Safety,Memory,Skills,Subagents,Sessions} 指針、reasoning 改 Reasoning.{Style,Enable}、limits 改 Limits.{MaxTurns,MaxRounds,MaxToolCalls,Autonomy}
   </text>
 </svg>

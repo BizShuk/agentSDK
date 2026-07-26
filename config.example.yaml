@@ -122,7 +122,6 @@ limits:
   max_rounds: 10                     # model requests (with their tool calls); operator counts these
   max_tool_calls: 4                  # bound on a SINGLE round's tool-call batch
                                      # over the limit → batch is skipped and paused at continue-gate
-  max_wall_time: 10m                 # process-level wall-clock cap (Go duration string)
   autonomy: L2                       # L0 (read-only) … L4 (full bypass)
                                      # affects DefaultApprovalPolicy fallback
 
@@ -137,14 +136,13 @@ middleware:
                                      # chain order is fixed (correctness property, not knob)
 
 # ---------------------------------------------------------------------------
-# Memory — persistence & compaction
+# Memory — persistence
 # ---------------------------------------------------------------------------
 
 memory:
   store: file                        # none | file
                                      # file → ~/.config/<name>/data/{states,wal}/<runID>.{json,jsonl}
                                      # enables resume / fork via `agentsdk sessions`
-  compaction: none                   # none | headline
 
 # ---------------------------------------------------------------------------
 # Tools — built-in tool allowlist
@@ -281,7 +279,6 @@ output:
 #   preset: secure
 # memory:
 #   store: file
-#   compaction: headline
 # tools:
 #   working_dir: /srv/app
 # safety:

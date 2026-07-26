@@ -35,13 +35,11 @@ func TestExpandTierLadderIsMonotonic(t *testing.T) {
 		got, err := spec.Config{Name: "x", Tier: tier}.Expand()
 		require.NoError(t, err)
 		cur := blocks(got)
-		if prev != nil {
-			for name, on := range prev {
-				if on {
-					assert.Truef(t, cur[name],
-						"tier %q dropped block %q that tier %q had — ladder must be monotonic",
-						tier, name, prevTier)
-				}
+		for name, on := range prev {
+			if on {
+				assert.Truef(t, cur[name],
+					"tier %q dropped block %q that tier %q had — ladder must be monotonic",
+					tier, name, prevTier)
 			}
 		}
 		prev, prevTier = cur, tier
@@ -259,7 +257,6 @@ func TestValidateBlockVariants(t *testing.T) {
 		{"bad autonomy", func(c *spec.Config) { c.Limits.Autonomy = "L9" }, "unknown limits.autonomy"},
 		{"bad builtin tool", func(c *spec.Config) { c.Tools = &spec.Tools{Builtin: []string{"read", "curl"}} }, "unknown tools.builtin"},
 		{"bad prompt source", func(c *spec.Config) { c.Prompt = &spec.Prompt{Sources: []string{"telepathy"}} }, "unknown prompt.sources"},
-		{"bad wall time", func(c *spec.Config) { c.Limits.MaxWallTime = "ten minutes" }, "not a Go duration"},
 		{"malformed safety rule", func(c *spec.Config) {
 			c.Tools = &spec.Tools{}
 			c.Safety = &spec.Safety{Deny: []string{"sudo"}}
@@ -416,10 +413,7 @@ func TestDefaultChoicesAreAcceptedByValidate(t *testing.T) {
 	c := spec.Config{Name: "x", Tier: spec.TIER_STANDARD}
 	c.Limits.Autonomy = spec.DefaultOf(spec.VariantChoices("limits.autonomy"))
 	c.Middleware = &spec.Middleware{Preset: spec.DefaultOf(spec.VariantChoices("middleware.preset"))}
-	c.Memory = &spec.Memory{
-		Store:      spec.DefaultOf(spec.VariantChoices("memory.store")),
-		Compaction: spec.DefaultOf(spec.VariantChoices("memory.compaction")),
-	}
+	c.Memory = &spec.Memory{Store: spec.DefaultOf(spec.VariantChoices("memory.store"))}
 	c.Safety = &spec.Safety{
 		Mode:     spec.DefaultOf(spec.VariantChoices("safety.mode")),
 		Fallback: spec.DefaultOf(spec.VariantChoices("safety.fallback")),

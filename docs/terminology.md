@@ -33,7 +33,7 @@
 | `Window`               | context window          | 依 `MaxMessages` 與可選的 `MaxTokens` 保留最新訊息；token trimming 至少保留一則訊息                                                                                 | `memory/window.go::Window.Trim`                                                       |
 | `CharHeuristicCounter` | heuristic token counter | 無 provider-native token counter 時的可決定性 fallback，以每個純文字 part 的 `len(text)/4 + 1` 估算                                                                 | `memory/window.go::CharHeuristicCounter.Count`                                        |
 | `Compactor`            | context compactor       | 把一段 `[]core.Message` 壓縮成一則較小 `core.Message` 的介面；root `memory` package 只保留型別別名相容層                                                            | `memory/compaction/compaction.go::Compactor`、`memory/compactor.go`                   |
-| `HeadlineCompactor`    | headline compactor      | 無 I/O、可決定性地擷取每個純文字 part 的第一行，串成一則 assistant summary；目前只由測試與 `memory-demo` 呼叫，尚未接入 `agent.Memory.Compaction` 的 runtime wiring | `memory/compaction/headline.go::HeadlineCompactor`、`sample/demo-memory/cmd/demos.go` |
+| `HeadlineCompactor`    | headline compactor      | 無 I/O、可決定性地擷取每個純文字 part 的第一行，串成一則 assistant summary；目前由測試與 `memory-demo` 明確組裝，不是宣告式 `agent.Config` 的空旋鈕                 | `memory/compaction/headline.go::HeadlineCompactor`、`sample/demo-memory/cmd/demos.go` |
 
 ## Core / Runtime
 

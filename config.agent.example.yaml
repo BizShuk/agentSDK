@@ -59,7 +59,6 @@ limits:
   max_turns: 20                    # Decide iterations (loopguard counts these)
   max_rounds: 10                   # model requests with their tool calls (operator counts these)
   max_tool_calls: 4                # bound on a single round's tool-call batch
-  max_wall_time: 10m               # process-level wall-clock cap
   autonomy: L2                     # L0..L4; affects DefaultApprovalPolicy fallback
 
 # ---------------------------------------------------------------------------
@@ -75,7 +74,6 @@ middleware:
 
 memory:
   store: file                      # none | file (file enables resume / fork)
-  compaction: none                 # none | headline
 
 # ---------------------------------------------------------------------------
 # Tools (tier=standard and up)
@@ -197,7 +195,6 @@ output:
 #   preset: secure
 # memory:
 #   store: file
-#   compaction: headline
 # safety:
 #   mode: acceptEdits
 #   sandbox: true
