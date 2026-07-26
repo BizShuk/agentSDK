@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/hook"
@@ -39,8 +41,9 @@ type builder struct {
 	sink      core.EventSink
 	listener  core.ObservationSource
 	notifier  core.Notifier
-	tools     []core.Tool
-	hooks     []hook.Rule
+	tools          []core.Tool
+	toolRegistrars []func(*action.Registry)
+	hooks          []hook.Rule
 	sources   []prompt.Source
 	rules     []core.DecisionRule
 	customize func(*runtime.Engine) error
@@ -145,6 +148,21 @@ func WithTools(tools ...core.Tool) Option {
 		b.tools = append(b.tools, tools...)
 		return nil
 	}
+}
+
+// WithToolRegistrar adds custom tool registration closures to the agent assembly.
+func WithToolRegistrar(fns ...func(*action.Registry)) Option {
+	return func(b *builder) error {
+		b.toolRegistrars = append(b.toolRegistrars, fns...)
+		return nil
+	}
+}
+
+// WithToolFunc registers a typed Go function directly as a tool.
+func WithToolFunc[TArgs any, TOut any](name, desc string, risk core.RiskLevel, fn func(ctx context.Context, args TArgs) (TOut, error)) Option {
+	return WithToolRegistrar(func(reg *action.Registry) {
+		action.RegisterFunc(reg, name, desc, risk, fn)
+	})
 }
 
 // WithHooks adds lifecycle hook rules — the closure-based safety gates

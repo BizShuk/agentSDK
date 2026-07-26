@@ -2,14 +2,15 @@ package tool
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/bizshuk/agentsdk/action"
-	sdkcore "github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/core"
 )
+
+// NAME_EDIT is the registry name of the edit tool.
+const NAME_EDIT = "edit"
 
 // EditArgs is the input shape the LLM sees for the edit tool.
 type EditArgs struct {
@@ -25,12 +26,14 @@ type EditOutput struct {
 	BytesAfter   int64 `json:"bytes_after"`
 }
 
+// EditDesc is the tool description sent to the LLM.
+const EditDesc = "Replace text in a file by exact string match. Single replacement by default; set replace_all to true to replace every occurrence. The edit is atomic (temp file + rename). old_text must match exactly (including whitespace). Refuses to edit if old_text is empty or not found in the file."
+
 // Edit performs exact string replacement in a file. It is NOT regex-based
 // — OldText must match exactly. Single replacement by default; pass
 // ReplaceAll for multi-occurrence replacement. Refuses empty OldText and
 // zero-match results.
 type Edit struct {
-	Inner   *action.TypedTool[EditArgs, EditOutput]
 	policy  Sandbox
 	rootDir string
 }
@@ -40,31 +43,20 @@ func NewEdit(opts EditOptions, policy Sandbox, rootDir string) (*Edit, error) {
 	if policy == nil {
 		return nil, errPolicyRequired("edit")
 	}
-	ed := &Edit{
+	return &Edit{
 		policy:  policy,
 		rootDir: rootDir,
-	}
-	ed.Inner = action.NewTypedTool("edit",
-		"Replace text in a file by exact string match. Single replacement by default; set replace_all to true to replace every occurrence. The edit is atomic (temp file + rename). old_text must match exactly (including whitespace). Refuses to edit if old_text is empty or not found in the file.",
-		ed.handle)
-	ed.Inner.SetRisk(sdkcore.RISK_LEVEL_HIGH)
-	return ed, nil
+	}, nil
 }
 
-// SetRisk changes the risk level. Call before Register.
-func (e *Edit) SetRisk(level sdkcore.RiskLevel) { e.Inner.SetRisk(level) }
+// ToolName returns the tool's registry name.
+func (e *Edit) ToolName() string { return NAME_EDIT }
 
-// --- core.Tool interface ---
+// ToolRisk returns the risk level.
+func (e *Edit) ToolRisk() core.RiskLevel { return core.RISK_LEVEL_HIGH }
 
-func (e *Edit) Name() string                       { return e.Inner.Name() }
-func (e *Edit) Description() string                { return e.Inner.Description() }
-func (e *Edit) Schema() sdkcore.ToolSpec         { return e.Inner.Schema() }
-func (e *Edit) Risk() sdkcore.RiskLevel            { return e.Inner.Risk() }
-func (e *Edit) Call(ctx context.Context, raw json.RawMessage) (sdkcore.ToolResult, error) {
-	return e.Inner.Call(ctx, raw)
-}
-
-func (e *Edit) handle(_ context.Context, a EditArgs) (EditOutput, error) {
+// Handle is the pure business logic — no JSON, no schema.
+func (e *Edit) Handle(_ context.Context, a EditArgs) (EditOutput, error) {
 	if a.OldText == "" {
 		return EditOutput{}, fmt.Errorf("edit: old_text must not be empty")
 	}

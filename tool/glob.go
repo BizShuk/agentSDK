@@ -2,15 +2,17 @@ package tool
 
 import (
 	"context"
-	"encoding/json"
 	"io/fs"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/bizshuk/agentsdk/action"
-	sdkcore "github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/core"
 )
+
+// NAME_GLOB is the registry name of the glob tool.
+const NAME_GLOB = "glob"
 
 // GlobArgs is the input shape the LLM sees for the glob tool.
 type GlobArgs struct {
@@ -24,10 +26,12 @@ type GlobOutput struct {
 	Count   int      `json:"count"`
 }
 
+// GlobDesc is the tool description sent to the LLM.
+const GlobDesc = "Find files matching a glob pattern. Supports ** for recursive directory matching (e.g. '**/*.go', 'src/**/*_test.go'). Returns sorted, relative paths. Capped at 100 results."
+
 // Glob finds files matching a pattern. Supports ** for recursive matching.
 // Results are sorted and capped at MaxMatches.
 type Glob struct {
-	Inner      *action.TypedTool[GlobArgs, GlobOutput]
 	policy     Sandbox
 	rootDir    string
 	maxMatches int
@@ -38,31 +42,21 @@ func NewGlob(opts GlobOptions, policy Sandbox, rootDir string) *Glob {
 	if opts.MaxMatches <= 0 {
 		opts.MaxMatches = defaultMaxMatches()
 	}
-	g := &Glob{
+	return &Glob{
 		policy:     policy,
 		rootDir:    rootDir,
 		maxMatches: opts.MaxMatches,
 	}
-	g.Inner = action.NewTypedTool("glob",
-		"Find files matching a glob pattern. Supports ** for recursive directory matching (e.g. '**/*.go', 'src/**/*_test.go'). Returns sorted, relative paths. Capped at 100 results.",
-		g.handle)
-	return g
 }
 
-// SetRisk changes the risk level. Call before Register.
-func (g *Glob) SetRisk(level sdkcore.RiskLevel) { g.Inner.SetRisk(level) }
+// ToolName returns the tool's registry name.
+func (g *Glob) ToolName() string { return NAME_GLOB }
 
-// --- core.Tool interface ---
+// ToolRisk returns the risk level.
+func (g *Glob) ToolRisk() core.RiskLevel { return core.RISK_LEVEL_LOW }
 
-func (g *Glob) Name() string                       { return g.Inner.Name() }
-func (g *Glob) Description() string                { return g.Inner.Description() }
-func (g *Glob) Schema() sdkcore.ToolSpec         { return g.Inner.Schema() }
-func (g *Glob) Risk() sdkcore.RiskLevel            { return g.Inner.Risk() }
-func (g *Glob) Call(ctx context.Context, raw json.RawMessage) (sdkcore.ToolResult, error) {
-	return g.Inner.Call(ctx, raw)
-}
-
-func (g *Glob) handle(_ context.Context, a GlobArgs) (GlobOutput, error) {
+// Handle is the pure business logic — no JSON, no schema.
+func (g *Glob) Handle(_ context.Context, a GlobArgs) (GlobOutput, error) {
 	wd, err := safeCwd(g.rootDir)
 	if err != nil {
 		return GlobOutput{}, err

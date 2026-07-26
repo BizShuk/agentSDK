@@ -1,30 +1,5 @@
 // Package tool ships built-in agent tools — Read, Write, Edit, Bash, Glob, Grep —
-// that any agent can register via RegisterDefaults. Every tool wraps
-// *action.TypedTool[TArgs, TOut] and delegates the core.Tool interface.
-//
-// # Integration
-//
-// Built-in tools are wired at the composition root, NOT auto-injected by
-// the runtime. Callers compose their own Registry:
-//
-//	reg := action.NewRegistry()
-//	tool.RegisterDefaults(reg, tool.Options{
-//	    Policy:     action.DefaultPolicy(),
-//	    WorkingDir: ".",
-//	})
-//
-// # Sandbox
-//
-// Write, Edit, and Bash require a non-nil Policy. Read, Glob, and Grep
-// accept a nil Policy (unrestricted reads within WorkingDir). All tools
-// defensively re-check Policy.Check before mutating or executing.
-//
-// # Risk
-//
-// Read, Glob, Grep → RISK_LEVEL_LOW (read-only)
-// Write, Edit, Bash → RISK_LEVEL_HIGH (mutate or execute)
-// Risk drives the ApprovalGate middleware — at L1/L2, high-risk tools
-// pause for HITL approval.
+// that any agent can register via RegisterDefaults.
 package tool
 
 import (
@@ -34,28 +9,28 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/action"
-	"github.com/bizshuk/agentsdk/core"
 )
 
-// RegisterDefaults constructs all 6 tools and registers them into reg.
-// Returns the list of registered tools (useful for logging / telemetry).
+// BuiltinNames lists every built-in tool name in a stable order.
+func BuiltinNames() []string {
+	return []string{NAME_READ, NAME_WRITE, NAME_EDIT, NAME_BASH, NAME_GLOB, NAME_GREP}
+}
+
+// RegisterDefaults constructs all 6 built-in tools and registers them into reg via RegisterFunc.
 // Errors if a required invariant is broken (e.g. Write without a Policy).
-func RegisterDefaults(reg *action.Registry, opts Options) ([]core.Tool, error) {
+func RegisterDefaults(reg *action.Registry, opts Options) error {
 	var errs []string
-	tools := make([]core.Tool, 0, 6)
 
 	// --- Read ---
 	r := NewRead(opts.Read, opts.Policy, opts.WorkingDir)
-	tools = append(tools, r)
-	reg.Register(r)
+	action.RegisterFunc(reg, r.ToolName(), ReadDesc, r.ToolRisk(), r.Handle)
 
 	// --- Write ---
 	w, err := NewWrite(opts.Write, opts.Policy, opts.WorkingDir)
 	if err != nil {
 		errs = append(errs, "write: "+err.Error())
 	} else {
-		tools = append(tools, w)
-		reg.Register(w)
+		action.RegisterFunc(reg, w.ToolName(), WriteDesc, w.ToolRisk(), w.Handle)
 	}
 
 	// --- Edit ---
@@ -63,8 +38,7 @@ func RegisterDefaults(reg *action.Registry, opts Options) ([]core.Tool, error) {
 	if err != nil {
 		errs = append(errs, "edit: "+err.Error())
 	} else {
-		tools = append(tools, e)
-		reg.Register(e)
+		action.RegisterFunc(reg, e.ToolName(), EditDesc, e.ToolRisk(), e.Handle)
 	}
 
 	// --- Bash ---
@@ -72,24 +46,21 @@ func RegisterDefaults(reg *action.Registry, opts Options) ([]core.Tool, error) {
 	if err != nil {
 		errs = append(errs, "bash: "+err.Error())
 	} else {
-		tools = append(tools, b)
-		reg.Register(b)
+		action.RegisterFunc(reg, b.ToolName(), BashDesc, b.ToolRisk(), b.Handle)
 	}
 
 	// --- Glob ---
 	g := NewGlob(opts.Glob, opts.Policy, opts.WorkingDir)
-	tools = append(tools, g)
-	reg.Register(g)
+	action.RegisterFunc(reg, g.ToolName(), GlobDesc, g.ToolRisk(), g.Handle)
 
 	// --- Grep ---
 	gr := NewGrep(opts.Grep, opts.Policy, opts.WorkingDir)
-	tools = append(tools, gr)
-	reg.Register(gr)
+	action.RegisterFunc(reg, gr.ToolName(), GrepDesc, gr.ToolRisk(), gr.Handle)
 
 	if len(errs) > 0 {
-		return tools, fmt.Errorf("tool.RegisterDefaults: %s", strings.Join(errs, "; "))
+		return fmt.Errorf("tool.RegisterDefaults: %s", strings.Join(errs, "; "))
 	}
-	return tools, nil
+	return nil
 }
 
 // MustPolicy panics if policy is nil — a convenience for callers that
@@ -110,9 +81,6 @@ func defaultMaxBytes() int64 { return 1 << 20 } // 1 MiB
 func defaultBashTimeout() time.Duration { return 30 * time.Second }
 func defaultMaxMatches() int { return 100 }
 
-// checkPathArgs is a helper for sandbox re-check in tool handlers. It
-// builds a map with "path" -> p and runs it through policy.Check. If the
-// policy denies, the returned error message includes the reason.
 // Sandbox is the type alias for action.Sandbox — used by tool constructors
 // so callers don't need to import action directly.
 type Sandbox = action.Sandbox

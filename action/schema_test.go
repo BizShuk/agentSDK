@@ -140,12 +140,15 @@ func TestValidateArgsAcceptsEmptyObjectForAllOptional(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-func TestTypedToolSchemaAutoReflected(t *testing.T) {
-	tool := action.NewTypedTool("read_file", "read a file",
+func TestRegisterFuncSchemaAutoReflected(t *testing.T) {
+	r := action.NewRegistry()
+	action.RegisterFunc(r, "read_file", "read a file", core.RISK_LEVEL_LOW,
 		func(ctx context.Context, a schemaArgs) (struct{}, error) {
 			return struct{}{}, nil
 		})
-	ts := tool.Schema()
+	schemas := r.List()
+	require.Len(t, schemas, 1)
+	ts := schemas[0]
 	assert.Equal(t, "read_file", ts.Name)
 	assert.Equal(t, core.RISK_LEVEL_LOW, ts.Risk)
 	params, ok := ts.Parameters.(json.RawMessage)
@@ -155,25 +158,25 @@ func TestTypedToolSchemaAutoReflected(t *testing.T) {
 	required := findRequired(asMap)
 	require.NotEmpty(t, required, "reflected schema must list required fields")
 	hasPath := false
-	for _, r := range required {
-		if r == "path" {
+	for _, req := range required {
+		if req == "path" {
 			hasPath = true
 		}
 	}
 	assert.True(t, hasPath, "reflected schema must list path as required")
 }
 
-// TestTypedToolCallValidatesBeforeFn verifies that an invalid payload
+// TestRegisterFuncCallValidatesBeforeFn verifies that an invalid payload
 // is rejected before the wrapped function runs.
-func TestTypedToolCallValidatesBeforeFn(t *testing.T) {
+func TestRegisterFuncCallValidatesBeforeFn(t *testing.T) {
 	called := false
-	tool := action.NewTypedTool("read_file", "read a file",
+	r := action.NewRegistry()
+	action.RegisterFunc(r, "read_file", "read a file", core.RISK_LEVEL_LOW,
 		func(ctx context.Context, a schemaArgs) (struct{}, error) {
 			called = true
 			return struct{}{}, nil
 		})
-	res, err := tool.Call(context.Background(), json.RawMessage(`{"mode":"fast"}`))
-	require.NoError(t, err)
+	res := r.Call(context.Background(), core.ToolCall{ID: "c1", Name: "read_file", Args: map[string]any{"mode": "fast"}})
 	assert.False(t, res.OK)
 	assert.False(t, called, "fn must not be invoked when validation fails")
 	assert.True(t, strings.Contains(res.Error, "missing required field"))

@@ -10,15 +10,15 @@ import (
 
 func TestRegisterDefaults_AllToolsRegistered(t *testing.T) {
 	reg := action.NewRegistry()
-	tools, err := RegisterDefaults(reg, Options{
+	err := RegisterDefaults(reg, Options{
 		Policy:     action.DefaultPolicy(),
 		WorkingDir: t.TempDir(),
 	})
 
 	require.NoError(t, err)
-	assert.Len(t, tools, 6)
 
-	names := []string{"read", "write", "edit", "bash", "glob", "grep"}
+	names := BuiltinNames()
+	assert.Len(t, names, 6)
 	for _, name := range names {
 		tool, ok := reg.Get(name)
 		assert.True(t, ok, "tool %q should be registered", name)
@@ -29,7 +29,7 @@ func TestRegisterDefaults_AllToolsRegistered(t *testing.T) {
 
 func TestRegisterDefaults_NilPolicy_WriteEditBashError(t *testing.T) {
 	reg := action.NewRegistry()
-	tools, err := RegisterDefaults(reg, Options{
+	err := RegisterDefaults(reg, Options{
 		Policy:     nil,
 		WorkingDir: t.TempDir(),
 	})
@@ -39,12 +39,13 @@ func TestRegisterDefaults_NilPolicy_WriteEditBashError(t *testing.T) {
 	assert.Contains(t, err.Error(), "edit:")
 	assert.Contains(t, err.Error(), "bash:")
 	// Read, Glob, Grep are still registered (3 of 6 succeed).
-	assert.GreaterOrEqual(t, len(tools), 3)
+	schemas := reg.List()
+	assert.GreaterOrEqual(t, len(schemas), 3)
 }
 
 func TestRegisterDefaults_RiskLevels(t *testing.T) {
 	reg := action.NewRegistry()
-	_, err := RegisterDefaults(reg, Options{
+	err := RegisterDefaults(reg, Options{
 		Policy:     action.DefaultPolicy(),
 		WorkingDir: t.TempDir(),
 	})
@@ -67,7 +68,7 @@ func TestRegisterDefaults_RiskLevels(t *testing.T) {
 
 func TestRegisterDefaults_ToolNotFound(t *testing.T) {
 	reg := action.NewRegistry()
-	_, err := RegisterDefaults(reg, Options{
+	err := RegisterDefaults(reg, Options{
 		Policy:     action.DefaultPolicy(),
 		WorkingDir: t.TempDir(),
 	})
@@ -79,7 +80,7 @@ func TestRegisterDefaults_ToolNotFound(t *testing.T) {
 
 func TestRegisterDefaults_SchemasAreNotEmpty(t *testing.T) {
 	reg := action.NewRegistry()
-	_, err := RegisterDefaults(reg, Options{
+	err := RegisterDefaults(reg, Options{
 		Policy:     action.DefaultPolicy(),
 		WorkingDir: t.TempDir(),
 	})

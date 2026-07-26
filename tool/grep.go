@@ -3,7 +3,6 @@ package tool
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -12,8 +11,11 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/action"
-	sdkcore "github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/core"
 )
+
+// NAME_GREP is the registry name of the grep tool.
+const NAME_GREP = "grep"
 
 // GrepArgs is the input shape the LLM sees for the grep tool.
 type GrepArgs struct {
@@ -39,10 +41,12 @@ type GrepMatch struct {
 	Text string `json:"text"`
 }
 
+// GrepDesc is the tool description sent to the LLM.
+const GrepDesc = "Search files for lines matching a regex pattern (RE2 syntax). Use 'path' to scope to a directory or file, and 'glob' to filter filenames (e.g. '*.go'). Skips binary files. Results are capped at 100 by default. Case-insensitive mode available."
+
 // Grep searches files for a regex pattern. Uses Go's regexp (RE2) for
 // linear-time matching. Skips binary files. Results capped at MaxResults.
 type Grep struct {
-	Inner      *action.TypedTool[GrepArgs, GrepOutput]
 	policy     Sandbox
 	rootDir    string
 	maxResults int
@@ -53,31 +57,21 @@ func NewGrep(opts GrepOptions, policy Sandbox, rootDir string) *Grep {
 	if opts.MaxResults <= 0 {
 		opts.MaxResults = defaultMaxMatches()
 	}
-	gr := &Grep{
+	return &Grep{
 		policy:     policy,
 		rootDir:    rootDir,
 		maxResults: opts.MaxResults,
 	}
-	gr.Inner = action.NewTypedTool("grep",
-		"Search files for lines matching a regex pattern (RE2 syntax). Use 'path' to scope to a directory or file, and 'glob' to filter filenames (e.g. '*.go'). Skips binary files. Results are capped at 100 by default. Case-insensitive mode available.",
-		gr.handle)
-	return gr
 }
 
-// SetRisk changes the risk level. Call before Register.
-func (gr *Grep) SetRisk(level sdkcore.RiskLevel) { gr.Inner.SetRisk(level) }
+// ToolName returns the tool's registry name.
+func (gr *Grep) ToolName() string { return NAME_GREP }
 
-// --- core.Tool interface ---
+// ToolRisk returns the risk level.
+func (gr *Grep) ToolRisk() core.RiskLevel { return core.RISK_LEVEL_LOW }
 
-func (gr *Grep) Name() string                       { return gr.Inner.Name() }
-func (gr *Grep) Description() string                { return gr.Inner.Description() }
-func (gr *Grep) Schema() sdkcore.ToolSpec         { return gr.Inner.Schema() }
-func (gr *Grep) Risk() sdkcore.RiskLevel            { return gr.Inner.Risk() }
-func (gr *Grep) Call(ctx context.Context, raw json.RawMessage) (sdkcore.ToolResult, error) {
-	return gr.Inner.Call(ctx, raw)
-}
-
-func (gr *Grep) handle(_ context.Context, a GrepArgs) (GrepOutput, error) {
+// Handle is the pure business logic — no JSON, no schema.
+func (gr *Grep) Handle(_ context.Context, a GrepArgs) (GrepOutput, error) {
 	wd, err := safeCwd(gr.rootDir)
 	if err != nil {
 		return GrepOutput{}, err
@@ -239,9 +233,6 @@ func (gr *Grep) grepFile(re *regexp.Regexp, path, rootDir string, fileFilter fun
 			}
 		}
 	}
-	// Scanner.Err may be bufio.ErrTooLong for lines exceeding buffer — ignore.
-	// Other errors (e.g., mid-read corruption) we also ignore since this is
-	// best-effort searching.
 	_ = scanner.Err()
 	return matches, nil
 }

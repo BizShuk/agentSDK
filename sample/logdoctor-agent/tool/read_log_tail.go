@@ -4,75 +4,63 @@ package tool
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"github.com/bizshuk/agentsdk/action"
 	sdkcore "github.com/bizshuk/agentsdk/core"
 )
 
-// Source is the minimal surface read_log_tail needs from a listener. Defined
-// here so the tool does not depend on the listener's full type and tests can
-// pass a stub source.
-//
-// The Percept comes from agentsdk/core — Percept is part of the SDK's
-// public API; the listener (in sample/logdoctor-agent/core) returns sdkcore.Observation.
+// Source is the minimal surface read_log_tail needs from a listener.
 type Source interface {
 	Observations(ctx context.Context) <-chan sdkcore.Observation
 }
 
-// ReadLogTailArgs — TypedTool argument shape. N is optional (defaults to 20).
+// ReadLogTailArgs argument shape. N is optional (defaults to 20).
 type ReadLogTailArgs struct {
 	N int `json:"n,omitempty"`
 }
 
-// ReadLogTailOutput — TypedTool output shape.
+// ReadLogTailOutput output shape.
 type ReadLogTailOutput struct {
 	Lines     []string `json:"lines"`
 	Truncated bool     `json:"truncated,omitempty"`
 }
 
-// ReadLogTail is a TypedTool that returns up to N lines from the listener's
-// first percept. In M1 the listener only emits one Percept (the entire
-// file); M2 will let this tool page through a tail cursor.
+// ReadLogTail returns up to N lines from the listener's first observation.
 type ReadLogTail struct {
-	Inner *action.TypedTool[ReadLogTailArgs, ReadLogTailOutput]
-	src   Source
+	src Source
 }
 
-// NewReadLogTail wires the TypedTool to a Source.
+// NewReadLogTail constructs a ReadLogTail tool.
 func NewReadLogTail(src Source) *ReadLogTail {
-	t := action.NewTypedTool("read_log_tail", "Read up to N lines from the watched log file",
-		func(ctx context.Context, a ReadLogTailArgs) (ReadLogTailOutput, error) {
-			if a.N <= 0 {
-				a.N = 20
-			}
-			var payload string
-			select {
-			case p, ok := <-src.Observations(ctx):
-				if !ok {
-					return ReadLogTailOutput{Lines: []string{}}, nil
-				}
-				payload, _ = p.Payload.(string)
-			case <-ctx.Done():
-				return ReadLogTailOutput{}, ctx.Err()
-			}
-			lines := strings.Split(payload, "\n")
-			truncated := false
-			if len(lines) > a.N {
-				lines = lines[:a.N]
-				truncated = true
-			}
-			return ReadLogTailOutput{Lines: lines, Truncated: truncated}, nil
-		})
-	return &ReadLogTail{Inner: t, src: src}
+	return &ReadLogTail{src: src}
 }
 
-// Name delegates to the TypedTool.
-func (r *ReadLogTail) Name() string             { return r.Inner.Name() }
-func (r *ReadLogTail) Description() string      { return r.Inner.Description() }
-func (r *ReadLogTail) Schema() sdkcore.ToolSpec { return r.Inner.Schema() }
-func (r *ReadLogTail) Risk() sdkcore.RiskLevel  { return r.Inner.Risk() }
-func (r *ReadLogTail) Call(ctx context.Context, args json.RawMessage) (sdkcore.ToolResult, error) {
-	return r.Inner.Call(ctx, args)
+// Register registers ReadLogTail into the given action.Registry.
+func (r *ReadLogTail) Register(reg *action.Registry) {
+	action.RegisterFunc(reg, "read_log_tail", "Read up to N lines from the watched log file", sdkcore.RISK_LEVEL_LOW, r.Handle)
+}
+
+// Handle is pure business logic.
+func (r *ReadLogTail) Handle(ctx context.Context, args ReadLogTailArgs) (ReadLogTailOutput, error) {
+	if args.N <= 0 {
+		args.N = 20
+	}
+	var payload string
+	select {
+	case p, ok := <-r.src.Observations(ctx):
+		if !ok {
+			return ReadLogTailOutput{Lines: []string{}}, nil
+		}
+		payload, _ = p.Payload.(string)
+	case <-ctx.Done():
+		return ReadLogTailOutput{}, ctx.Err()
+	}
+	lines := strings.Split(payload, "\n")
+	truncated := false
+	if len(lines) > args.N {
+		lines = lines[:args.N]
+		truncated = true
+	}
+	return ReadLogTailOutput{Lines: lines, Truncated: truncated}, nil
 }

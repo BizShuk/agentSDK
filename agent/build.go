@@ -19,7 +19,7 @@ import (
 	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/skill"
-	builtin "github.com/bizshuk/agentsdk/tool"
+	"github.com/bizshuk/agentsdk/tool"
 )
 
 // Agent is a prepared configuration plus its injected dependencies. It
@@ -240,7 +240,7 @@ func (a *Agent) Bootstrap(ctx context.Context, ac *AppConfig) (*runtime.Engine, 
 // oversight — runtime treats a nil ToolRegistry as "no tools", the model
 // then receives no tool specs, and the loop reduces to plain conversation.
 func (a *Agent) buildTools(cwd, userDir string, prov core.Provider) (core.ToolRegistry, error) {
-	if a.cfg.Tools == nil && a.cfg.Subagents == nil && len(a.deps.tools) == 0 {
+	if a.cfg.Tools == nil && a.cfg.Subagents == nil && len(a.deps.tools) == 0 && len(a.deps.toolRegistrars) == 0 {
 		return nil, nil
 	}
 	reg := action.NewRegistry()
@@ -258,6 +258,9 @@ func (a *Agent) buildTools(cwd, userDir string, prov core.Provider) (core.ToolRe
 	for _, t := range a.deps.tools {
 		reg.Register(t)
 	}
+	for _, fn := range a.deps.toolRegistrars {
+		fn(reg)
+	}
 
 	if a.cfg.Subagents != nil {
 		defs := discoverSubagentDefs(a.cfg, userDir, cwd)
@@ -274,37 +277,40 @@ func (a *Agent) buildTools(cwd, userDir string, prov core.Provider) (core.ToolRe
 func registerBuiltins(reg *action.Registry, allow []string, workDir string) error {
 	policy := action.DefaultPolicy()
 	if len(allow) == 0 {
-		if _, err := builtin.RegisterDefaults(reg, builtin.Options{Policy: policy, WorkingDir: workDir}); err != nil {
+		if err := tool.RegisterDefaults(reg, tool.Options{Policy: policy, WorkingDir: workDir}); err != nil {
 			return fmt.Errorf("agent: register built-in tools: %w", err)
 		}
 		return nil
 	}
 	for _, name := range allow {
 		switch name {
-		case builtin.NAME_READ:
-			reg.Register(builtin.NewRead(builtin.ReadOptions{}, policy, workDir))
-		case builtin.NAME_GLOB:
-			reg.Register(builtin.NewGlob(builtin.GlobOptions{}, policy, workDir))
-		case builtin.NAME_GREP:
-			reg.Register(builtin.NewGrep(builtin.GrepOptions{}, policy, workDir))
-		case builtin.NAME_WRITE:
-			t, err := builtin.NewWrite(builtin.WriteOptions{}, policy, workDir)
+		case tool.NAME_READ:
+			r := tool.NewRead(tool.ReadOptions{}, policy, workDir)
+			action.RegisterFunc(reg, r.ToolName(), tool.ReadDesc, r.ToolRisk(), r.Handle)
+		case tool.NAME_GLOB:
+			g := tool.NewGlob(tool.GlobOptions{}, policy, workDir)
+			action.RegisterFunc(reg, g.ToolName(), tool.GlobDesc, g.ToolRisk(), g.Handle)
+		case tool.NAME_GREP:
+			gr := tool.NewGrep(tool.GrepOptions{}, policy, workDir)
+			action.RegisterFunc(reg, gr.ToolName(), tool.GrepDesc, gr.ToolRisk(), gr.Handle)
+		case tool.NAME_WRITE:
+			w, err := tool.NewWrite(tool.WriteOptions{}, policy, workDir)
 			if err != nil {
 				return fmt.Errorf("agent: write tool: %w", err)
 			}
-			reg.Register(t)
-		case builtin.NAME_EDIT:
-			t, err := builtin.NewEdit(builtin.EditOptions{}, policy, workDir)
+			action.RegisterFunc(reg, w.ToolName(), tool.WriteDesc, w.ToolRisk(), w.Handle)
+		case tool.NAME_EDIT:
+			e, err := tool.NewEdit(tool.EditOptions{}, policy, workDir)
 			if err != nil {
 				return fmt.Errorf("agent: edit tool: %w", err)
 			}
-			reg.Register(t)
-		case builtin.NAME_BASH:
-			t, err := builtin.NewBash(builtin.BashOptions{}, policy, workDir)
+			action.RegisterFunc(reg, e.ToolName(), tool.EditDesc, e.ToolRisk(), e.Handle)
+		case tool.NAME_BASH:
+			b, err := tool.NewBash(tool.BashOptions{}, policy, workDir)
 			if err != nil {
 				return fmt.Errorf("agent: bash tool: %w", err)
 			}
-			reg.Register(t)
+			action.RegisterFunc(reg, b.ToolName(), tool.BashDesc, b.ToolRisk(), b.Handle)
 		default:
 			// spec.Validate rejects unknown names; reaching here means
 			// the two lists drifted.

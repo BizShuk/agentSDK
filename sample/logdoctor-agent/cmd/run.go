@@ -75,16 +75,16 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 	// 內建工具 (Read/Write/Edit/Bash/Glob/Grep) 透過 RegisterDefaults 一次註冊,
 	// 與既有 read_log_tail / notify 並存。Write/Edit/Bash 需要 non-nil Policy。
 	reg := action.NewRegistry()
-	if _, err := builtin.RegisterDefaults(reg, builtin.Options{
+	if err := builtin.RegisterDefaults(reg, builtin.Options{
 		Policy:     action.DefaultPolicy(),
 		WorkingDir: ".",
 	}); err != nil {
 		return fmt.Errorf("register built-in tools: %w", err)
 	}
 	rdt := tool.NewReadLogTail(listener)
-	reg.Register(rdt)
+	rdt.Register(reg)
 	nt := tool.NewNotify(cmd.OutOrStdout())
-	reg.Register(nt)
+	nt.Register(reg)
 
 	// Step: ReAct is the simplest pattern; matches the sample's flow.
 	step := agent.ReActStep()

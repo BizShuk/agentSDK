@@ -4,15 +4,16 @@ import (
 	"bufio"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
-	"github.com/bizshuk/agentsdk/action"
-	sdkcore "github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/core"
 )
+
+// NAME_READ is the registry name of the read tool.
+const NAME_READ = "read"
 
 // ReadArgs is the input shape the LLM sees for the read tool.
 type ReadArgs struct {
@@ -30,11 +31,13 @@ type ReadOutput struct {
 	Mime      string `json:"mime,omitempty"`
 }
 
+// ReadDesc is the tool description sent to the LLM.
+const ReadDesc = "Read file contents. Supports text files (returned as-is) and binary files (base64-encoded with MIME type hint). Use absolute paths. For large files, use offset and limit to paginate."
+
 // Read reads a file's content. Text files are returned as-is; binary
 // files are base64-encoded with a MIME type hint. Pagination via Offset
 // and Limit supports reading large files in chunks.
 type Read struct {
-	Inner    *action.TypedTool[ReadArgs, ReadOutput]
 	policy   Sandbox
 	rootDir  string
 	maxBytes int64
@@ -46,32 +49,21 @@ func NewRead(opts ReadOptions, policy Sandbox, rootDir string) *Read {
 	if opts.MaxBytes <= 0 {
 		opts.MaxBytes = defaultMaxBytes()
 	}
-	rd := &Read{
+	return &Read{
 		policy:   policy,
 		rootDir:  rootDir,
 		maxBytes: opts.MaxBytes,
 	}
-	rd.Inner = action.NewTypedTool("read",
-		"Read file contents. Supports text files (returned as-is) and binary files (base64-encoded with MIME type hint). Use absolute paths. For large files, use offset and limit to paginate.",
-		rd.handle)
-	return rd
 }
 
-// SetRisk changes the risk level. Call before Register.
-func (r *Read) SetRisk(level sdkcore.RiskLevel) { r.Inner.SetRisk(level) }
+// ToolName returns the tool's registry name.
+func (r *Read) ToolName() string { return NAME_READ }
 
-// --- core.Tool interface ---
+// ToolRisk returns the risk level.
+func (r *Read) ToolRisk() core.RiskLevel { return core.RISK_LEVEL_LOW }
 
-func (r *Read) Name() string                       { return r.Inner.Name() }
-func (r *Read) Description() string                { return r.Inner.Description() }
-func (r *Read) Schema() sdkcore.ToolSpec         { return r.Inner.Schema() }
-func (r *Read) Risk() sdkcore.RiskLevel            { return r.Inner.Risk() }
-func (r *Read) Call(ctx context.Context, raw json.RawMessage) (sdkcore.ToolResult, error) {
-	return r.Inner.Call(ctx, raw)
-}
-
-// handle is the pure business logic — no JSON, no schema.
-func (r *Read) handle(ctx context.Context, a ReadArgs) (ReadOutput, error) {
+// Handle is the pure business logic — no JSON, no schema.
+func (r *Read) Handle(ctx context.Context, a ReadArgs) (ReadOutput, error) {
 	wd, err := safeCwd(r.rootDir)
 	if err != nil {
 		return ReadOutput{}, fmt.Errorf("read: working dir: %w", err)

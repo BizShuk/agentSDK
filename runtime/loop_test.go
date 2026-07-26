@@ -72,12 +72,10 @@ func TestReActOneToolCallThenEnd(t *testing.T) {
 	prov.EnqueueEndTurn("the sum is 5")
 
 	reg := action.NewRegistry()
-	addTool := action.NewTypedTool("add", "add two ints",
+	action.RegisterFunc(reg, "add", "add two ints", core.RISK_LEVEL_LOW,
 		func(_ context.Context, a addArgs) (addOut, error) {
 			return addOut{Sum: a.N1 + a.N2}, nil
 		})
-	addTool.RiskV = core.RISK_LEVEL_LOW
-	reg.Register(addTool)
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_REACT: planning.NewThinkThenAct(),
@@ -119,10 +117,8 @@ func TestPlannerExecutorDispatchesBlueprint(t *testing.T) {
 	prov.EnqueueEndTurn("unused")
 
 	reg := action.NewRegistry()
-	noop := action.NewTypedTool("noop", "no-op",
+	action.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, a addArgs) (addOut, error) { return addOut{}, nil })
-	noop.RiskV = core.RISK_LEVEL_LOW
-	reg.Register(noop)
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_PLAN_THEN_RUN: planning.NewPlanThenRun(),
@@ -162,10 +158,8 @@ func TestBudgetExceededStopsLoop(t *testing.T) {
 	}
 
 	reg := action.NewRegistry()
-	noop := action.NewTypedTool("noop", "no-op",
+	action.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, a addArgs) (addOut, error) { return addOut{}, nil })
-	noop.RiskV = core.RISK_LEVEL_LOW
-	reg.Register(noop)
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_REACT: planning.NewThinkThenAct(),
@@ -314,12 +308,10 @@ func toolResultsOf(s core.State) []core.ToolResultPart {
 func batchEngine(t *testing.T, prov *testutil.ScriptedProvider) *runtime.Engine {
 	t.Helper()
 	reg := action.NewRegistry()
-	addTool := action.NewTypedTool("add", "add two ints",
+	action.RegisterFunc(reg, "add", "add two ints", core.RISK_LEVEL_LOW,
 		func(_ context.Context, a addArgs) (addOut, error) {
 			return addOut{Sum: a.N1 + a.N2}, nil
 		})
-	addTool.RiskV = core.RISK_LEVEL_LOW
-	reg.Register(addTool)
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_REACT: planning.NewThinkThenAct(),

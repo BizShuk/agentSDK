@@ -92,7 +92,7 @@ func TestSpotlightWrapsToolOutput(t *testing.T) {
 }
 
 func TestSpotlightWrapsStructuredJSONOutput(t *testing.T) {
-	// Real TypedTools return Output as json.RawMessage (i.e. []byte).
+	// RegisterFunc returns Output as json.RawMessage (i.e. []byte).
 	// The wrapping must keep it a single valid JSON value, not splice
 	// text markers around it (which would corrupt the JSON).
 	mw := security.Spotlight()

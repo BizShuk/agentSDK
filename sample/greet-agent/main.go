@@ -111,7 +111,7 @@ func main() {
 	cli.Main(
 		greetAgent{agent.MustNew(cfg,
 			agent.WithSink(sink),
-			agent.WithTools(tool.NewGreet().Inner),
+			agent.WithToolRegistrar(tool.NewGreet().Register),
 		)},
 		agent.WithLogToStdout(),
 	)

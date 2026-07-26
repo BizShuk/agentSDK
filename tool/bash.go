@@ -3,14 +3,15 @@ package tool
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"time"
 
-	"github.com/bizshuk/agentsdk/action"
-	sdkcore "github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/core"
 )
+
+// NAME_BASH is the registry name of the bash tool.
+const NAME_BASH = "bash"
 
 // BashArgs is the input shape the LLM sees for the bash tool.
 type BashArgs struct {
@@ -27,6 +28,9 @@ type BashOutput struct {
 	Duration string `json:"duration"`
 }
 
+// BashDesc is the tool description sent to the LLM.
+const BashDesc = "Execute a shell command via /bin/sh -c. Commands are checked against the sandbox denylist. Use absolute paths. Output is capped at 1 MiB. Non-zero exit codes are returned as output (not errors). Timeout defaults to 30 seconds."
+
 // Executor abstracts subprocess execution so tests can inject a fake.
 type Executor interface {
 	Run(ctx context.Context, cmd string, env []string, cwd string) (stdout, stderr []byte, exitCode int, err error)
@@ -35,7 +39,6 @@ type Executor interface {
 // Bash executes a shell command via /bin/sh -c. Commands are checked
 // against the sandbox denylist before execution. Output is capped.
 type Bash struct {
-	Inner          *action.TypedTool[BashArgs, BashOutput]
 	policy         Sandbox
 	rootDir        string
 	defaultTimeout time.Duration
@@ -55,39 +58,28 @@ func NewBash(opts BashOptions, policy Sandbox, rootDir string) (*Bash, error) {
 	if opts.MaxOutputBytes <= 0 {
 		opts.MaxOutputBytes = defaultMaxBytes()
 	}
-	exec := opts.Executor
-	if exec == nil {
-		exec = &realExecutor{}
+	e := opts.Executor
+	if e == nil {
+		e = &realExecutor{}
 	}
-	b := &Bash{
+	return &Bash{
 		policy:         policy,
 		rootDir:        rootDir,
 		defaultTimeout: opts.DefaultTimeout,
 		maxOutputBytes: opts.MaxOutputBytes,
-		executor:       exec,
+		executor:       e,
 		env:            opts.Env,
-	}
-	b.Inner = action.NewTypedTool("bash",
-		"Execute a shell command via /bin/sh -c. Commands are checked against the sandbox denylist. Use absolute paths. Output is capped at 1 MiB. Non-zero exit codes are returned as output (not errors). Timeout defaults to 30 seconds.",
-		b.handle)
-	b.Inner.SetRisk(sdkcore.RISK_LEVEL_HIGH)
-	return b, nil
+	}, nil
 }
 
-// SetRisk changes the risk level. Call before Register.
-func (b *Bash) SetRisk(level sdkcore.RiskLevel) { b.Inner.SetRisk(level) }
+// ToolName returns the tool's registry name.
+func (b *Bash) ToolName() string { return NAME_BASH }
 
-// --- core.Tool interface ---
+// ToolRisk returns the risk level.
+func (b *Bash) ToolRisk() core.RiskLevel { return core.RISK_LEVEL_HIGH }
 
-func (b *Bash) Name() string                       { return b.Inner.Name() }
-func (b *Bash) Description() string                { return b.Inner.Description() }
-func (b *Bash) Schema() sdkcore.ToolSpec         { return b.Inner.Schema() }
-func (b *Bash) Risk() sdkcore.RiskLevel            { return b.Inner.Risk() }
-func (b *Bash) Call(ctx context.Context, raw json.RawMessage) (sdkcore.ToolResult, error) {
-	return b.Inner.Call(ctx, raw)
-}
-
-func (b *Bash) handle(ctx context.Context, a BashArgs) (BashOutput, error) {
+// Handle is the pure business logic — no JSON, no schema.
+func (b *Bash) Handle(ctx context.Context, a BashArgs) (BashOutput, error) {
 	// Sandbox check on command content.
 	if err := checkCommandArgs(b.policy, "bash", a.Command); err != nil {
 		return BashOutput{}, err
@@ -208,6 +200,3 @@ func (lw *limitWriter) String() string {
 	}
 	return s
 }
-
-
-

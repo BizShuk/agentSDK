@@ -54,7 +54,7 @@ func reactState(runID string) core.State {
 }
 
 func addCounterTool(reg *action.Registry, calls *int) {
-	tool := action.NewTypedTool("add", "add two ints",
+	action.RegisterFunc(reg, "add", "add two ints", core.RISK_LEVEL_LOW,
 		func(_ context.Context, a struct {
 			N1 int `json:"n1"`
 			N2 int `json:"n2"`
@@ -62,8 +62,6 @@ func addCounterTool(reg *action.Registry, calls *int) {
 			*calls++
 			return map[string]int{"sum": a.N1 + a.N2}, nil
 		})
-	tool.RiskV = core.RISK_LEVEL_LOW
-	reg.Register(tool)
 }
 
 func messagesText(s core.State) string {

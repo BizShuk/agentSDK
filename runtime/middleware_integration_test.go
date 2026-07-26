@@ -26,10 +26,8 @@ func TestRuntimeLoopguardTripInRealtime(t *testing.T) {
 	// Provider is irrelevant — pattern bypasses LLM entirely.
 
 	reg := action.NewRegistry()
-	noop := action.NewTypedTool("noop", "no-op",
+	action.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
-	noop.RiskV = core.RISK_LEVEL_LOW
-	reg.Register(noop)
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_REACT: &stuckPattern{},
@@ -74,10 +72,8 @@ func TestRuntimeBudgetExceededExitsRun(t *testing.T) {
 		prov.EnqueueToolCall("c", "noop", map[string]any{})
 	}
 	reg := action.NewRegistry()
-	noop := action.NewTypedTool("noop", "no-op",
+	action.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
-	noop.RiskV = core.RISK_LEVEL_LOW
-	reg.Register(noop)
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_REACT: planning.NewThinkThenAct(),

@@ -102,9 +102,9 @@ func resumeExecute(cmd *cobra.Command, f *resumeFlags) error {
 	}
 	reg := action.NewRegistry()
 	rdt := tool.NewReadLogTail(listener)
-	reg.Register(rdt)
+	rdt.Register(reg)
 	nt := tool.NewNotify(cmd.OutOrStdout())
-	reg.Register(nt)
+	nt.Register(reg)
 
 	step := agent.ReActStep()
 

@@ -30,11 +30,8 @@ func TestBash_EchoCommand(t *testing.T) {
 	}, action.DefaultPolicy(), t.TempDir())
 	require.NoError(t, err)
 
-	res, cerr := b.Call(context.Background(), mustMarshal(BashArgs{Command: "echo hello"}))
-	require.NoError(t, cerr)
-	assert.True(t, res.OK)
-
-	out := unmarshalOutput[BashOutput](t, res)
+	out, herr := b.Handle(context.Background(), BashArgs{Command: "echo hello"})
+	require.NoError(t, herr)
 	assert.Contains(t, out.Stdout, "hello")
 	assert.Equal(t, 0, out.ExitCode)
 }
@@ -46,11 +43,8 @@ func TestBash_NonZeroExit(t *testing.T) {
 	}, action.DefaultPolicy(), t.TempDir())
 	require.NoError(t, err)
 
-	res, cerr := b.Call(context.Background(), mustMarshal(BashArgs{Command: "false"}))
-	require.NoError(t, cerr)
-	assert.True(t, res.OK)
-
-	out := unmarshalOutput[BashOutput](t, res)
+	out, herr := b.Handle(context.Background(), BashArgs{Command: "false"})
+	require.NoError(t, herr)
 	assert.Equal(t, 1, out.ExitCode)
 	assert.Contains(t, out.Stderr, "error!")
 }
@@ -61,10 +55,9 @@ func TestBash_CommandDenied(t *testing.T) {
 	}, action.DefaultPolicy(), t.TempDir())
 	require.NoError(t, err)
 
-	res, cerr := b.Call(context.Background(), mustMarshal(BashArgs{Command: "rm -rf /"}))
-	require.NoError(t, cerr)
-	assert.False(t, res.OK)
-	assert.Contains(t, res.Error, "sandbox denied")
+	_, herr := b.Handle(context.Background(), BashArgs{Command: "rm -rf /"})
+	require.Error(t, herr)
+	assert.Contains(t, herr.Error(), "sandbox denied")
 }
 
 func TestBash_NilPolicy_Error(t *testing.T) {
@@ -78,7 +71,7 @@ func TestBash_RiskLevel(t *testing.T) {
 		DefaultTimeout: 5 * time.Second,
 	}, action.DefaultPolicy(), t.TempDir())
 	require.NoError(t, err)
-	assert.Equal(t, sdkcore.RISK_LEVEL_HIGH, b.Risk())
+	assert.Equal(t, sdkcore.RISK_LEVEL_HIGH, b.ToolRisk())
 }
 
 func TestBash_StubTimeout(t *testing.T) {
@@ -89,10 +82,9 @@ func TestBash_StubTimeout(t *testing.T) {
 	}, action.DefaultPolicy(), t.TempDir())
 	require.NoError(t, err)
 
-	res, cerr := b.Call(context.Background(), mustMarshal(BashArgs{Command: "sleep 10", TimeoutMs: 1}))
-	require.NoError(t, cerr)
-	assert.False(t, res.OK)
-	assert.Contains(t, res.Error, "bash:")
+	_, herr := b.Handle(context.Background(), BashArgs{Command: "sleep 10", TimeoutMs: 1})
+	require.Error(t, herr)
+	assert.Contains(t, herr.Error(), "bash:")
 }
 
 func TestBash_CustomCwd(t *testing.T) {
@@ -103,7 +95,7 @@ func TestBash_CustomCwd(t *testing.T) {
 	}, action.DefaultPolicy(), dir)
 	require.NoError(t, err)
 
-	res, cerr := b.Call(context.Background(), mustMarshal(BashArgs{Command: "pwd", Cwd: dir}))
-	require.NoError(t, cerr)
-	assert.True(t, res.OK)
+	out, herr := b.Handle(context.Background(), BashArgs{Command: "pwd", Cwd: dir})
+	require.NoError(t, herr)
+	assert.Contains(t, out.Stdout, dir)
 }

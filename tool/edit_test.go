@@ -19,15 +19,12 @@ func TestEdit_SingleReplacement(t *testing.T) {
 	e, err := NewEdit(EditOptions{}, testPolicy(dir), dir)
 	require.NoError(t, err)
 
-	res, cerr := e.Call(context.Background(), mustMarshal(EditArgs{
+	out, herr := e.Handle(context.Background(), EditArgs{
 		Path:    path,
 		OldText: "debug: false",
 		NewText: "debug: true",
-	}))
-	require.NoError(t, cerr)
-	assert.True(t, res.OK, "edit should succeed, got: %s", res.Error)
-
-	out := unmarshalOutput[EditOutput](t, res)
+	})
+	require.NoError(t, herr)
 	assert.Equal(t, 1, out.Replacements)
 
 	data, rerr := os.ReadFile(path)
@@ -44,16 +41,13 @@ func TestEdit_ReplaceAll(t *testing.T) {
 	e, err := NewEdit(EditOptions{}, testPolicy(dir), dir)
 	require.NoError(t, err)
 
-	res, cerr := e.Call(context.Background(), mustMarshal(EditArgs{
+	out, herr := e.Handle(context.Background(), EditArgs{
 		Path:       path,
 		OldText:    "foo",
 		NewText:    "qux",
 		ReplaceAll: true,
-	}))
-	require.NoError(t, cerr)
-	assert.True(t, res.OK)
-
-	out := unmarshalOutput[EditOutput](t, res)
+	})
+	require.NoError(t, herr)
 	assert.Equal(t, 3, out.Replacements)
 
 	data, _ := os.ReadFile(path)
@@ -66,14 +60,13 @@ func TestEdit_EmptyOldText_Error(t *testing.T) {
 	e, err := NewEdit(EditOptions{}, testPolicy(dir), dir)
 	require.NoError(t, err)
 
-	res, cerr := e.Call(context.Background(), mustMarshal(EditArgs{
+	_, herr := e.Handle(context.Background(), EditArgs{
 		Path:    filepath.Join(dir, "f.txt"),
 		OldText: "",
 		NewText: "x",
-	}))
-	require.NoError(t, cerr)
-	assert.False(t, res.OK)
-	assert.Contains(t, res.Error, "old_text must not be empty")
+	})
+	require.Error(t, herr)
+	assert.Contains(t, herr.Error(), "old_text must not be empty")
 }
 
 func TestEdit_NotFound_Error(t *testing.T) {
@@ -84,14 +77,13 @@ func TestEdit_NotFound_Error(t *testing.T) {
 	e, err := NewEdit(EditOptions{}, testPolicy(dir), dir)
 	require.NoError(t, err)
 
-	res, cerr := e.Call(context.Background(), mustMarshal(EditArgs{
+	_, herr := e.Handle(context.Background(), EditArgs{
 		Path:    path,
 		OldText: "not found anywhere",
 		NewText: "x",
-	}))
-	require.NoError(t, cerr)
-	assert.False(t, res.OK)
-	assert.Contains(t, res.Error, "not found")
+	})
+	require.Error(t, herr)
+	assert.Contains(t, herr.Error(), "not found")
 }
 
 func TestEdit_MultipleMatches_WithoutReplaceAll_Error(t *testing.T) {
@@ -102,14 +94,13 @@ func TestEdit_MultipleMatches_WithoutReplaceAll_Error(t *testing.T) {
 	e, err := NewEdit(EditOptions{}, testPolicy(dir), dir)
 	require.NoError(t, err)
 
-	res, cerr := e.Call(context.Background(), mustMarshal(EditArgs{
+	_, herr := e.Handle(context.Background(), EditArgs{
 		Path:    path,
 		OldText: "dup",
 		NewText: "xxx",
-	}))
-	require.NoError(t, cerr)
-	assert.False(t, res.OK)
-	assert.Contains(t, res.Error, "matches 2 times")
+	})
+	require.Error(t, herr)
+	assert.Contains(t, herr.Error(), "matches 2 times")
 }
 
 func TestEdit_SandboxDenied(t *testing.T) {
@@ -117,14 +108,13 @@ func TestEdit_SandboxDenied(t *testing.T) {
 	e, err := NewEdit(EditOptions{}, testPolicy(dir), dir)
 	require.NoError(t, err)
 
-	res, cerr := e.Call(context.Background(), mustMarshal(EditArgs{
+	_, herr := e.Handle(context.Background(), EditArgs{
 		Path:    "/etc/hosts",
 		OldText: "x",
 		NewText: "y",
-	}))
-	require.NoError(t, cerr)
-	assert.False(t, res.OK)
-	assert.Contains(t, res.Error, "sandbox denied")
+	})
+	require.Error(t, herr)
+	assert.Contains(t, herr.Error(), "sandbox denied")
 }
 
 func TestEdit_NilPolicy_Error(t *testing.T) {
@@ -137,7 +127,7 @@ func TestEdit_RiskLevel(t *testing.T) {
 	dir := t.TempDir()
 	e, err := NewEdit(EditOptions{}, testPolicy(dir), dir)
 	require.NoError(t, err)
-	assert.Equal(t, sdkcore.RISK_LEVEL_HIGH, e.Risk())
+	assert.Equal(t, sdkcore.RISK_LEVEL_HIGH, e.ToolRisk())
 }
 
 func countIn(s, substr string) int {

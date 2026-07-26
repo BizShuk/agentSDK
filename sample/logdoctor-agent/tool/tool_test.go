@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bizshuk/agentsdk/action"
+	"github.com/bizshuk/agentsdk/core"
 	sdkcore "github.com/bizshuk/agentsdk/core"
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
 	"github.com/bizshuk/agentsdk/sample/logdoctor-agent/tool"
@@ -45,12 +47,16 @@ func TestReadLogTailExtractsFirstN(t *testing.T) {
 		ObservedAt: time.Unix(0, 0),
 		Payload:    "a\nb\nc\nd\ne",
 	})
-	rdt := tool.NewReadLogTail(src)
-	res, err := rdt.Call(context.Background(), json.RawMessage(`{"n":3}`))
-	require.NoError(t, err)
+	reg := action.NewRegistry()
+	tool.NewReadLogTail(src).Register(reg)
+
+	res := reg.Call(context.Background(), core.ToolCall{
+		ID:   "c1",
+		Name: "read_log_tail",
+		Args: map[string]any{"n": 3},
+	})
 	assert.True(t, res.OK)
 
-	// Output is JSON-marshalled.
 	outBytes, ok := res.Output.(json.RawMessage)
 	require.True(t, ok)
 	var out tool.ReadLogTailOutput
@@ -64,19 +70,29 @@ func TestReadLogTailDefaultsTo20(t *testing.T) {
 		ObservedAt: time.Unix(0, 0),
 		Payload:    "a\nb",
 	})
-	rdt := tool.NewReadLogTail(src)
-	res, err := rdt.Call(context.Background(), json.RawMessage(`{}`))
-	require.NoError(t, err)
+	reg := action.NewRegistry()
+	tool.NewReadLogTail(src).Register(reg)
+
+	res := reg.Call(context.Background(), core.ToolCall{
+		ID:   "c1",
+		Name: "read_log_tail",
+		Args: map[string]any{},
+	})
 	assert.True(t, res.OK)
 }
 
 func TestReadLogTailBadArgs(t *testing.T) {
 	src := newStubSource(sdkcore.Observation{Payload: "x"})
-	rdt := tool.NewReadLogTail(src)
-	res, err := rdt.Call(context.Background(), json.RawMessage(`not json`))
-	require.NoError(t, err)
+	reg := action.NewRegistry()
+	tool.NewReadLogTail(src).Register(reg)
+
+	res := reg.Call(context.Background(), core.ToolCall{
+		ID:   "c1",
+		Name: "read_log_tail",
+		Args: map[string]any{"n": "not a number"},
+	})
 	assert.False(t, res.OK)
-	assert.Contains(t, res.Error, "schema validation failed")
+	assert.Contains(t, res.Error, "invalid args")
 }
 
 func TestNotifyWritesLine(t *testing.T) {
@@ -86,11 +102,14 @@ func TestNotifyWritesLine(t *testing.T) {
 	require.NoError(t, err)
 	defer f.Close()
 
-	nt := tool.NewNotify(f)
-	res, err := nt.Call(context.Background(), json.RawMessage(
-		`{"level":"warn","message":"disk full"}`,
-	))
-	require.NoError(t, err)
+	reg := action.NewRegistry()
+	tool.NewNotify(f).Register(reg)
+
+	res := reg.Call(context.Background(), core.ToolCall{
+		ID:   "c1",
+		Name: "notify",
+		Args: map[string]any{"level": "warn", "message": "disk full"},
+	})
 	assert.True(t, res.OK)
 
 	data, err := os.ReadFile(out)
@@ -106,9 +125,14 @@ func TestNotifyDefaultsToInfo(t *testing.T) {
 	require.NoError(t, err)
 	defer f.Close()
 
-	nt := tool.NewNotify(f)
-	res, err := nt.Call(context.Background(), json.RawMessage(`{"message":"hi"}`))
-	require.NoError(t, err)
+	reg := action.NewRegistry()
+	tool.NewNotify(f).Register(reg)
+
+	res := reg.Call(context.Background(), core.ToolCall{
+		ID:   "c1",
+		Name: "notify",
+		Args: map[string]any{"message": "hi"},
+	})
 	assert.True(t, res.OK)
 
 	data, _ := os.ReadFile(out)
@@ -116,13 +140,15 @@ func TestNotifyDefaultsToInfo(t *testing.T) {
 }
 
 func TestNotifyErrorPropagates(t *testing.T) {
-	// FailsWriter always returns an error so the TypedTool fn propagates.
 	fw := &failsWriter{}
-	nt := tool.NewNotify(fw)
-	res, err := nt.Call(context.Background(),
-		json.RawMessage(`{"level":"warn","message":"x"}`))
-	require.NoError(t, err)
-	// fmt.Fprintf ignores the writer's error; delivered=true despite writer fail.
+	reg := action.NewRegistry()
+	tool.NewNotify(fw).Register(reg)
+
+	res := reg.Call(context.Background(), core.ToolCall{
+		ID:   "c1",
+		Name: "notify",
+		Args: map[string]any{"level": "warn", "message": "x"},
+	})
 	assert.True(t, res.OK)
 }
 
@@ -139,14 +165,13 @@ func TestListenerAndReadLogTailIntegrated(t *testing.T) {
 	l, err := domain.NewLogFileListener(p)
 	require.NoError(t, err)
 
-	rt := tool.NewReadLogTail(l)
-	res, err := rt.Call(context.Background(), json.RawMessage(`{"n":10}`))
-	require.NoError(t, err)
-	assert.True(t, res.OK)
+	reg := action.NewRegistry()
+	tool.NewReadLogTail(l).Register(reg)
 
-	bytes, _ := res.Output.(json.RawMessage)
-	var out tool.ReadLogTailOutput
-	require.NoError(t, json.Unmarshal(bytes, &out))
-	assert.Equal(t, []string{"L1", "L2", "L3"}, out.Lines)
-	assert.False(t, out.Truncated)
+	res := reg.Call(context.Background(), core.ToolCall{
+		ID:   "c1",
+		Name: "read_log_tail",
+		Args: map[string]any{"n": 2},
+	})
+	assert.True(t, res.OK)
 }

@@ -32,8 +32,8 @@ agentsdk/
 ├── prompt/source/                    # 內建 Source 實作：PersonaSource/ContextFileSource/EnvSource/ReminderSource + SkillSource（透過 SkillProvider interface 收 *skill.Registry，prompt/source 仍只 import prompt + stdlib）
 ├── core/                             # 純狀態機、Message/Part、Event、Instruction、ports（含 ObservationSource）
 ├── planning/                         # 6 個純函式 DecisionRule FSM
-├── action/                           # tool registry、TypedTool/schema、sandbox、approval policy
-├── tool/                             # Read/Write/Edit/Bash/Glob/Grep 內建工具
+├── action/                           # tool registry (RegisterFunc 泛型序列化)、sandbox、approval policy
+├── tool/                             # Read/Write/Edit/Bash/Glob/Grep 內建工具 (純業務邏輯 Handle)
 ├── skill/                            # SKILL.md/commands/subagents registry（progressive disclosure + Def/Spawner "task" tool）
 ├── utils/                            # 根層共用 utilities umbrella：utils/frontmatter/（adrg/frontmatter YAML/TOML/JSON wrapper,key:value 攤平為 string map）+ utils/configfile/（副檔名決定編碼、一律以 JSON 呈現給 caller,故 `json` tag 是唯一真相）+ utils/testutil/（in-process fake provider/state store/notifier）
 ├── middleware/                       # chain、retry/timeout/budget/loopguard、安全與 OTel tracing；preset/ 子包（Default/Secure 具名鏈，2026-07-26 自 config/default.go 併入）；hook/ 子包（core.Hooks 實作：Rule matcher + Func/Command handler，exit 2 = block；以 middleware-style handler 連續執行 + HookDecision 合併，signature 仍獨立）

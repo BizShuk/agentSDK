@@ -233,21 +233,31 @@ type WriteAheadLog interface {
 // ToolRegistry resolves a tool call to a tool by name. Concrete impl lives in
 // action.Registry — it composes static registrations and dynamic ToolSource
 // discoveries (e.g. MCP).
+//
+// Register accepts a Tool (metadata only) or a CallableTool (metadata +
+// dispatch). For metadata-only tools, the caller must have registered a
+// dispatch function via action.RegisterFunc beforehand.
 type ToolRegistry interface {
-	Register(t Tool)
 	Get(name string) (Tool, bool)
 	List() []ToolSpec
 	Call(ctx context.Context, call ToolCall) ToolResult
 }
 
-// Tool is the runtime-side contract — what Registry dispatches into.
-//
-// Note: action.Tool extends this with a typed-call helper.
+// Tool describes a tool's metadata — no execution logic. Tools are pure
+// business logic; JSON marshal/unmarshal/schema reflection is the
+// Registry's responsibility (via action.RegisterFunc).
 type Tool interface {
 	Name() string
 	Description() string
-	Schema() ToolSpec
 	Risk() RiskLevel
+	Schema() ToolSpec
+}
+
+// CallableTool extends Tool with a Call method for tools that manage their
+// own JSON dispatch — typically dynamic or composite tools like Spawner
+// where the registry cannot reflect args from a static Go type.
+type CallableTool interface {
+	Tool
 	Call(ctx context.Context, args json.RawMessage) (ToolResult, error)
 }
 

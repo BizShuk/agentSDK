@@ -17,11 +17,9 @@ func TestRead_TextFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("line 1\nline 2\nline 3\n"), 0o644))
 
 	r := NewRead(ReadOptions{}, testPolicy(dir), dir)
-	res, err := r.Call(context.Background(), mustMarshal(ReadArgs{Path: path}))
+	out, err := r.Handle(context.Background(), ReadArgs{Path: path})
 	require.NoError(t, err)
-	assert.True(t, res.OK, "read should succeed, got error: %s", res.Error)
 
-	out := unmarshalOutput[ReadOutput](t, res)
 	assert.Equal(t, "text", out.Encoding)
 	assert.Contains(t, out.Content, "line 1")
 	assert.False(t, out.Truncated)
@@ -38,11 +36,9 @@ func TestRead_Pagination(t *testing.T) {
 
 	r := NewRead(ReadOptions{}, testPolicy(dir), dir)
 
-	res, err := r.Call(context.Background(), mustMarshal(ReadArgs{Path: path, Offset: 0, Limit: 3}))
+	out, err := r.Handle(context.Background(), ReadArgs{Path: path, Offset: 0, Limit: 3})
 	require.NoError(t, err)
-	assert.True(t, res.OK)
 
-	out := unmarshalOutput[ReadOutput](t, res)
 	assert.True(t, out.Truncated, "should be truncated with 3 lines out of 10")
 	assert.Equal(t, "text", out.Encoding)
 }
@@ -51,10 +47,9 @@ func TestRead_FileNotFound(t *testing.T) {
 	dir := t.TempDir()
 	r := NewRead(ReadOptions{}, testPolicy(dir), dir)
 
-	res, err := r.Call(context.Background(), mustMarshal(ReadArgs{Path: filepath.Join(dir, "nope.txt")}))
-	require.NoError(t, err)
-	assert.False(t, res.OK)
-	assert.Contains(t, res.Error, "open")
+	_, err := r.Handle(context.Background(), ReadArgs{Path: filepath.Join(dir, "nope.txt")})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "open")
 }
 
 func TestRead_SandboxDenied(t *testing.T) {
@@ -62,13 +57,11 @@ func TestRead_SandboxDenied(t *testing.T) {
 	path := filepath.Join(dir, "secret.txt")
 	require.NoError(t, os.WriteFile(path, []byte("secret"), 0o644))
 
-	// Use DefaultPolicy (only allows /tmp) — the temp dir won't be allowed.
 	r := NewRead(ReadOptions{}, action.DefaultPolicy(), dir)
 
-	res, err := r.Call(context.Background(), mustMarshal(ReadArgs{Path: path}))
-	require.NoError(t, err)
-	assert.False(t, res.OK)
-	assert.Contains(t, res.Error, "sandbox denied")
+	_, err := r.Handle(context.Background(), ReadArgs{Path: path})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sandbox denied")
 }
 
 func TestRead_NilPolicy_Allowed(t *testing.T) {
@@ -77,9 +70,9 @@ func TestRead_NilPolicy_Allowed(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("open"), 0o644))
 
 	r := NewRead(ReadOptions{}, nil, dir)
-	res, err := r.Call(context.Background(), mustMarshal(ReadArgs{Path: path}))
+	out, err := r.Handle(context.Background(), ReadArgs{Path: path})
 	require.NoError(t, err)
-	assert.True(t, res.OK, "read with nil policy should succeed, got: %s", res.Error)
+	assert.Equal(t, "text", out.Encoding)
 }
 
 func TestRead_RelativePath(t *testing.T) {
@@ -87,7 +80,7 @@ func TestRead_RelativePath(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "rel.txt"), []byte("relative"), 0o644))
 
 	r := NewRead(ReadOptions{}, nil, dir)
-	res, err := r.Call(context.Background(), mustMarshal(ReadArgs{Path: "rel.txt"}))
+	out, err := r.Handle(context.Background(), ReadArgs{Path: "rel.txt"})
 	require.NoError(t, err)
-	assert.True(t, res.OK, "relative path should be resolved against rootDir")
+	assert.Equal(t, "relative", out.Content)
 }

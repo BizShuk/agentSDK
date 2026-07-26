@@ -2,7 +2,6 @@ package runtime_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/bizshuk/agentsdk/action"
@@ -16,14 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// highRiskTool is a LOW-effort HIGH-risk tool whose Call records that it
-// ran, so the e2e can assert the approved call actually executed after
-// resume (not just that the run unpause-then-completed).
-type highRiskTool struct {
-	inner  *action.TypedTool[hrArgs, hrOut]
-	called int
-}
-
 type hrArgs struct {
 	What string `json:"what"`
 }
@@ -32,24 +23,12 @@ type hrOut struct {
 	Fixed string `json:"fixed"`
 }
 
-func newHighRiskTool() *highRiskTool {
-	t := &highRiskTool{}
-	inner := action.NewTypedTool("propose_fix", "propose a high-risk fix",
+func registerHighRiskTool(reg *action.Registry, called *int) {
+	action.RegisterFunc(reg, "propose_fix", "propose a high-risk fix", core.RISK_LEVEL_HIGH,
 		func(_ context.Context, a hrArgs) (hrOut, error) {
-			t.called++
+			*called++
 			return hrOut{Fixed: a.What}, nil
 		})
-	inner.SetRisk(core.RISK_LEVEL_HIGH)
-	t.inner = inner
-	return t
-}
-
-func (t *highRiskTool) Name() string          { return t.inner.Name() }
-func (t *highRiskTool) Description() string   { return t.inner.Description() }
-func (t *highRiskTool) Schema() core.ToolSpec { return t.inner.Schema() }
-func (t *highRiskTool) Risk() core.RiskLevel  { return t.inner.Risk() }
-func (t *highRiskTool) Call(ctx context.Context, args json.RawMessage) (core.ToolResult, error) {
-	return t.inner.Call(ctx, args)
 }
 
 // TestM4E2EApprovalPauseThenResumeApprove drives the full HITL story:
@@ -75,8 +54,8 @@ func TestM4E2EApprovalPauseThenResumeApprove(t *testing.T) {
 	prov.EnqueueEndTurn("fix applied")
 
 	reg := action.NewRegistry()
-	hr := newHighRiskTool()
-	reg.Register(hr)
+	called1 := 0
+	registerHighRiskTool(reg, &called1)
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_REACT: planning.NewThinkThenAct(),
@@ -105,7 +84,7 @@ func TestM4E2EApprovalPauseThenResumeApprove(t *testing.T) {
 	pa := paused.PendingApprovals[0]
 	assert.Equal(t, "propose_fix", pa.ToolCall.Name)
 	assert.Equal(t, core.RISK_LEVEL_HIGH, pa.Risk)
-	assert.Equal(t, 0, hr.called, "the tool must NOT have executed while paused")
+	assert.Equal(t, 0, called1, "the tool must NOT have executed while paused")
 
 	// Persisted state must carry the pause (approve reads from Store).
 	require.NoError(t, store.Save(context.Background(), paused))
@@ -118,7 +97,7 @@ func TestM4E2EApprovalPauseThenResumeApprove(t *testing.T) {
 	// (3) The approved call executed and the run completed.
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, final.Status,
 		"after approval the run must complete")
-	assert.Equal(t, 1, hr.called, "the approved high-risk tool must execute exactly once")
+	assert.Equal(t, 1, called1, "the approved high-risk tool must execute exactly once")
 	assert.Empty(t, final.PendingApprovals, "decided approval must be consumed")
 }
 
@@ -134,8 +113,8 @@ func TestM4E2EApprovalRejectTerminates(t *testing.T) {
 	prov.EnqueueToolCall("call-1", "propose_fix", map[string]any{"what": "drop table"})
 
 	reg := action.NewRegistry()
-	hr := newHighRiskTool()
-	reg.Register(hr)
+	called2 := 0
+	registerHighRiskTool(reg, &called2)
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_REACT: planning.NewThinkThenAct(),
@@ -159,5 +138,5 @@ func TestM4E2EApprovalRejectTerminates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, final.Status,
 		"rejected approval must terminate the run")
-	assert.Equal(t, 0, hr.called, "the tool must never execute on reject")
+	assert.Equal(t, 0, called2, "rejected tool must NOT execute")
 }

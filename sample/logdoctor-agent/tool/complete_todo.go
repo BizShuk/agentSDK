@@ -9,41 +9,37 @@ import (
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
 )
 
-// CompleteTodoArgs — TypedTool argument shape.
+// CompleteTodoArgs argument shape.
 type CompleteTodoArgs struct {
 	ID string `json:"id"`
 }
 
-// CompleteTodoOutput — TypedTool output shape.
+// CompleteTodoOutput output shape.
 type CompleteTodoOutput struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
 }
 
-// CompleteTodo is a TypedTool that marks a todo as DONE.
+// CompleteTodo marks a todo as DONE.
 type CompleteTodo struct {
-	Inner *action.TypedTool[CompleteTodoArgs, CompleteTodoOutput]
 	Store *domain.TodoStore
 }
 
-// NewCompleteTodo wires the TypedTool to a TodoStore.
+// NewCompleteTodo constructs a CompleteTodo tool.
 func NewCompleteTodo(s *domain.TodoStore) *CompleteTodo {
-	t := action.NewTypedTool("complete_todo", "Mark a todo as done by ID",
-		func(_ context.Context, a CompleteTodoArgs) (CompleteTodoOutput, error) {
-			updated, ok := s.Complete(a.ID)
-			if !ok {
-				return CompleteTodoOutput{}, errors.New("todo not found: " + a.ID)
-			}
-			return CompleteTodoOutput{ID: updated.ID, Status: string(updated.Status)}, nil
-		})
-	t.SetRisk(sdkcore.RISK_LEVEL_LOW)
-	return &CompleteTodo{Inner: t, Store: s}
+	return &CompleteTodo{Store: s}
 }
 
-func (c *CompleteTodo) Name() string             { return c.Inner.Name() }
-func (c *CompleteTodo) Description() string      { return c.Inner.Description() }
-func (c *CompleteTodo) Schema() sdkcore.ToolSpec { return c.Inner.Schema() }
-func (c *CompleteTodo) Risk() sdkcore.RiskLevel  { return c.Inner.Risk() }
-func (c *CompleteTodo) Call(ctx context.Context, args []byte) (sdkcore.ToolResult, error) {
-	return c.Inner.Call(ctx, args)
+// Register registers CompleteTodo into the given action.Registry.
+func (c *CompleteTodo) Register(reg *action.Registry) {
+	action.RegisterFunc(reg, "complete_todo", "Mark a todo as done by ID", sdkcore.RISK_LEVEL_LOW, c.Handle)
+}
+
+// Handle is pure business logic.
+func (c *CompleteTodo) Handle(_ context.Context, args CompleteTodoArgs) (CompleteTodoOutput, error) {
+	updated, ok := c.Store.Complete(args.ID)
+	if !ok {
+		return CompleteTodoOutput{}, errors.New("todo not found: " + args.ID)
+	}
+	return CompleteTodoOutput{ID: updated.ID, Status: string(updated.Status)}, nil
 }
