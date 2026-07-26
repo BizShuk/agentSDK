@@ -26,6 +26,7 @@ import (
 	appconfig "github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/utils/agentconfig"
 )
 
 // configPath is the canonical config file for this sample. It sits next
@@ -91,7 +92,7 @@ func (f fileAgent) Bootstrap(ctx context.Context, ac *appconfig.AppConfig) (*run
 func main() {
 	go readStdin()
 
-	cfg, err := agent.LoadFile(configPath)
+	cfg, err := agentconfig.LoadFile(configPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "load config:", err)
 		os.Exit(1)

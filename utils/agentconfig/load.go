@@ -1,4 +1,8 @@
-package agent
+// Package agentconfig reads and writes a spec.Config from disk, encoding
+// chosen by the file extension. It is the I/O seam for declarative agent
+// configs: spec decides what the data means, configfile decides what the
+// bytes on disk mean, and this package ties them together.
+package agentconfig
 
 import (
 	"github.com/bizshuk/agentsdk/agent/spec"
@@ -24,10 +28,10 @@ func FormatOf(path string) Format { return configfile.FormatOf(path) }
 // configfile converts, and the `json` tags in spec govern both encodings
 // by construction. Both paths share spec's validation, so a YAML file and
 // a hand-built literal cannot diverge in what they accept.
-func LoadFile(path string) (Config, error) {
+func LoadFile(path string) (spec.Config, error) {
 	raw, err := configfile.ReadJSON(path)
 	if err != nil {
-		return Config{}, err
+		return spec.Config{}, err
 	}
 	return spec.DecodeBytes(raw)
 }
@@ -35,7 +39,7 @@ func LoadFile(path string) (Config, error) {
 // Marshal encodes a config in the requested format. It does not expand or
 // validate: a wizard writes what the user chose, and re-reading it must
 // be a fixed point.
-func Marshal(cfg Config, f Format) ([]byte, error) {
+func Marshal(cfg spec.Config, f Format) ([]byte, error) {
 	jsonBytes, err := spec.EncodeBytes(cfg)
 	if err != nil {
 		return nil, err
@@ -46,7 +50,7 @@ func Marshal(cfg Config, f Format) ([]byte, error) {
 // SaveFile writes a config. It refuses to clobber an existing file unless
 // force is set — a wizard run that silently overwrote a hand-tuned config
 // would be worse than one that failed.
-func SaveFile(path string, cfg Config, force bool) error {
+func SaveFile(path string, cfg spec.Config, force bool) error {
 	jsonBytes, err := spec.EncodeBytes(cfg)
 	if err != nil {
 		return err

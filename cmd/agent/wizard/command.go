@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/agent"
+	"github.com/bizshuk/agentsdk/utils/agentconfig"
 	"github.com/spf13/cobra"
 )
 
@@ -78,7 +79,7 @@ func runWizardCmd(cmd *cobra.Command, _ []string) error {
 
 	base := agent.Config{}
 	if edit != "" {
-		loaded, err := agent.LoadFile(edit)
+		loaded, err := agentconfig.LoadFile(edit)
 		if err != nil {
 			return err
 		}
@@ -111,13 +112,13 @@ func runWizardCmd(cmd *cobra.Command, _ []string) error {
 	}
 
 	if out == "-" {
-		body, err := agent.Marshal(cfg, agent.FORMAT_YAML)
+		body, err := agentconfig.Marshal(cfg, agentconfig.FORMAT_YAML)
 		if err != nil {
 			return err
 		}
 		fmt.Fprint(stdout, string(body))
 	} else {
-		if err := agent.SaveFile(out, cfg, force); err != nil {
+		if err := agentconfig.SaveFile(out, cfg, force); err != nil {
 			return err
 		}
 		absOut := out

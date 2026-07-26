@@ -8,6 +8,7 @@ import (
 
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
+	"github.com/bizshuk/agentsdk/utils/agentconfig"
 )
 
 // wizard carries the prompt loop's I/O and the non-interactive switch.
@@ -141,7 +142,7 @@ func (w *wizard) run(cfg agent.Config) (agent.Config, error) {
 	// --- stage 9: review ---
 	if !w.yes {
 		w.section("9/9  review")
-		body, err := agent.Marshal(cfg, agent.FORMAT_YAML)
+		body, err := agentconfig.Marshal(cfg, agentconfig.FORMAT_YAML)
 		if err != nil {
 			return cfg, err
 		}

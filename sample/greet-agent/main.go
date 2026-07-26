@@ -23,6 +23,7 @@ import (
 	appconfig "github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/utils/agentconfig"
 	"github.com/bizshuk/agentsdk/sample/greet-agent/tool"
 )
 
@@ -86,7 +87,7 @@ func (g greetAgent) Bootstrap(ctx context.Context, ac *appconfig.AppConfig) (*ru
 func main() {
 	go readStdin()
 
-	cfg, err := agent.LoadFile(configPath)
+	cfg, err := agentconfig.LoadFile(configPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "load config:", err)
 		os.Exit(1)

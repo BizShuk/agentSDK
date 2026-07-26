@@ -73,12 +73,5 @@ func TestBuildSourcesPersonaWorksAtEveryTier(t *testing.T) {
 	}
 }
 
-// SkillSource is the one Source that must live here, because it is the
-// one that needs to know two packages exist. If a future refactor adds
-// another Source to this package that only needs prompt, it belongs in
-// prompt instead.
-func TestSkillSourceHandlesNilRegistry(t *testing.T) {
-	got, err := agent.SkillSource(nil).Sections(context.Background(), prompt.Req{})
-	require.NoError(t, err)
-	assert.Empty(t, got, "no skill registry means no skill index, not a failure")
-}
+// SkillSource now lives in prompt/source. Its nil-registry test moved
+// with it (see prompt/source/skill_test.go).

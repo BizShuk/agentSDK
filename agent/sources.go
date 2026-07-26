@@ -1,45 +1,27 @@
 package agent
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/bizshuk/agentsdk/agent/spec"
 	"github.com/bizshuk/agentsdk/prompt"
+	"github.com/bizshuk/agentsdk/prompt/source"
 	"github.com/bizshuk/agentsdk/skill"
 )
 
-// This file is the adapter layer that keeps the dependency rule intact —
-// and it is deliberately small.
+// This file is the dispatch site that turns the config's source names
+// into live Sources. The Sources themselves live in prompt/source — the
+// content concerns (Persona, ContextFile, Env, Reminder) and the one
+// cross-package adapter (SkillSource, which uses a SkillProvider
+// interface to keep skill invisible to prompt/source).
 //
-// prompt defines the Source interface and owns every Source it can build
-// from its own vocabulary plus the standard library (persona, context
-// files, environment, budget reminder). skill produces content but knows
-// nothing about prompt, and prompt knows nothing about skill. That one
-// pairing is the only thing this layer has to wire, because it is the
-// only Source whose two halves live in packages that must not see each
-// other.
-//
-// The test for whether something belongs here: does writing it require
-// knowing that two packages exist? If not, it is content, and content
-// lives with prompt.
-
-// SkillSource adapts a skill registry's progressive-disclosure listing —
-// names and descriptions only, with bodies loaded on demand by the skill
-// tool rather than pushed into every request.
-func SkillSource(reg *skill.Registry) prompt.Source {
-	return prompt.SourceFunc(func(context.Context, prompt.Req) ([]prompt.Section, error) {
-		if reg == nil {
-			return nil, nil
-		}
-		return []prompt.Section{{
-			Slot: prompt.SLOT_SYSTEM, Name: "skills",
-			Text: reg.SystemPrompt(), Order: prompt.ORDER_SKILLS,
-		}}, nil
-	})
-}
+// prompt/source depends only on prompt and the standard library; this
+// file is the only place in the tree where skill, prompt/source, and
+// agent/spec are brought together, because translating the config's
+// string names into the right Source is the composition policy and
+// belongs at the composition layer.
 
 // BuildSources turns the Prompt block's source names into live Sources.
 // Slice position does not matter — each Source carries an Order, and the
@@ -54,7 +36,7 @@ func SkillSource(reg *skill.Registry) prompt.Source {
 func BuildSources(cfg Config, reg *skill.Registry, userDir string) ([]prompt.Source, error) {
 	var out []prompt.Source
 	if strings.TrimSpace(cfg.Persona) != "" {
-		out = append(out, prompt.PersonaSource(cfg.Persona))
+		out = append(out, source.PersonaSource(cfg.Persona))
 	}
 	if cfg.Prompt == nil {
 		return out, nil
@@ -62,13 +44,23 @@ func BuildSources(cfg Config, reg *skill.Registry, userDir string) ([]prompt.Sou
 	for _, name := range cfg.Prompt.Sources {
 		switch name {
 		case spec.SOURCE_FILES:
-			out = append(out, prompt.ContextFileSource(promptUserDir(cfg, userDir)))
+			out = append(out, source.ContextFileSource(promptUserDir(cfg, userDir)))
 		case spec.SOURCE_SKILLS:
-			out = append(out, SkillSource(reg))
+			// Convert typed-nil *skill.Registry to a true-nil
+			// SkillProvider interface so the Source's nil check
+			// (interface == nil) catches it. Without this, a
+			// `*skill.Registry(nil)` would wrap into a non-nil
+			// interface and SkillSource would call SystemPrompt on
+			// a nil pointer.
+			var prov source.SkillProvider
+			if reg != nil {
+				prov = reg
+			}
+			out = append(out, source.SkillSource(prov))
 		case spec.SOURCE_ENV:
-			out = append(out, prompt.EnvSource())
+			out = append(out, source.EnvSource())
 		case spec.SOURCE_REMINDER:
-			out = append(out, prompt.ReminderSource())
+			out = append(out, source.ReminderSource())
 		default:
 			// spec.Validate already rejects unknown names; reaching here
 			// means the two lists drifted apart.

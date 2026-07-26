@@ -3,11 +3,14 @@ package prompt_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/prompt"
+	"github.com/bizshuk/agentsdk/prompt/source"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -234,4 +237,34 @@ func TestSourcesSeeReadOnlyState(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 4, seen.Turn)
 	assert.Equal(t, 4, state.Turn, "the caller's State must be untouched")
+}
+
+// TestSourcesAssembleInTheDocumentedOrder is the end-to-end shape test:
+// real Sources from prompt/source plugged into the Builder still sort by
+// Order even when the caller registers them out of order. The test
+// belongs with prompt.Builder (not in prompt/source) because its claim
+// is about the Builder's sort, not about any individual Source.
+func TestSourcesAssembleInTheDocumentedOrder(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("PROJECT_RULES"), 0o600))
+
+	b := prompt.Builder{Sources: []prompt.Source{
+		source.EnvSource(), // registered first, must still sort last
+		source.PersonaSource("PERSONA"),
+		source.ContextFileSource(""),
+	}}
+
+	msgs, err := b.Seed(context.Background(), prompt.Req{Cwd: dir, Input: "go"})
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+
+	sys := msgs[0].Parts[0].Text
+	iPersona := strings.Index(sys, "PERSONA")
+	iFiles := strings.Index(sys, "PROJECT_RULES")
+	iEnv := strings.Index(sys, "working directory:")
+	require.NotEqual(t, -1, iPersona)
+	require.NotEqual(t, -1, iFiles)
+	require.NotEqual(t, -1, iEnv)
+	assert.Less(t, iPersona, iFiles)
+	assert.Less(t, iFiles, iEnv)
 }

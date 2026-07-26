@@ -66,6 +66,7 @@ import (
 	appconfig "github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/utils/agentconfig"
 )
 
 // stdinLines is fed by a single background reader (readStdin) so both
@@ -176,10 +177,10 @@ func main() {
 	go readStdin()
 
 	// Load the agent config from skeleton-agent.yaml — same schema the
-	// wizard writes and `agentsdk run -c path` consumes. agent.LoadFile
+	// wizard writes and `agentsdk run -c path` consumes. agentconfig.LoadFile
 	// reads YAML/JSON based on extension and runs spec.Decode (which
 	// rejects unknown fields, so typos surface immediately).
-	cfg, err := agent.LoadFile(configPath)
+	cfg, err := agentconfig.LoadFile(configPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "load config:", err)
 		os.Exit(1)

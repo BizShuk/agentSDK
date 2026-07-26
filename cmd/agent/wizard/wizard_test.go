@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
 	"github.com/bizshuk/agentsdk/cmd/agent/wizard"
+	"github.com/bizshuk/agentsdk/utils/agentconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,7 +38,7 @@ func TestWizardEveryTierProducesAValidConfig(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "agent.yaml")
 			require.NoError(t, os.WriteFile(path, []byte(out), 0o600))
 
-			cfg, err := agent.LoadFile(path)
+			cfg, err := agentconfig.LoadFile(path)
 			require.NoError(t, err, "the wizard must not emit a config LoadFile rejects")
 			assert.Equal(t, tier, cfg.Tier)
 		})
@@ -104,7 +104,7 @@ func TestWizardWritesJSONWhenAsked(t *testing.T) {
 	assert.True(t, strings.HasPrefix(strings.TrimSpace(string(raw)), "{"),
 		"a .json path must produce JSON, not YAML")
 
-	cfg, err := agent.LoadFile(path)
+	cfg, err := agentconfig.LoadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, spec.TIER_BASIC, cfg.Tier)
 }
@@ -164,7 +164,7 @@ func TestWizardAlwaysRegistersTheSelectedStyle(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "agent.yaml")
 	require.NoError(t, os.WriteFile(path, []byte(out), 0o600))
-	cfg, err := agent.LoadFile(path)
+	cfg, err := agentconfig.LoadFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, cfg.Reasoning.Enable, cfg.Reasoning.Style)
 }
