@@ -44,10 +44,10 @@ func NewProposeFix() *ProposeFix {
 	return &ProposeFix{Inner: t}
 }
 
-func (p *ProposeFix) Name() string              { return p.Inner.Name() }
-func (p *ProposeFix) Description() string       { return p.Inner.Description() }
+func (p *ProposeFix) Name() string             { return p.Inner.Name() }
+func (p *ProposeFix) Description() string      { return p.Inner.Description() }
 func (p *ProposeFix) Schema() sdkcore.ToolSpec { return p.Inner.Schema() }
-func (p *ProposeFix) Risk() sdkcore.RiskLevel    { return p.Inner.Risk() }
+func (p *ProposeFix) Risk() sdkcore.RiskLevel  { return p.Inner.Risk() }
 func (p *ProposeFix) Call(ctx context.Context, args []byte) (sdkcore.ToolResult, error) {
 	return p.Inner.Call(ctx, args)
 }

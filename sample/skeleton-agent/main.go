@@ -63,7 +63,6 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/agent"
-	appconfig "github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/utils/agentconfig"
@@ -114,7 +113,7 @@ type stdinAgent struct{ *agent.Agent }
 // lines are delivered round by round through NextRound. An empty first
 // line (immediate EOF) runs with the persona only — the provider CLI's
 // `provider "ask me anything"` with no follow-up.
-func (s stdinAgent) Bootstrap(ctx context.Context, ac *appconfig.AppConfig) (*runtime.Engine, core.State, error) {
+func (s stdinAgent) Bootstrap(ctx context.Context, ac *agent.AppConfig) (*runtime.Engine, core.State, error) {
 	engine, state, err := s.Agent.Bootstrap(ctx, ac)
 	if err != nil {
 		return engine, state, err
@@ -178,8 +177,8 @@ func main() {
 
 	// Load the agent config from skeleton-agent.yaml — same schema the
 	// wizard writes and `agentsdk run -c path` consumes. agentconfig.LoadFile
-	// reads YAML/JSON based on extension and runs spec.Decode (which
-	// rejects unknown fields, so typos surface immediately).
+	// reads YAML/JSON based on extension and runs agentconfig.Decode
+	// (which rejects unknown fields, so typos surface immediately).
 	cfg, err := agentconfig.LoadFile(configPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "load config:", err)

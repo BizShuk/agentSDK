@@ -8,11 +8,11 @@ import (
 
 	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/security"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,10 +38,10 @@ func newInjectionTool(payload string) *injectionTool {
 	return &injectionTool{inner: t}
 }
 
-func (t *injectionTool) Name() string           { return t.inner.Name() }
-func (t *injectionTool) Description() string    { return t.inner.Description() }
-func (t *injectionTool) Schema() core.ToolSpec  { return t.inner.Schema() }
-func (t *injectionTool) Risk() core.RiskLevel   { return t.inner.Risk() }
+func (t *injectionTool) Name() string          { return t.inner.Name() }
+func (t *injectionTool) Description() string   { return t.inner.Description() }
+func (t *injectionTool) Schema() core.ToolSpec { return t.inner.Schema() }
+func (t *injectionTool) Risk() core.RiskLevel  { return t.inner.Risk() }
 func (t *injectionTool) Call(ctx context.Context, args json.RawMessage) (core.ToolResult, error) {
 	return t.inner.Call(ctx, args)
 }
@@ -84,10 +84,10 @@ func TestM3E2EPromptInjectionIsSanitizedAndSpotlighted(t *testing.T) {
 	loop.Emitter = func(eff core.Instruction) {}
 
 	state := core.State{
-		RunID:           "m3-e2e",
-		ReasoningStyle:  core.REASON_REACT,
-		Autonomy:        core.AUTONOMY_L2,
-		Budget:          core.Budget{MaxTurns: 10},
+		RunID:          "m3-e2e",
+		ReasoningStyle: core.REASON_REACT,
+		Autonomy:       core.AUTONOMY_L2,
+		Budget:         core.Budget{MaxTurns: 10},
 	}
 	final, err := loop.Run(context.Background(), state)
 	require.NoError(t, err)

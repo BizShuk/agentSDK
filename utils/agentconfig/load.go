@@ -33,14 +33,14 @@ func LoadFile(path string) (spec.Config, error) {
 	if err != nil {
 		return spec.Config{}, err
 	}
-	return spec.DecodeBytes(raw)
+	return DecodeBytes(raw)
 }
 
 // Marshal encodes a config in the requested format. It does not expand or
 // validate: a wizard writes what the user chose, and re-reading it must
 // be a fixed point.
 func Marshal(cfg spec.Config, f Format) ([]byte, error) {
-	jsonBytes, err := spec.EncodeBytes(cfg)
+	jsonBytes, err := EncodeBytes(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func Marshal(cfg spec.Config, f Format) ([]byte, error) {
 // force is set — a wizard run that silently overwrote a hand-tuned config
 // would be worse than one that failed.
 func SaveFile(path string, cfg spec.Config, force bool) error {
-	jsonBytes, err := spec.EncodeBytes(cfg)
+	jsonBytes, err := EncodeBytes(cfg)
 	if err != nil {
 		return err
 	}

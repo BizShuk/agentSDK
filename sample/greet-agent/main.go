@@ -20,11 +20,10 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/agent"
-	appconfig "github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/runtime"
-	"github.com/bizshuk/agentsdk/utils/agentconfig"
 	"github.com/bizshuk/agentsdk/sample/greet-agent/tool"
+	"github.com/bizshuk/agentsdk/utils/agentconfig"
 )
 
 // configPath is the canonical config file for this sample. It sits next
@@ -66,7 +65,7 @@ type greetAgent struct {
 
 // Bootstrap reads the opening prompt and seeds the user message asking
 // the agent to greet the named person via the greet tool.
-func (g greetAgent) Bootstrap(ctx context.Context, ac *appconfig.AppConfig) (*runtime.Engine, core.State, error) {
+func (g greetAgent) Bootstrap(ctx context.Context, ac *agent.AppConfig) (*runtime.Engine, core.State, error) {
 	engine, state, err := g.Agent.Bootstrap(ctx, ac)
 	if err != nil {
 		return engine, state, err

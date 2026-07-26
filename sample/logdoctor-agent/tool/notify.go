@@ -43,10 +43,10 @@ func NewNotify(w io.Writer) *Notify {
 }
 
 // Name delegates to the TypedTool.
-func (n *Notify) Name() string                { return n.Inner.Name() }
-func (n *Notify) Description() string         { return n.Inner.Description() }
-func (n *Notify) Schema() sdkcore.ToolSpec  { return n.Inner.Schema() }
-func (n *Notify) Risk() sdkcore.RiskLevel     { return n.Inner.Risk() }
+func (n *Notify) Name() string             { return n.Inner.Name() }
+func (n *Notify) Description() string      { return n.Inner.Description() }
+func (n *Notify) Schema() sdkcore.ToolSpec { return n.Inner.Schema() }
+func (n *Notify) Risk() sdkcore.RiskLevel  { return n.Inner.Risk() }
 func (n *Notify) Call(ctx context.Context, args json.RawMessage) (sdkcore.ToolResult, error) {
 	return n.Inner.Call(ctx, args)
 }

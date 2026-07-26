@@ -19,12 +19,14 @@ import (
 // sole entry point for clients — call New for the API-key path or
 // NewWithOAuth for the ChatGPT-Plus/Pro OAuth path.
 type Provider struct {
-	baseURL   string
-	apiKey    string
-	bearer    string // OAuth access token; takes precedence over apiKey when set
-	model     string
-	accountID string
-	client    *http.Client
+	baseURL string
+	// auth carries the credential AND the Codex account id. The account
+	// id is a header (ChatGPT-Account-ID), so core.Auth.Headers is its
+	// natural home — a separate field would be a second thing a
+	// per-request credential override could not reach.
+	auth   core.Auth
+	model  string
+	client *http.Client
 }
 
 // New returns a Provider using an API key (or OPENAI_API_KEY env
@@ -40,7 +42,7 @@ func New(opts ...Option) (*Provider, error) {
 	if key == "" {
 		return nil, fmt.Errorf("codex: API key not set (use WithAPIKey or OPENAI_API_KEY)")
 	}
-	return newProvider(cfg.baseURL, key, "", cfg.model, cfg.accountID), nil
+	return newProvider(cfg.baseURL, authFor(key, "", cfg.accountID), cfg.model), nil
 }
 
 // NewWithOAuth constructs a Provider from an OAuth credential
@@ -54,18 +56,27 @@ func NewWithOAuth(creds OAuthCredentials, opts ...Option) (*Provider, error) {
 	if creds.AccessToken == "" {
 		return nil, fmt.Errorf("codex: OAuth access token is empty")
 	}
-	return newProvider(cfg.baseURL, "", creds.AccessToken, cfg.model, creds.AccountID), nil
+	return newProvider(cfg.baseURL, authFor("", creds.AccessToken, creds.AccountID), cfg.model), nil
 }
 
-func newProvider(baseURL, apiKey, bearer, model, accountID string) *Provider {
+func newProvider(baseURL string, auth core.Auth, model string) *Provider {
 	return &Provider{
-		baseURL:   strings.TrimRight(ResolveBaseURL(baseURL), "/"),
-		apiKey:    apiKey,
-		bearer:    bearer,
-		model:     model,
-		accountID: accountID,
-		client:    &http.Client{Timeout: 120 * time.Second},
+		baseURL: strings.TrimRight(ResolveBaseURL(baseURL), "/"),
+		auth:    auth,
+		model:   model,
+		client:  &http.Client{Timeout: 120 * time.Second},
 	}
+}
+
+// authFor packs the two credential classes and the account id into one
+// core.Auth. An empty account id contributes no header rather than an
+// empty one, because Codex rejects a blank ChatGPT-Account-ID.
+func authFor(apiKey, bearer, accountID string) core.Auth {
+	a := core.Auth{APIKey: apiKey, Bearer: bearer}
+	if accountID != "" {
+		a.Headers = map[string]string{"ChatGPT-Account-ID": accountID}
+	}
+	return a
 }
 
 // ID implements core.Provider. Returns the family alone — "codex".
@@ -103,7 +114,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 	if err != nil {
 		return core.ModelResult{}, err
 	}
-	p.applyHeaders(httpReq)
+	p.applyHeaders(httpReq, req.Auth)
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return core.ModelResult{}, fmt.Errorf("codex: http: %w", err)
@@ -156,7 +167,7 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 	if err != nil {
 		return nil, err
 	}
-	p.applyHeaders(httpReq)
+	p.applyHeaders(httpReq, req.Auth)
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("codex: http: %w", err)
@@ -368,18 +379,23 @@ func (p *Provider) endpoint() string {
 //   - User-Agent: codex_cli_rs/0.125.0 (<platform>; <arch>)
 //   - ChatGPT-Account-ID (when set)
 //   - Authorization: Bearer <token>  (oauth or api key path)
-func (p *Provider) applyHeaders(req *http.Request) {
+//
+// override is the per-call core.ModelRequest.Auth, merged on top of the
+// credential bound at construction; a zero override changes nothing.
+func (p *Provider) applyHeaders(req *http.Request, override core.Auth) {
+	a := p.auth.Merge(override)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("originator", CodexOriginator)
 	req.Header.Set("version", CodexVersion)
 	req.Header.Set("User-Agent", CodexUserAgent())
-	if p.accountID != "" {
-		req.Header.Set("ChatGPT-Account-ID", p.accountID)
+	// Codex sends both credential classes in the same header.
+	if tok := a.Token(); tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
 	}
-	if p.bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+p.bearer)
-	} else if p.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	for k, v := range a.Headers {
+		if v != "" {
+			req.Header.Set(k, v)
+		}
 	}
 }
 

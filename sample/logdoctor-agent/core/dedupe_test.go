@@ -37,8 +37,8 @@ func (s *stubObservationSource) Observations(ctx context.Context) <-chan sdkcore
 func TestDedupeDropsRepeatsWithinCooldown(t *testing.T) {
 	src := &stubObservationSource{out: []sdkcore.Observation{
 		{Payload: "ERROR: oom"},
-		{Payload: "ERROR: oom"}, // same fingerprint
-		{Payload: "ERROR: oom"}, // same fingerprint
+		{Payload: "ERROR: oom"},    // same fingerprint
+		{Payload: "ERROR: oom"},    // same fingerprint
 		{Payload: "WARN: latency"}, // different
 	}}
 	d := domain.NewBurstSuppressor(src, "logline", 1*time.Hour)

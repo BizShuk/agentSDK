@@ -69,10 +69,10 @@ func NewReadLogTail(src Source) *ReadLogTail {
 }
 
 // Name delegates to the TypedTool.
-func (r *ReadLogTail) Name() string                { return r.Inner.Name() }
-func (r *ReadLogTail) Description() string         { return r.Inner.Description() }
-func (r *ReadLogTail) Schema() sdkcore.ToolSpec  { return r.Inner.Schema() }
-func (r *ReadLogTail) Risk() sdkcore.RiskLevel     { return r.Inner.Risk() }
+func (r *ReadLogTail) Name() string             { return r.Inner.Name() }
+func (r *ReadLogTail) Description() string      { return r.Inner.Description() }
+func (r *ReadLogTail) Schema() sdkcore.ToolSpec { return r.Inner.Schema() }
+func (r *ReadLogTail) Risk() sdkcore.RiskLevel  { return r.Inner.Risk() }
 func (r *ReadLogTail) Call(ctx context.Context, args json.RawMessage) (sdkcore.ToolResult, error) {
 	return r.Inner.Call(ctx, args)
 }

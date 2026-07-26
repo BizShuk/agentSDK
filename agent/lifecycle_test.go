@@ -14,7 +14,6 @@ import (
 
 	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/agent"
-	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/security"
@@ -77,7 +76,7 @@ type testAgent struct {
 
 func (a *testAgent) Name() string { return a.name }
 
-func (a *testAgent) Bootstrap(_ context.Context, _ *config.AppConfig) (*runtime.Engine, core.State, error) {
+func (a *testAgent) Bootstrap(_ context.Context, _ *agent.AppConfig) (*runtime.Engine, core.State, error) {
 	a.bootstrapRan = true
 	if a.bootstrapErr != nil {
 		return nil, core.State{}, a.bootstrapErr
@@ -116,7 +115,7 @@ func (a *testAgent) OnComplete(_ context.Context, final core.State) error {
 // Runner that does not implement Preflighter must skip that step.
 type preflightAgent struct{ *testAgent }
 
-func (a *preflightAgent) Preflight(context.Context, *config.AppConfig) error {
+func (a *preflightAgent) Preflight(context.Context, *agent.AppConfig) error {
 	a.preflightRan = true
 	return a.preflightErr
 }
@@ -239,7 +238,7 @@ type deadlineProbe struct {
 	probe func(context.Context)
 }
 
-func (a *deadlineProbe) Bootstrap(ctx context.Context, cfg *config.AppConfig) (*runtime.Engine, core.State, error) {
+func (a *deadlineProbe) Bootstrap(ctx context.Context, cfg *agent.AppConfig) (*runtime.Engine, core.State, error) {
 	a.probe(ctx)
 	return a.testAgent.Bootstrap(ctx, cfg)
 }
@@ -298,7 +297,7 @@ type interactiveAgent struct {
 
 func (a *interactiveAgent) Name() string { return a.name }
 
-func (a *interactiveAgent) Bootstrap(_ context.Context, _ *config.AppConfig) (*runtime.Engine, core.State, error) {
+func (a *interactiveAgent) Bootstrap(_ context.Context, _ *agent.AppConfig) (*runtime.Engine, core.State, error) {
 	eng, st := a.boot()
 	return eng, st, nil
 }
@@ -322,7 +321,7 @@ type pausingAgent struct {
 }
 
 func (a *pausingAgent) Name() string { return a.name }
-func (a *pausingAgent) Bootstrap(_ context.Context, _ *config.AppConfig) (*runtime.Engine, core.State, error) {
+func (a *pausingAgent) Bootstrap(_ context.Context, _ *agent.AppConfig) (*runtime.Engine, core.State, error) {
 	eng, st := pausingEngine()
 	return eng, st, nil
 }

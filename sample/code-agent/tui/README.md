@@ -1,6 +1,8 @@
 # tui — terminal UI library（root sub-package, zero-dep）
 
-`github.com/bizshuk/agentsdk/tui` 是 pi-tui 式的 terminal presentation library：differential rendering、不用 alternate screen（保留 scrollback）、CSI 2026 synchronized output。zero dependency（純 stdlib），且不 import agentsdk 任何 package —— caller 把 engine 的 `core.StreamEvent` 轉成 component 更新。第一個真 caller 是 [`sample/code-agent`](../sample/code-agent/)（interactive 模式的 transcript 區域即本 package 渲染）。
+`github.com/bizshuk/agentsdk/sample/code-agent/tui` 是 pi-tui 式的 terminal presentation library：differential rendering、不用 alternate screen（保留 scrollback）、CSI 2026 synchronized output。zero dependency（純 stdlib），且不 import agentsdk 任何 package —— caller 把 engine 的 `core.StreamEvent` 轉成 component 更新。
+
+本 package 於 2026-07-26 自 root `tui/` 移入 [`code-agent`](../)：SDK 與 `agent` 組裝層都不需要終端機畫面，只有具體的 agent 實作需要，而 code-agent 是唯一 caller（interactive 模式的 transcript 區域即本 package 渲染）。留在 root 會讓 SDK 表面暗示「用這個 SDK 就得用這套 TUI」，實際上 renderer 是應用自己的選擇。
 
 ## 現有能力（skeleton）
 

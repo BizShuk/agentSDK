@@ -36,10 +36,12 @@ import (
 // Provider implements core.Provider against the xAI Grok API.
 type Provider struct {
 	baseURL string
-	apiKey  string // API-key path
-	bearer  string // OAuth path; takes precedence over apiKey when set
-	model   string
-	client  *http.Client
+	// auth holds whichever credential class the constructor was given.
+	// Bearer outranks APIKey inside core.Auth.Token, so the OAuth path
+	// still wins without a second field to keep in sync.
+	auth   core.Auth
+	model  string
+	client *http.Client
 }
 
 // New returns a Provider using an API key (or XAI_API_KEY env fallback).
@@ -55,7 +57,7 @@ func New(opts ...Option) (*Provider, error) {
 	}
 	return &Provider{
 		baseURL: strings.TrimRight(ResolveBaseURL(cfg.baseURL), "/"),
-		apiKey:  key,
+		auth:    core.Auth{APIKey: key},
 		model:   cfg.model,
 		client:  &http.Client{Timeout: 120 * time.Second},
 	}, nil
@@ -78,7 +80,7 @@ func NewWithOAuth(creds OAuthCredentials, opts ...Option) (*Provider, error) {
 	}
 	return &Provider{
 		baseURL: strings.TrimRight(ResolveBaseURL(cfg.baseURL), "/"),
-		bearer:  creds.AccessToken,
+		auth:    core.Auth{Bearer: creds.AccessToken},
 		model:   cfg.model,
 		client:  &http.Client{Timeout: 120 * time.Second},
 	}, nil
@@ -122,7 +124,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 		return core.ModelResult{}, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", p.authHeader())
+	httpReq.Header.Set("Authorization", p.authHeader(req.Auth))
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return core.ModelResult{}, fmt.Errorf("grok: http: %w", err)
@@ -166,7 +168,7 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
-	httpReq.Header.Set("Authorization", p.authHeader())
+	httpReq.Header.Set("Authorization", p.authHeader(req.Auth))
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("grok: http: %w", err)
@@ -192,11 +194,8 @@ func (p *Provider) CountTokens(_ context.Context, msgs []core.Message) (int, err
 // authHeader returns the Authorization header value. OAuth bearer wins
 // over a baked-in API key when both are present, matching the priority
 // documented for the anthropic provider.
-func (p *Provider) authHeader() string {
-	if p.bearer != "" {
-		return "Bearer " + p.bearer
-	}
-	return "Bearer " + p.apiKey
+func (p *Provider) authHeader(override core.Auth) string {
+	return "Bearer " + p.auth.Merge(override).Token()
 }
 
 // ---------------------------------------------------------------------------

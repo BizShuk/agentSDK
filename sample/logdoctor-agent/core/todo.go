@@ -9,9 +9,9 @@ import (
 type TodoStatus string
 
 const (
-	TODO_STATUS_OPEN       TodoStatus = "open"
+	TODO_STATUS_OPEN        TodoStatus = "open"
 	TODO_STATUS_IN_PROGRESS TodoStatus = "in_progress"
-	TODO_STATUS_DONE       TodoStatus = "done"
+	TODO_STATUS_DONE        TodoStatus = "done"
 )
 
 // Todo is one remediation task. Persisted in-memory only — M4 may

@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/runtime"
 )
@@ -61,7 +60,7 @@ func Run(ctx context.Context, a Runner, opts ...RunOption) int {
 
 	// 1. Config. Opens the app dirs, generates the run ID, wires the
 	//    file-backed StateStore + WAL, and swaps slog's default handler.
-	cfg, err := config.OpenForCLI(name, o.logLevel)
+	cfg, err := OpenForCLI(name, o.logLevel)
 	if err != nil {
 		slog.Error("config load failed", "app", name, "err", err)
 		return EXIT_ERROR
@@ -292,7 +291,7 @@ func markFailed(ctx context.Context, e *runtime.Engine, seed core.State) core.St
 	return out
 }
 
-// useStdoutLog replaces the file handler config.OpenForCLI installed with a
+// useStdoutLog replaces the file handler OpenForCLI installed with a
 // JSON handler on stdout, keeping the run_id attribute.
 func useStdoutLog(runID string, level slog.Level) {
 	h := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})

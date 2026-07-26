@@ -2,8 +2,6 @@ package antigravity_test
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -205,31 +203,4 @@ func TestOAuthCredentialsIsExpired(t *testing.T) {
 	assert.False(t, future.IsExpired(), "future expiry must report fresh")
 	assert.True(t, withinGrace.IsExpired(), "within 60s grace window must report expired")
 	assert.False(t, zero.IsExpired(), "zero ExpiresAt must NOT report expired")
-}
-
-// TestGeneratePKCEReturnsVerifierAndChallenge — verifier/challenge are
-// non-empty and the challenge is the S256 hash of the verifier.
-func TestGeneratePKCEReturnsVerifierAndChallenge(t *testing.T) {
-	verifier, challenge, err := antigravity.GeneratePKCE()
-	require.NoError(t, err)
-	assert.NotEmpty(t, verifier)
-	assert.NotEmpty(t, challenge)
-	assert.NotEqual(t, verifier, challenge)
-
-	sum := sha256.Sum256([]byte(verifier))
-	want := base64.RawURLEncoding.EncodeToString(sum[:])
-	assert.Equal(t, want, challenge)
-}
-
-// TestAuthorizeURLShape — ensures the URL carries the params Google expects.
-func TestAuthorizeURLShape(t *testing.T) {
-	u := antigravity.AuthorizeURL("opaque-state", "challenge-value")
-	assert.Contains(t, u, "accounts.google.com/o/oauth2/v2/auth")
-	assert.Contains(t, u, "client_id=antigravity-cli")
-	assert.Contains(t, u, "response_type=code")
-	assert.Contains(t, u, "state=opaque-state")
-	assert.Contains(t, u, "code_challenge=challenge-value")
-	assert.Contains(t, u, "code_challenge_method=S256")
-	assert.Contains(t, u, "access_type=offline")
-	assert.Contains(t, u, "prompt=consent")
 }

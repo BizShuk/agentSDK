@@ -8,18 +8,18 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/action"
+	"github.com/bizshuk/agentsdk/agent/permission"
+	"github.com/bizshuk/agentsdk/agent/session"
 	"github.com/bizshuk/agentsdk/agent/spec"
-	appconfig "github.com/bizshuk/agentsdk/config"
+	"github.com/bizshuk/agentsdk/agent/wire"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/permission"
+	"github.com/bizshuk/agentsdk/middleware/preset"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/prompt"
 	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/runtime"
-	"github.com/bizshuk/agentsdk/session"
 	"github.com/bizshuk/agentsdk/skill"
 	builtin "github.com/bizshuk/agentsdk/tool"
-	"github.com/bizshuk/agentsdk/wire"
 )
 
 // Agent is a prepared configuration plus its injected dependencies. It
@@ -50,7 +50,7 @@ type Parts struct {
 	Skills    *skill.Registry
 	Prompt    prompt.Builder
 	Config    Config
-	AppConfig *appconfig.AppConfig
+	AppConfig *AppConfig
 	Cwd       string
 }
 
@@ -100,7 +100,7 @@ func (a *Agent) Parts() *Parts { return a.parts }
 //
 // A run that discovers a bad API key on its first model call has already
 // created state and a WAL entry that will sit in `running` forever.
-func (a *Agent) Preflight(_ context.Context, _ *appconfig.AppConfig) error {
+func (a *Agent) Preflight(_ context.Context, _ *AppConfig) error {
 	if a.deps.provider != nil {
 		return nil
 	}
@@ -127,7 +127,7 @@ func (a *Agent) Preflight(_ context.Context, _ *appconfig.AppConfig) error {
 //   - one permission.Engine instance feeds BOTH Engine.Approval and the
 //     middleware chain; building two would let the gate and the chain
 //     disagree about the same call
-func (a *Agent) Bootstrap(ctx context.Context, ac *appconfig.AppConfig) (*runtime.Engine, core.State, error) {
+func (a *Agent) Bootstrap(ctx context.Context, ac *AppConfig) (*runtime.Engine, core.State, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, core.State{}, fmt.Errorf("agent: getwd: %w", err)
@@ -477,14 +477,14 @@ func (a *Agent) buildMiddleware(sandbox action.Sandbox, perm core.ApprovalPolicy
 	}
 	switch a.cfg.Middleware.Preset {
 	case spec.MIDDLEWARE_SECURE:
-		// A typed nil interface would make SecureMiddleware install a gate
+		// A typed nil interface would make preset.Secure install a gate
 		// that always denies, so pass an untyped nil when there is none.
 		if perm == nil {
-			return appconfig.SecureMiddleware(sandbox, nil)
+			return preset.Secure(sandbox, nil)
 		}
-		return appconfig.SecureMiddleware(sandbox, perm)
+		return preset.Secure(sandbox, perm)
 	case spec.MIDDLEWARE_DEFAULT:
-		return appconfig.DefaultMiddleware()
+		return preset.Default()
 	default: // MIDDLEWARE_NONE
 		return nil
 	}
@@ -496,7 +496,7 @@ func (a *Agent) buildMiddleware(sandbox action.Sandbox, perm core.ApprovalPolicy
 // memory block is off. agent.Run backfills from AppConfig only when the
 // engine leaves them nil, so returning nils here genuinely disables
 // persistence rather than deferring to the default.
-func (a *Agent) buildPersistence(ac *appconfig.AppConfig) (core.StateStore, core.WriteAheadLog) {
+func (a *Agent) buildPersistence(ac *AppConfig) (core.StateStore, core.WriteAheadLog) {
 	if a.cfg.Memory == nil || a.cfg.Memory.Store != spec.MEMORY_STORE_FILE {
 		return nil, nil
 	}
@@ -506,7 +506,7 @@ func (a *Agent) buildPersistence(ac *appconfig.AppConfig) (core.StateStore, core
 // buildSessions adds lineage — list, resume, fork, tree — on top of the
 // store. Without persistence there is nothing to have lineage over, which
 // spec.Validate already rejects.
-func (a *Agent) buildSessions(ac *appconfig.AppConfig, store core.StateStore, wal core.WriteAheadLog) (*session.Manager, error) {
+func (a *Agent) buildSessions(ac *AppConfig, store core.StateStore, wal core.WriteAheadLog) (*session.Manager, error) {
 	if a.cfg.Sessions == nil || store == nil {
 		return nil, nil
 	}
@@ -546,7 +546,7 @@ func (a *Agent) buildSink() core.EventSink {
 
 // seedState builds the opening State: budget and autonomy from Limits,
 // messages from the prompt builder.
-func (a *Agent) seedState(ctx context.Context, ac *appconfig.AppConfig, b prompt.Builder, cwd string) (core.State, error) {
+func (a *Agent) seedState(ctx context.Context, ac *AppConfig, b prompt.Builder, cwd string) (core.State, error) {
 	state := core.State{
 		RunID:          ac.RunID,
 		ReasoningStyle: core.ReasoningStyle(a.cfg.Reasoning.Style),

@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/action"
-	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory/filestore"
+	"github.com/bizshuk/agentsdk/middleware/preset"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
@@ -99,7 +99,7 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 	// (HIGH risk) triggers a REQUEST_APPROVAL at L2. sandbox policy must
 	// be non-nil so the built-in Write/Edit/Bash tools can path-check
 	// their args — matches the Policy passed to RegisterDefaults above.
-	loop.Middleware = config.SecureMiddleware(action.DefaultPolicy(), action.DefaultApprovalPolicy{})
+	loop.Middleware = preset.Secure(action.DefaultPolicy(), action.DefaultApprovalPolicy{})
 	loop.Emitter = func(eff core.Instruction) {
 		writeEnvelope(cmd, eff)
 	}

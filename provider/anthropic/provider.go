@@ -226,7 +226,7 @@ func (p *Provider) applyAuthHeaders(req *http.Request, override core.Auth) {
 	useOverride := override.APIKey != "" || override.Bearer != "" || len(override.Headers) > 0
 	src := p.auth
 	if useOverride {
-		src = mergeAuth(p.auth, override)
+		src = p.auth.Merge(override)
 	}
 	if src.Bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+src.Bearer)
@@ -238,32 +238,6 @@ func (p *Provider) applyAuthHeaders(req *http.Request, override core.Auth) {
 			req.Header.Set(k, v)
 		}
 	}
-}
-
-// mergeAuth returns base with override fields filled in where override
-// has a non-zero value. We never mutate base or override.
-func mergeAuth(base, override core.Auth) core.Auth {
-	out := base
-	if override.APIKey != "" {
-		out.APIKey = override.APIKey
-	}
-	if override.Bearer != "" {
-		out.Bearer = override.Bearer
-	}
-	if override.BaseURL != "" {
-		out.BaseURL = override.BaseURL
-	}
-	if len(override.Headers) > 0 {
-		merged := make(map[string]string, len(out.Headers)+len(override.Headers))
-		for k, v := range out.Headers {
-			merged[k] = v
-		}
-		for k, v := range override.Headers {
-			merged[k] = v
-		}
-		out.Headers = merged
-	}
-	return out
 }
 
 // resolveEndpoint computes the /v1/messages URL for the configured

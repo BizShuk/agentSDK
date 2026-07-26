@@ -136,6 +136,55 @@ type Auth struct {
 	BaseURL string `json:"base_url,omitempty"`
 }
 
+// IsZero reports whether the Auth carries nothing — no credential, no
+// header override, no endpoint override. Adapters use it to skip the
+// merge entirely when a request brings no per-call override.
+func (a Auth) IsZero() bool {
+	return a.APIKey == "" && a.Bearer == "" && a.BaseURL == "" && len(a.Headers) == 0
+}
+
+// Merge returns a copy of a with every non-zero field of override applied
+// on top. Neither receiver nor argument is mutated, so the construction-
+// time Auth an adapter holds stays intact across concurrent requests —
+// which is the whole reason this returns a value rather than mutating.
+//
+// Headers merge key by key rather than replacing the map wholesale: a
+// per-request override that sets one header must not drop the adapter's
+// own defaults.
+func (a Auth) Merge(override Auth) Auth {
+	out := a
+	if override.APIKey != "" {
+		out.APIKey = override.APIKey
+	}
+	if override.Bearer != "" {
+		out.Bearer = override.Bearer
+	}
+	if override.BaseURL != "" {
+		out.BaseURL = override.BaseURL
+	}
+	if len(override.Headers) > 0 {
+		merged := make(map[string]string, len(out.Headers)+len(override.Headers))
+		for k, v := range out.Headers {
+			merged[k] = v
+		}
+		for k, v := range override.Headers {
+			merged[k] = v
+		}
+		out.Headers = merged
+	}
+	return out
+}
+
+// Token returns the credential that should be carried, preferring the
+// OAuth access token. Adapters that send both classes in the same header
+// (`Authorization: Bearer`) use this instead of branching.
+func (a Auth) Token() string {
+	if a.Bearer != "" {
+		return a.Bearer
+	}
+	return a.APIKey
+}
+
 // ---------------------------------------------------------------------------
 // ModelRequest — the bridge between runtime / proxy and a Provider.
 //

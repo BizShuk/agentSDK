@@ -1,11 +1,18 @@
-// Package config provides the one-stop AppConfig for CLI samples.
-// It wraps gosdk/config initialization, log file setup, and filestore-backed
-// StateStore + WriteAheadLog wiring in a single OpenForCLI call.
+// Package preset holds the named middleware chains an application picks
+// from: Default for the harness layers, Secure for harness plus the
+// security layers.
 //
-// DefaultMiddleware lives here (rather than runtime/) because it wires
-// concrete harness/loopguard implementations — importing those from
-// runtime would create a dependency cycle with middleware/.
-package config
+// A preset is a chain, not a menu. The ORDER of these layers is a
+// correctness property — retry outermost so it re-runs the whole inner
+// stack, sanitizer innermost so it rewrites tool output before anything
+// else sees it — which is why config selects a preset by name rather than
+// composing layers itself.
+//
+// It lives under middleware/ rather than in runtime/ because it wires the
+// concrete harness, loopguard, and security implementations; runtime
+// importing those would cycle back through middleware. The subpackage
+// direction (preset → middleware) does not.
+package preset
 
 import (
 	"time"
@@ -18,20 +25,20 @@ import (
 	"github.com/bizshuk/agentsdk/middleware/security"
 )
 
-// DefaultMiddleware returns the M2 chain: retry → timeout → budget → loopguard.
+// Default returns the M2 chain: retry → timeout → budget → loopguard.
 // Order matches plans/plan-only-and-plan-breezy-pike.md.
 //
 // Callers wire this explicitly:
 //
-//	loop.Middleware = config.DefaultMiddleware()
+//	loop.Middleware = preset.Default()
 //
 // When Engine.Middleware is nil, the runtime defaults to middleware.Identity()
 // (no-op) — the caller is responsible for choosing a chain.
 //
 // This chain has NO security layer (sandbox / approval / spotlight /
-// sanitizer). Use SecureMiddleware for production runs that execute tools
+// sanitizer). Use Secure for production runs that execute tools
 // against untrusted or user-facing input.
-func DefaultMiddleware() middleware.Middleware {
+func Default() middleware.Middleware {
 	return middleware.Chain(
 		harness.Retry(harness.RetryConfig{N: 3, BaseBackoff: 100 * time.Millisecond, MaxBackoff: 5 * time.Second}),
 		harness.Timeout(harness.TimeoutConfig{PerEffect: 60 * time.Second}),
@@ -40,7 +47,7 @@ func DefaultMiddleware() middleware.Middleware {
 	)
 }
 
-// SecureMiddleware returns the full M3+M4 chain: the M2 harness layers
+// Secure returns the full M3+M4 chain: the M2 harness layers
 // plus sandbox → approval → spotlight → sanitizer, wrapping the base
 // dispatcher.
 //
@@ -57,8 +64,8 @@ func DefaultMiddleware() middleware.Middleware {
 //
 // Nil policy disables the approval gate (every tool call passes); nil
 // sandboxPolicy disables the sandbox. Both nil is equivalent to
-// DefaultMiddleware() plus spotlight/sanitizer.
-func SecureMiddleware(sandboxPolicy action.Sandbox, approval core.ApprovalPolicy) middleware.Middleware {
+// Default() plus spotlight/sanitizer.
+func Secure(sandboxPolicy action.Sandbox, approval core.ApprovalPolicy) middleware.Middleware {
 	chain := []middleware.Middleware{
 		harness.Retry(harness.RetryConfig{N: 3, BaseBackoff: 100 * time.Millisecond, MaxBackoff: 5 * time.Second}),
 		harness.Timeout(harness.TimeoutConfig{PerEffect: 60 * time.Second}),

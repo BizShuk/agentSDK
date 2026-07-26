@@ -38,7 +38,7 @@ func (p *ScriptedProvider) Name() string { return "fake-scripted" }
 func (p *ScriptedProvider) Models() []core.ModelSpec {
 	return []core.ModelSpec{{
 		ID: "fake-scripted", Family: "fake", Reasoning: false,
-		Input: []core.Modality{core.MODALITY_TEXT},
+		Input:         []core.Modality{core.MODALITY_TEXT},
 		ContextWindow: 128000, MaxTokens: 4096,
 	}}
 }

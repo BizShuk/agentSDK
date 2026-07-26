@@ -5,7 +5,7 @@
 // Note: gosdk v1.2.0+ renamed GetAppLogDir to GetAppLogsDir and the default
 // on-disk directory from "log/" to "logs/" (this package follows gosdk's
 // choice — see github.com/bizshuk/gosdk/config.GetAppLogsDir).
-package config
+package agent
 
 import (
 	"fmt"
@@ -16,22 +16,25 @@ import (
 
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory/filestore"
-	utils "github.com/bizshuk/auth/utils"
 	gosdkconfig "github.com/bizshuk/gosdk/config"
 )
 
 // AppConfig is the result of OpenForCLI — all wiring needed by a CLI sample
 // in one struct. Callers wire Store / WAL directly from the fields;
 // DataDir / LogDir / RunID are also exposed for further wiring.
+//
+// It carries no credential store. It used to hold an *auth.FileStore, and
+// that single field made auth a transitive dependency of every binary that
+// built an agent — for a field nothing ever read. Credential storage now
+// lives behind provider/credential, which a composition root wires in only
+// when it actually wants stored credentials.
 type AppConfig struct {
 	DataDir    string             // ~/.config/<appName>/data
 	LogDir     string             // ~/.config/<appName>/log
-	AuthDir    string             // ~/.config/<appName>/data/auth
 	RunID      string             // UnixNano, used as states/wal/log filename
 	LogFile    string             // <LogDir>/<RunID>.log
 	StateStore core.StateStore    // file-backed StateStore, ready to use
 	WAL        core.WriteAheadLog // file-backed WriteAheadLog, ready to use
-	AuthStore  *utils.FileStore   // provider credentials (0600 JSON files)
 }
 
 // OpenForCLI does everything a CLI sample needs in one call:
@@ -47,7 +50,7 @@ type AppConfig struct {
 // should use MustOpenForCLI.
 func OpenForCLI(appName string, level slog.Level) (*AppConfig, error) {
 	if appName == "" {
-		return nil, fmt.Errorf("config: appName must not be empty")
+		return nil, fmt.Errorf("agent: appName must not be empty")
 	}
 
 	// 1. Bind appName. Calling WithAppName with the same appName twice is
@@ -59,7 +62,7 @@ func OpenForCLI(appName string, level slog.Level) (*AppConfig, error) {
 	//    indicator — GetAppDataDir() returns "data" when appName is empty
 	//    (via filepath.Join("", "data")), not "".
 	if gosdkconfig.GetAppName() == "" {
-		return nil, fmt.Errorf("config: gosdk/config not initialised (call config.Default(config.WithAppName(%q)))", appName)
+		return nil, fmt.Errorf("agent: gosdk/config not initialised (call config.Default(config.WithAppName(%q)))", appName)
 	}
 
 	dataDir := gosdkconfig.GetAppDataDir()
@@ -68,7 +71,7 @@ func OpenForCLI(appName string, level slog.Level) (*AppConfig, error) {
 	walDir := filepath.Join(dataDir, "wal")
 	for _, d := range []string{statesDir, walDir, logDir} {
 		if err := os.MkdirAll(d, 0o750); err != nil {
-			return nil, fmt.Errorf("config: mkdir %s: %w", d, err)
+			return nil, fmt.Errorf("agent: mkdir %s: %w", d, err)
 		}
 	}
 
@@ -76,39 +79,27 @@ func OpenForCLI(appName string, level slog.Level) (*AppConfig, error) {
 	runID := fmt.Sprintf("%d", time.Now().UnixNano())
 	logFile := filepath.Join(logDir, runID+".log")
 	if err := openRunLog(logFile, runID, level); err != nil {
-		return nil, fmt.Errorf("config: open log: %w", err)
+		return nil, fmt.Errorf("agent: open log: %w", err)
 	}
 
 	// 4. File-backed StateStore + WriteAheadLog.
 	store, err := filestore.NewJSONFileStateStore(dataDir)
 	if err != nil {
-		return nil, fmt.Errorf("config: state store: %w", err)
+		return nil, fmt.Errorf("agent: state store: %w", err)
 	}
 	wal, err := filestore.NewJSONLFileLog(dataDir)
 	if err != nil {
-		return nil, fmt.Errorf("config: wal: %w", err)
-	}
-
-	// 5. Provider 憑證 store (0700 目錄 / 0600 檔案)。
-	authStore, err := utils.NewFileStore(authDir(dataDir))
-	if err != nil {
-		return nil, fmt.Errorf("config: auth store: %w", err)
+		return nil, fmt.Errorf("agent: wal: %w", err)
 	}
 
 	return &AppConfig{
 		DataDir:    dataDir,
 		LogDir:     logDir,
-		AuthDir:    authStore.Dir(),
 		RunID:      runID,
 		LogFile:    logFile,
 		StateStore: store,
 		WAL:        wal,
-		AuthStore:  authStore,
 	}, nil
-}
-
-func authDir(dataDir string) string {
-	return filepath.Join(dataDir, "auth")
 }
 
 // MustOpenForCLI is like OpenForCLI but panics on error — for CLI entry

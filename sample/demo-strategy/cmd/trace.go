@@ -20,15 +20,15 @@ const MAX_TRACE_STEPS = 12
 // 它模擬 runtime 對 emitted instruction 的回饋(model 回 tool_use、
 // tool 回結果、reviewer 給評語…),讓純函式的 NextStep 能推進。
 type strategy struct {
-	id       string             // CLI 識別字,如 "react"
-	title    string             // 人類可讀標題
-	style    core.ReasoningStyle // 對應的 ReasoningStyle
-	blurb    string             // 一行說明
-	phaseKey string             // 存 phase 的 scratch key(顯示用)
-	initPhase string            // phase scratch 未設定時的預設顯示值
-	prompt   string             // 開場 user message
-	rule     core.DecisionRule  // 被測的規則
-	seed     func(*core.State)  // 初始 scratch 播種(可為 nil)
+	id        string              // CLI 識別字,如 "react"
+	title     string              // 人類可讀標題
+	style     core.ReasoningStyle // 對應的 ReasoningStyle
+	blurb     string              // 一行說明
+	phaseKey  string              // 存 phase 的 scratch key(顯示用)
+	initPhase string              // phase scratch 未設定時的預設顯示值
+	prompt    string              // 開場 user message
+	rule      core.DecisionRule   // 被測的規則
+	seed      func(*core.State)   // 初始 scratch 播種(可為 nil)
 	// fold 模擬環境對第 step 步 instruction 的回應,回傳 true 代表環境
 	// 結束了這一回合(等同 runtime 收到 end_turn 的 COMPLETED 短路)。
 	fold func(s *core.State, step int) bool

@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bizshuk/agentsdk/config"
+	"github.com/bizshuk/agentsdk/agent"
+	"github.com/bizshuk/agentsdk/agent/wire"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/wire"
 	"github.com/spf13/cobra"
 )
 
@@ -47,7 +47,7 @@ func NewRoot() *cobra.Command {
 		Short:   "Full-harness agentsdk demo: tui + wire + hooks/permission/session/skill/subagent",
 		Version: Version,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := config.MustOpenForCLI(appName, slog.LevelInfo)
+			cfg := agent.MustOpenForCLI(appName, slog.LevelInfo)
 			ctx := cmd.Context()
 			if ctx == nil {
 				ctx = context.Background()

@@ -10,12 +10,12 @@ import (
 
 	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/harness"
 	"github.com/bizshuk/agentsdk/middleware/security"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +37,8 @@ func (stubApproval) Decide(_ struct{}, _ core.AutonomyLevel, _ core.CallToolInst
 }
 
 // TestReActOneToolCall drives a single read-then-end loop:
-//   FakeProvider queues (1) end_turn → expect loop to exit on DONE.
+//
+//	FakeProvider queues (1) end_turn → expect loop to exit on DONE.
 func TestReActEndTurnExitsLoop(t *testing.T) {
 	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("done")
@@ -49,9 +50,9 @@ func TestReActEndTurnExitsLoop(t *testing.T) {
 	loop := runtime.NewEngine(step, prov, action.NewRegistry())
 	loop.Emitter = func(eff core.Instruction) {}
 	state := core.State{
-		RunID:        "r1",
+		RunID:          "r1",
 		ReasoningStyle: core.REASON_REACT,
-		Budget:       core.Budget{MaxTurns: 5},
+		Budget:         core.Budget{MaxTurns: 5},
 	}
 
 	final, err := loop.Run(context.Background(), state)
@@ -61,10 +62,10 @@ func TestReActEndTurnExitsLoop(t *testing.T) {
 }
 
 // TestReActOneToolCall exercises CALL_TOOL → CALL_MODEL → DONE:
-//   1. ReAct starts in THINK → emits CALL_MODEL
-//   2. FakeProvider returns tool_use (add 2+3) → loop dispatches tool, gets result 5
-//   3. Pattern advances to OBSERVE → emits CALL_MODEL
-//   4. FakeProvider returns end_turn → loop exits DONE
+//  1. ReAct starts in THINK → emits CALL_MODEL
+//  2. FakeProvider returns tool_use (add 2+3) → loop dispatches tool, gets result 5
+//  3. Pattern advances to OBSERVE → emits CALL_MODEL
+//  4. FakeProvider returns end_turn → loop exits DONE
 func TestReActOneToolCallThenEnd(t *testing.T) {
 	prov := testutil.NewScriptedProvider()
 	prov.EnqueueToolCall("c1", "add", map[string]any{"n1": 2, "n2": 3})
@@ -86,9 +87,9 @@ func TestReActOneToolCallThenEnd(t *testing.T) {
 	loop.Approval = stubApproval{}
 	loop.Emitter = func(eff core.Instruction) {}
 	state := core.State{
-		RunID:        "r1",
+		RunID:          "r1",
 		ReasoningStyle: core.REASON_REACT,
-		Budget:       core.Budget{MaxTurns: 10},
+		Budget:         core.Budget{MaxTurns: 10},
 	}
 
 	final, err := loop.Run(context.Background(), state)
@@ -128,9 +129,9 @@ func TestPlannerExecutorDispatchesBlueprint(t *testing.T) {
 	})
 
 	state := core.State{
-		RunID:        "r1",
+		RunID:          "r1",
 		ReasoningStyle: core.REASON_PLAN_THEN_RUN,
-		Budget:       core.Budget{MaxTurns: 5},
+		Budget:         core.Budget{MaxTurns: 5},
 	}
 	planning.SeedBlueprint(&state, []core.ToolCall{
 		{ID: "s1", Name: "noop", Args: map[string]any{}},
@@ -175,9 +176,9 @@ func TestBudgetExceededStopsLoop(t *testing.T) {
 	loop.Approval = stubApproval{}
 	loop.Emitter = func(eff core.Instruction) {}
 	state := core.State{
-		RunID:        "r1",
+		RunID:          "r1",
 		ReasoningStyle: core.REASON_REACT,
-		Budget:       core.Budget{MaxTurns: 3},
+		Budget:         core.Budget{MaxTurns: 3},
 	}
 
 	final, err := loop.Run(context.Background(), state)
@@ -203,9 +204,9 @@ func TestStoreAndWAL(t *testing.T) {
 	loop.Log = wal
 
 	state := core.State{
-		RunID:        "r1",
+		RunID:          "r1",
 		ReasoningStyle: core.REASON_REACT,
-		Budget:       core.Budget{MaxTurns: 5},
+		Budget:         core.Budget{MaxTurns: 5},
 	}
 	final, err := loop.Run(context.Background(), state)
 	require.NoError(t, err)
@@ -265,9 +266,9 @@ func TestRunWithInputSeedsFirstTurn(t *testing.T) {
 	loop.Emitter = func(eff core.Instruction) {}
 
 	state := core.State{
-		RunID:        "r1",
+		RunID:          "r1",
 		ReasoningStyle: core.REASON_REACT,
-		Budget:       core.Budget{MaxTurns: 5},
+		Budget:         core.Budget{MaxTurns: 5},
 	}
 
 	_, err := loop.RunWithEvent(context.Background(), state, core.Event{
@@ -275,7 +276,7 @@ func TestRunWithInputSeedsFirstTurn(t *testing.T) {
 		Observation: &core.Observation{
 			ID: "p1", Source: "test",
 			ObservedAt: time.Now().UTC(),
-			Payload: "wake up",
+			Payload:    "wake up",
 		},
 	})
 	require.NoError(t, err)
@@ -286,6 +287,7 @@ func TestRunWithInputSeedsFirstTurn(t *testing.T) {
 var _ = json.Marshal
 var _ = errors.New
 var _ = harness.IsBudgetExceeded
+
 // --- batch settlement (one round, N tool calls) ---
 
 // toolResultsOf collects every ROLE_TOOL part in transcript order, which

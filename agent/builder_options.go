@@ -69,7 +69,7 @@ func (b *builder) apply(opts []Option) error {
 // WithProvider supplies the model provider directly, overriding the
 // Model block entirely. This is how a test injects a fake, and how an
 // application reuses a provider it already built (a shared client, or one
-// wrapped by config.NewRefreshingProvider).
+// wrapped by credential.NewRefreshingProvider).
 func WithProvider(p core.Provider) Option {
 	return func(b *builder) error {
 		if p == nil {

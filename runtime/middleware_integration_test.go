@@ -6,13 +6,13 @@ import (
 
 	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/memory/filestore"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/harness"
 	"github.com/bizshuk/agentsdk/middleware/loopguard"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -122,8 +122,8 @@ func TestRuntimeResumeFromWAL(t *testing.T) {
 	// First run — Router stub emits one NOTIFY + DONE.
 	state := core.State{
 		RunID: "r1", ReasoningStyle: core.REASON_PICK_AGENT,
-		Status: core.RUN_STATUS_RUNNING,
-		Budget: core.Budget{MaxTurns: 5},
+		Status:       core.RUN_STATUS_RUNNING,
+		Budget:       core.Budget{MaxTurns: 5},
 		LastInputSeq: 0,
 	}
 	_, err = loop.Run(context.Background(), state)

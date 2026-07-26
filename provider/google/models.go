@@ -344,7 +344,7 @@ func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
 			url += "&pageToken=" + token
 		}
 		raw, err := utils.Fetch(ctx, p.client, url, map[string]string{
-			"x-goog-api-key": p.apiKey,
+			"x-goog-api-key": p.auth.Token(),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("google: list models: %w", err)

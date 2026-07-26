@@ -34,7 +34,7 @@ import (
 // single Generate call when streaming fails.
 type Provider struct {
 	baseURL string
-	apiKey  string
+	auth    core.Auth
 	model   string
 	client  *http.Client
 }
@@ -49,7 +49,7 @@ func New(opts ...Option) (*Provider, error) {
 	}
 	return &Provider{
 		baseURL: strings.TrimRight(ResolveBaseURL(cfg.baseURL), "/"),
-		apiKey:  ResolveAPIKey(cfg.apiKey),
+		auth:    core.Auth{APIKey: ResolveAPIKey(cfg.apiKey)},
 		model:   cfg.model,
 		client:  &http.Client{Timeout: 120 * time.Second},
 	}, nil
@@ -87,7 +87,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 	if err != nil {
 		return core.ModelResult{}, err
 	}
-	p.applyHeaders(httpReq, false)
+	p.applyHeaders(httpReq, req.Auth, false)
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return core.ModelResult{}, fmt.Errorf("ollama: http: %w", err)
@@ -122,7 +122,7 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 	if err != nil {
 		return nil, err
 	}
-	p.applyHeaders(httpReq, true)
+	p.applyHeaders(httpReq, req.Auth, true)
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("ollama: http: %w", err)
@@ -151,13 +151,21 @@ func (p *Provider) CountTokens(_ context.Context, msgs []core.Message) (int, err
 // applyHeaders sets Content-Type, optional Accept for SSE, and the
 // Bearer token when one was configured. Local Ollama installs leave
 // the Authorization header off entirely.
-func (p *Provider) applyHeaders(req *http.Request, stream bool) {
+// override is the per-call core.ModelRequest.Auth, merged on top of the
+// credential bound at construction; a zero override changes nothing.
+func (p *Provider) applyHeaders(req *http.Request, override core.Auth, stream bool) {
+	a := p.auth.Merge(override)
 	req.Header.Set("Content-Type", "application/json")
 	if stream {
 		req.Header.Set("Accept", "text/event-stream")
 	}
-	if p.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	if tok := a.Token(); tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
+	for k, v := range a.Headers {
+		if v != "" {
+			req.Header.Set(k, v)
+		}
 	}
 }
 

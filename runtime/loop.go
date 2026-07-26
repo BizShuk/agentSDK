@@ -4,7 +4,7 @@
 //
 // Middleware chain is wired by the caller. For the M2 defaults use:
 //
-//	loop.Middleware = config.DefaultMiddleware()
+//	loop.Middleware = preset.Default()
 //
 // M3 / M4 slots in tracing, sandbox, approval, spotlight / sanitizer at
 // the appropriate positions without changing the public Engine API.
@@ -30,7 +30,7 @@ type Emitter func(core.Instruction)
 // gate), and Emit (nil = drops emit instructions).
 // Callers that want the M2 defaults should wire:
 //
-//	loop.Middleware = config.DefaultMiddleware()
+//	loop.Middleware = preset.Default()
 type Engine struct {
 	Step       core.Decide
 	Model      core.Provider
@@ -40,7 +40,7 @@ type Engine struct {
 	Approval   core.ApprovalPolicy
 	Notifier   core.Notifier
 	Emitter    Emitter
-	Middleware middleware.Middleware // nil = Identity(); wire config.DefaultMiddleware() for M2 chain
+	Middleware middleware.Middleware // nil = Identity(); wire preset.Default() for M2 chain
 	Hooks      core.Hooks            // nil = no lifecycle hooks; default impl: hook.Runner
 	Sink       core.EventSink        // nil = no presentation stream events
 
@@ -64,7 +64,7 @@ func NewEngine(step core.Decide, model core.Provider, tools core.ToolRegistry) *
 // When Middleware is nil, the chain defaults to middleware.Identity (no-ops).
 // Callers that want retry/timeout/budget/loopguard should wire:
 //
-//	loop.Middleware = config.DefaultMiddleware()
+//	loop.Middleware = preset.Default()
 func (e *Engine) resolveChain() middleware.Middleware {
 	if e.Middleware != nil {
 		return e.Middleware

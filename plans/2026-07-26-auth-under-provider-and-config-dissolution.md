@@ -1,5 +1,12 @@
 # auth 沉入 provider 之下，`config/` 解體
 
+`狀態 2026-07-26`：`Phase A / B / C1 / C2 全部落地`，root + 8 個 sample module 全綠
+（build + vet + test）。分層由 `go list -deps` 驗收：`agent` 與 `provider` registry 本體對
+`bizshuk/auth` 皆為 `0`，只有 `provider/credential` 非零；`config/` 目錄已消失。
+in-tree OAuth `967` → `194` 行。實作與本文的差異已回寫對應段落。
+
+`未關閉`：OAuth 登入流程未經實跑驗證（見「風險」第一列）；`provider/credential` 尚無 caller。
+
 ## Context
 
 架構審查（2026-07-26）列出六項落差，其中 `3`/`4`/`5` 與 sample 分類已落地。剩下的兩項互相糾纏，因為 `agent → auth` 的那條線正好穿過 `config/`：

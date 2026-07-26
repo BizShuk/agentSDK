@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 
-	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/runtime"
 )
@@ -32,7 +31,7 @@ import (
 // Completer, Interactive); both *Agent and the wrapper remain a Runner.
 type Runner interface {
 	Name() string
-	Bootstrap(ctx context.Context, cfg *config.AppConfig) (*runtime.Engine, core.State, error)
+	Bootstrap(ctx context.Context, cfg *AppConfig) (*runtime.Engine, core.State, error)
 }
 
 // Preflighter is an optional Agent extension. When implemented, Preflight
@@ -44,7 +43,7 @@ type Runner interface {
 // that discovers a bad API key on its first model call has already created
 // a run that will sit in `running` forever.
 type Preflighter interface {
-	Preflight(ctx context.Context, cfg *config.AppConfig) error
+	Preflight(ctx context.Context, cfg *AppConfig) error
 }
 
 // Completer is an optional Agent extension. When implemented, OnComplete

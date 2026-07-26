@@ -48,7 +48,7 @@ func main() {
 設定檔驅動——應用層完全不出現任何 harness package：
 
 ```go
-cfg, err := agent.LoadFile("agent.yaml")
+cfg, err := agentconfig.LoadFile("agent.yaml")
 agent.Main(agent.MustNew(cfg))
 ```
 
@@ -100,12 +100,15 @@ go run . w --list model.provider # 列出單一欄位的選項
 
 ```tree
 agentsdk/
-├── go.work                    # 9 modules：root + 8 samples（tui/provider 已併回 root）
+├── go.work                    # 9 modules：root + 8 samples（provider 已併回 root，tui 已下沉 code-agent）
 ├── go.mod                     # module github.com/bizshuk/agentsdk
 ├── main.go                    # cobra root binary;掛載 `provider` 與 `wizard` 兩個子指令
 ├── cmd/                       # root subcommands (provider: smoke-test CLI；wizard/w: 設定產生器)
 ├── agent/                     # 組裝層：spec.Config → 8 stage pipeline → *runtime.Engine（實作 agent.Runner；含 CLI lifecycle 與 Interactive seam）
-│   └── spec/                  # 宣告層：Config / Choice / tier 展開 / 驗證（只 import core）
+│   ├── spec/                  # 宣告層：Config / Choice / tier 展開 / 驗證（只 import core）
+│   ├── permission/            # permission rules × mode (allow/ask/deny specifier, deny > ask > allow)
+│   ├── session/               # session 管理層 (list / resume / fork / tree; WAL JSONL 為 transcript 真相)
+│   └── wire/                  # headless 表面: stream-json envelope / RPC framing / print formatter
 ├── prompt/                    # content management：Slot(system/user/reminder)、Source、Builder、LoadContextFiles（AGENTS.md/CLAUDE.md 階層載入）
 ├── core/                      # 純狀態機 (stdlib only, 含 ObservationSource port)
 ├── memory/                    # 支柱 2 (M2)
@@ -114,18 +117,14 @@ agentsdk/
 ├── middleware/                # (M2 鏈)
 │   └── hook/                  # lifecycle hooks (PreToolUse/PostToolUse/...; command hook exit 2 = block)
 ├── runtime/                   # Loop: dispatch + checkpoint + WAL
-├── config/                    # AppConfig、middleware presets、RefreshingProvider
 ├── tool/                      # 6 個內建工具
-├── permission/                # permission rules × mode (allow/ask/deny specifier, deny > ask > allow)
-├── session/                   # session 管理層 (list / resume / fork / tree; WAL JSONL 為 transcript 真相)
 ├── skill/                     # SKILL.md skills + slash commands + prompt templates (progressive disclosure) + subagent Def/Spawner ("task" tool)
-├── wire/                      # headless 表面: stream-json envelope / RPC framing / print formatter
-├── tui/                       # sub-package (zero-dep)：differential-rendering terminal UI，不 import agentsdk
 ├── provider/                  # 7 個 adapter（已併回 root module）
 │   └── registry.go            # name → adapter 的唯一真相；env 查詢用注入，CLI 與 agent 共用
 ├── auth / proxy               # 外部獨立 repo，本 repo 無此目錄（auth 為 go.mod require，proxy 已完全脫離）
 ├── utils/                     # 根層共用 utilities umbrella：utils/frontmatter/ + utils/testutil/（FakeProvider / MemStore / CapturingNotifier）
 ├── sample/code-agent/         # 全 harness 組合 CLI（tui 互動 / -p / --json、session flags、.agentsdk 探索）
+│   └── tui/                   # zero-dep differential-rendering terminal UI，不 import agentsdk（只有 agent 實作需要）
 ├── sample/logdoctor-agent/          # 驗證 sample (cobra CLI + 兩個 tool)
 ```
 
@@ -201,7 +200,7 @@ effect done            ← end_turn
 | M6        | auth mechanism、9 provider ids、auth CLI                                                             | ✅ 完成     |
 | Proxy     | 3×3 pairwise protocol transform、provider profile routing、SSE hardening                             | ✅ 完成     |
 | Format    | 四來源 `37` 個 client/provider wire-format entity catalog                                            | ✅ 完成     |
-| Harness   | hooks / permission / session / skill（內含 subagent）/ wire / tui skeleton + steering queue（`contextfile` 已併入 `prompt.LoadContextFiles`） | 🚧 skeleton |
+| Harness   | hooks / agent/permission / agent/session / skill（內含 subagent）/ agent/wire + steering queue（`contextfile` 已併入 `prompt.LoadContextFiles`；tui 已下沉 code-agent） | 🚧 skeleton |
 | Agent     | 宣告式組裝：`agent/spec` + `agent` 8 stage pipeline + `prompt` + `provider`（registry）+ `wizard` 子指令 | ✅ 完成     |
 
 詳細規格見 `docs/specs/` 與 `plans/`（proxy 規格已隨 repo 移出）,root milestone 實作完成後會轉為 `docs/specs/YYYY-MM-DD-<feature>.md`:
@@ -218,7 +217,7 @@ effect done            ← end_turn
 ## 慣例
 
 - 常數一律 `SCREAMING_SNAKE_CASE` (含 unexported、block-scoped),與 gosdk 一致
-- `go.work` 多模組：目前 9 個 `use` entries（root + 8 samples；`tui` 與 `provider/*` 已併回 root）；`core/` 維持 stdlib-only，root config + agent 可使用應用層依賴
+- `go.work` 多模組：目前 9 個 `use` entries（root + 8 samples；`provider/*` 已併回 root，`tui` 已下沉 `sample/code-agent/tui`）；`core/` 維持 stdlib-only，root config + agent 可使用應用層依賴
 - 宣告層依賴紀律（CI 可驗）：`go list -deps ./agent/spec | grep agentsdk` 與 `go list -deps ./prompt | grep agentsdk` 都只該出現 `core` 與自己
 - 依賴分析工具已移至獨立 repo `~/projects/go-dependency-analysis`：`go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work --format text`
 - 測試:table-driven + `t.Run` + `testify`

@@ -36,10 +36,12 @@ import (
 // Provider implements core.Provider against the Antigravity gateway.
 type Provider struct {
 	baseURL string
-	apiKey  string
-	bearer  string // OAuth access token (takes precedence over apiKey)
-	model   string
-	client  *http.Client
+	// auth holds whichever credential class the constructor was given.
+	// Bearer still outranks APIKey, but the precedence now lives in
+	// core.Auth rather than in an if-chain repeated per adapter.
+	auth   core.Auth
+	model  string
+	client *http.Client
 }
 
 // New returns a Provider authenticated with an API key (direct key path).
@@ -55,7 +57,7 @@ func New(opts ...Option) (*Provider, error) {
 	}
 	return &Provider{
 		baseURL: strings.TrimRight(ResolveBaseURL(cfg.baseURL), "/"),
-		apiKey:  key,
+		auth:    core.Auth{APIKey: key},
 		model:   cfg.model,
 		client:  &http.Client{Timeout: 120 * time.Second},
 	}, nil
@@ -73,7 +75,7 @@ func NewWithOAuth(creds OAuthCredentials, opts ...Option) (*Provider, error) {
 	}
 	return &Provider{
 		baseURL: strings.TrimRight(ResolveBaseURL(cfg.baseURL), "/"),
-		bearer:  creds.AccessToken,
+		auth:    core.Auth{Bearer: creds.AccessToken},
 		model:   cfg.model,
 		client:  &http.Client{Timeout: 120 * time.Second},
 	}, nil
@@ -109,7 +111,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 	if err != nil {
 		return core.ModelResult{}, err
 	}
-	p.applyHeaders(httpReq)
+	p.applyHeaders(httpReq, req.Auth)
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return core.ModelResult{}, fmt.Errorf("antigravity: http: %w", err)
@@ -145,7 +147,7 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 		return nil, err
 	}
 	httpReq.Header.Set("Accept", "text/event-stream")
-	p.applyHeaders(httpReq)
+	p.applyHeaders(httpReq, req.Auth)
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("antigravity: http: %w", err)
@@ -171,16 +173,26 @@ func (p *Provider) CountTokens(_ context.Context, msgs []core.Message) (int, err
 	return n, nil
 }
 
-func (p *Provider) applyHeaders(req *http.Request) {
+// override is the per-call core.ModelRequest.Auth, merged on top of the
+// credential bound at construction; a zero override changes nothing.
+func (p *Provider) applyHeaders(req *http.Request, override core.Auth) {
+	a := p.auth.Merge(override)
 	req.Header.Set("Content-Type", "application/json")
 	// Anthropic-Messages wire shape carries the API version as a header.
 	// Antigravity mirrors Anthropic here — confirm against the gateway
 	// docs if a version mismatch surfaces.
 	req.Header.Set("anthropic-version", "2023-06-01")
-	if p.bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+p.bearer)
-	} else if p.apiKey != "" {
-		req.Header.Set("x-api-key", p.apiKey)
+	// Anthropic-style split: OAuth rides in Authorization, an API key in
+	// x-api-key. The two are not interchangeable here.
+	if a.Bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+a.Bearer)
+	} else if a.APIKey != "" {
+		req.Header.Set("x-api-key", a.APIKey)
+	}
+	for k, v := range a.Headers {
+		if v != "" {
+			req.Header.Set(k, v)
+		}
 	}
 }
 

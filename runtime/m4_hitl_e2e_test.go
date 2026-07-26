@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	"github.com/bizshuk/agentsdk/action"
-	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/memory/filestore"
+	"github.com/bizshuk/agentsdk/middleware/preset"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,10 +44,10 @@ func newHighRiskTool() *highRiskTool {
 	return t
 }
 
-func (t *highRiskTool) Name() string            { return t.inner.Name() }
-func (t *highRiskTool) Description() string     { return t.inner.Description() }
-func (t *highRiskTool) Schema() core.ToolSpec   { return t.inner.Schema() }
-func (t *highRiskTool) Risk() core.RiskLevel    { return t.inner.Risk() }
+func (t *highRiskTool) Name() string          { return t.inner.Name() }
+func (t *highRiskTool) Description() string   { return t.inner.Description() }
+func (t *highRiskTool) Schema() core.ToolSpec { return t.inner.Schema() }
+func (t *highRiskTool) Risk() core.RiskLevel  { return t.inner.Risk() }
 func (t *highRiskTool) Call(ctx context.Context, args json.RawMessage) (core.ToolResult, error) {
 	return t.inner.Call(ctx, args)
 }
@@ -55,7 +55,7 @@ func (t *highRiskTool) Call(ctx context.Context, args json.RawMessage) (core.Too
 // TestM4E2EApprovalPauseThenResumeApprove drives the full HITL story:
 //
 //  1. ScriptedProvider returns a HIGH-risk tool_use (propose_fix).
-//  2. SecureMiddleware's ApprovalGate (L2 + HIGH → ASK) rewrites it to
+//  2. preset.Secure's ApprovalGate (L2 + HIGH → ASK) rewrites it to
 //     REQUEST_APPROVAL → run pauses with PAUSED_APPROVAL + a
 //     PendingApproval carrying the tool call.
 //  3. Out-of-band: SubmitHumanDecision(approve) writes the decision into
@@ -84,7 +84,7 @@ func TestM4E2EApprovalPauseThenResumeApprove(t *testing.T) {
 	loop := runtime.NewEngine(step, prov, reg)
 	// Full security chain with the real L0-L4 approval policy. Sandbox is
 	// nil: propose_fix has no "path"/"command" arg.
-	loop.Middleware = config.SecureMiddleware(nil, action.DefaultApprovalPolicy{})
+	loop.Middleware = preset.Secure(nil, action.DefaultApprovalPolicy{})
 	loop.Approval = action.DefaultApprovalPolicy{}
 	loop.Store = store
 	loop.Emitter = func(eff core.Instruction) {}
@@ -141,7 +141,7 @@ func TestM4E2EApprovalRejectTerminates(t *testing.T) {
 		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, reg)
-	loop.Middleware = config.SecureMiddleware(nil, action.DefaultApprovalPolicy{})
+	loop.Middleware = preset.Secure(nil, action.DefaultApprovalPolicy{})
 	loop.Approval = action.DefaultApprovalPolicy{}
 	loop.Store = store
 	loop.Emitter = func(eff core.Instruction) {}

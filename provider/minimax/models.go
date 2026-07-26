@@ -47,7 +47,7 @@ func DefaultCatalog() []core.ModelSpec {
 // DefaultCatalog for ids we ship metadata for.
 func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
 	raw, err := utils.Fetch(ctx, p.client, p.baseURL+"/v1/models", map[string]string{
-		"X-Api-Key": p.apiKey,
+		"X-Api-Key": p.auth.Token(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("minimax: list models: %w", err)

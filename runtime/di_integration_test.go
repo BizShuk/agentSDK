@@ -6,9 +6,9 @@ import (
 
 	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,9 +30,9 @@ func TestDIProviderSwap(t *testing.T) {
 
 	state := func() core.State {
 		return core.State{
-			RunID:        "di-1",
+			RunID:          "di-1",
 			ReasoningStyle: core.REASON_REACT,
-			Budget:       core.Budget{MaxTurns: 5},
+			Budget:         core.Budget{MaxTurns: 5},
 		}
 	}
 
@@ -81,9 +81,9 @@ func TestImageChunkSurvivesRunLoop(t *testing.T) {
 	loop.Emitter = func(eff core.Instruction) {}
 
 	state := core.State{
-		RunID:        "img-1",
+		RunID:          "img-1",
 		ReasoningStyle: core.REASON_REACT,
-		Budget:       core.Budget{MaxTurns: 3},
+		Budget:         core.Budget{MaxTurns: 3},
 		Messages: []core.Message{
 			{Role: core.ROLE_USER, Parts: []core.Part{
 				{Kind: core.PART_KIND_IMAGE, ImageMIME: "image/png", Image: imgBytes},
@@ -91,7 +91,7 @@ func TestImageChunkSurvivesRunLoop(t *testing.T) {
 		},
 	}
 	_, err := loop.RunWithEvent(context.Background(), state, core.Event{
-		Kind: core.EVENT_OBSERVATION,
+		Kind:        core.EVENT_OBSERVATION,
 		Observation: &core.Observation{ID: "p", Source: "test", Payload: "wake up"},
 	})
 	require.NoError(t, err)

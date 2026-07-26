@@ -52,8 +52,8 @@ func DefaultCatalog() []core.ModelSpec {
 // deployments behind auth need the Bearer.
 func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
 	headers := map[string]string{}
-	if p.apiKey != "" {
-		headers["Authorization"] = "Bearer " + p.apiKey
+	if p.auth.Token() != "" {
+		headers["Authorization"] = "Bearer " + p.auth.Token()
 	}
 	raw, err := utils.Fetch(ctx, p.client, p.baseURL+"/models", headers)
 	if err != nil {

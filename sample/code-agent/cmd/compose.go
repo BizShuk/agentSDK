@@ -15,7 +15,6 @@ import (
 
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
-	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/provider"
 )
@@ -32,7 +31,7 @@ type agentParts struct {
 }
 
 type composeOptions struct {
-	cfg            *config.AppConfig
+	cfg            *agent.AppConfig
 	fake           bool
 	provider       string
 	model          string

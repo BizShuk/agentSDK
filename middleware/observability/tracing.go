@@ -1,7 +1,7 @@
 // Package observability hosts cross-cutting telemetry middlewares.
 //
 // tracing.go wraps each effect in an OpenTelemetry span. The runtime
-// default chain (DefaultMiddleware) does NOT include tracing — callers
+// default chain (preset.Default) does NOT include tracing — callers
 // opt in by adding it:
 //
 //	loop.Middleware = middleware.Chain(

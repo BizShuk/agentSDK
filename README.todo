@@ -5,7 +5,7 @@
   - 與下方「Provider 認證解耦」同一條線：placeholder 方案的落腳處就是 `provider/credential`
 - [x] DefaultEnvironmentNames add ollama and llmbox
 
-## Provider 認證解耦（設計已定，實作延後）
+## Provider 認證解耦（2026-07-26 全數落地）
 
 計畫見 [`plans/2026-07-26-auth-under-provider-and-config-dissolution.md`](plans/2026-07-26-auth-under-provider-and-config-dissolution.md)。
 
@@ -13,7 +13,7 @@
 `per-request decorator` 注入 adapter，上層 `agent` 依使用者設定選 kind 並在
 `provider.New` 時注入，caller 拿到的就是已接好的 provider。
 
-設計結論（2026-07-26 討論定案，尚未動工）：
+設計結論（2026-07-26 定案並落地）：
 
 - decorator 的型別必須定義在 `provider`，`不`能定義在 `auth` —— 否則每個 adapter 都得 import
   `auth`，「adapter 自我包含」這個性質就沒了，而那正是當初複製 `967` 行 OAuth 的理由
@@ -33,21 +33,25 @@
 
 待辦（依執行順序）：
 
-- [ ] `Phase A` 切斷死掉的 auth 連線：`config/provider.go`（`RefreshingProvider`，零呼叫者）搬到
+- [x] `Phase A` 切斷死掉的 auth 連線：`config/provider.go`（`RefreshingProvider`，零呼叫者）搬到
       `provider/credential`；`AppConfig` 移除 `AuthStore`/`AuthDir`（零呼叫者）。
       驗收 `go list -deps ./agent | grep bizshuk/auth` 為空。獨立可交付、零風險
-- [ ] `Phase B` `config/` 解體（見計畫；`agent.AppConfig` + `middleware/preset`）
-- [ ] `Phase C1` `7` 個 adapter 統一到 `core.Auth` + 接上 per-request `provider.Decorator`。
+- [x] `Phase B` `config/` 解體（見計畫；`agent.AppConfig` + `middleware/preset`）
+- [x] `Phase C1` `7` 個 adapter 統一到 `core.Auth` + 接上 per-request `provider.Decorator`。
       `不`吃 auth 依賴，純 in-repo；做完就已經是目標架構，`Phase C2` 只是換 decorator 的來源
-- [ ] `Phase C2` decorator 指向 `auth`，刪掉 `967` 行 in-tree OAuth（`provider/*/auth_oauth.go`）
+- [x] `Phase C2` decorator 指向 `auth`，in-tree OAuth `967` → `194` 行（只留 request-time token DTO 與 vendor header）
 
-阻擋 `Phase C2` 的兩件事（`Phase A`/`B`/`C1` 不受影響）：
+落地後仍未關閉的兩件事：
 
-- [ ] `anthropic` OAuth 常數兩份已漂移，且兩邊都無 caller 可證何者正確：
-      `TOKEN_URL`（`console.` vs `api.`）、`REDIRECT_URI`（貼回碼 vs `localhost:54545`）、
-      `SCOPES`（是否含 `org:create_api_key`）。需實跑一次 login 才能定案
-- [ ] `bizshuk/auth` 目前是未發布的 pseudo-version，`go work sync` 對它 `404`
-      （現在靠 module cache 才建得起來）。變成 credential path 的硬依賴前需先處理 release 順序
+- [ ] OAuth 登入流程`未經實跑驗證`。C2 一律以 `auth` 的常數為準（in-tree 版本零呼叫者，
+      故不構成行為回歸），但兩份曾在 `TOKEN_URL`（`console.` vs `api.`）、
+      `REDIRECT_URI`（貼回碼 vs `localhost:54545`）、`SCOPES`（是否含 `org:create_api_key`）
+      三處漂移。第一次真正跑 login 時要留意這三個值
+- [ ] `bizshuk/auth` 仍是未發布的 pseudo-version，`go work sync` 對它 `404`（靠 module cache
+      才建得起來）。它現在是 `provider/credential` 的硬依賴，release 順序需處理：
+      `auth` → root
+- [ ] `provider/credential` 尚無 caller —— `Source.Decorator()` 與 `Login` 已就緒，
+      但沒有 CLI 或 agent 接上去。接線是獨立題目（login 子指令 + `spec` 增加 credential source 開關）
 
 ## Agent Skeleton（2026-07-22 落地，`M1`–`M7` 完成）
 

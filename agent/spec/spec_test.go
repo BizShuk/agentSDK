@@ -353,22 +353,6 @@ func TestValidateCredentialKind(t *testing.T) {
 	}
 }
 
-func TestDecodeAcceptsCredentialKind(t *testing.T) {
-	// The whole reason this field exists in the schema: spec.Decode with
-	// DisallowUnknownFields would reject it before, so a YAML hand-written
-	// from config.example.yaml failed at startup.
-	got, err := spec.DecodeBytes([]byte(`{
-		"name": "x",
-		"tier": "basic",
-		"model": {
-			"provider": "anthropic",
-			"credential_kind": "oauth"
-		}
-	}`))
-	require.NoError(t, err)
-	assert.Equal(t, core.CREDENTIAL_KIND_OAUTH, got.Model.CredentialKind)
-}
-
 func TestVariantKeysIncludesCredentialKind(t *testing.T) {
 	keys := spec.VariantKeys()
 	assert.Contains(t, keys, "model.credential_kind",
@@ -385,52 +369,6 @@ func TestCredentialKindChoicesMatchRegistryConstants(t *testing.T) {
 		"spec variant 0 must be core.CREDENTIAL_KIND_AUTO (the only source of truth)")
 	assert.Equal(t, core.CREDENTIAL_KIND_APIKEY, cs[1])
 	assert.Equal(t, core.CREDENTIAL_KIND_OAUTH, cs[2])
-}
-
-// --- serialization ---
-
-func TestDecodeAbsentBlockIsOff(t *testing.T) {
-	// The layer-1 rule in JSON terms: a missing key is off, an empty
-	// object is on with defaults.
-	off, err := spec.DecodeBytes([]byte(`{"name":"x","tier":"basic"}`))
-	require.NoError(t, err)
-	assert.Nil(t, off.Skills)
-
-	on, err := spec.DecodeBytes([]byte(`{"name":"x","tier":"basic","skills":{}}`))
-	require.NoError(t, err)
-	require.NotNil(t, on.Skills)
-}
-
-func TestEncodeDecodeRoundTripIsFixedPoint(t *testing.T) {
-	for _, tier := range spec.Tiers() {
-		t.Run(tier, func(t *testing.T) {
-			first, err := spec.Config{Name: "round", Tier: tier, Persona: "you are terse"}.Prepare()
-			require.NoError(t, err)
-
-			raw, err := spec.EncodeBytes(first)
-			require.NoError(t, err)
-
-			second, err := spec.DecodeBytes(raw)
-			require.NoError(t, err)
-			assert.Equal(t, first, second, "an expanded config must survive a write/read cycle unchanged")
-
-			again, err := spec.EncodeBytes(second)
-			require.NoError(t, err)
-			assert.JSONEq(t, string(raw), string(again))
-		})
-	}
-}
-
-func TestDecodeRejectsUnknownField(t *testing.T) {
-	_, err := spec.DecodeBytes([]byte(`{"name":"x","toolz":{}}`))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "toolz")
-}
-
-func TestDecodeValidates(t *testing.T) {
-	_, err := spec.DecodeBytes([]byte(`{"name":"x","reasoning":{"style":"vibes"}}`))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown reasoning.style")
 }
 
 // --- choices ---

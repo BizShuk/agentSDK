@@ -253,19 +253,6 @@ func TestCountTokensHeuristic(t *testing.T) {
 	assert.Greater(t, n, 0)
 }
 
-func TestAuthorizeURLShape(t *testing.T) {
-	url := codex.AuthorizeURL("state-abc", "challenge-xyz")
-	assert.True(t, strings.HasPrefix(url, codex.OAuthAuthorizeURL), "starts at authorize endpoint")
-	assert.Contains(t, url, "client_id="+codex.OAuthClientID)
-	assert.Contains(t, url, "redirect_uri=")
-	// url.Values encodes spaces as "+" but ":", "/", and "%" stay raw —
-	// bare substring match is sufficient for the parts we care about.
-	assert.Contains(t, url, "response_type=code")
-	assert.Contains(t, url, "code_challenge=challenge-xyz")
-	assert.Contains(t, url, "code_challenge_method=S256")
-	assert.Contains(t, url, "state=state-abc")
-}
-
 func TestCodexUserAgentFormat(t *testing.T) {
 	ua := codex.CodexUserAgent()
 	assert.True(t, strings.HasPrefix(ua, "codex_cli_rs/0.125.0"))

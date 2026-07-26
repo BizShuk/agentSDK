@@ -67,7 +67,7 @@ func DefaultCatalog() []core.ModelSpec {
 // from DefaultCatalog where the id is recognized.
 func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
 	raw, err := utils.Fetch(ctx, p.client, p.baseURL+"/models", map[string]string{
-		"Authorization": p.authHeader(),
+		"Authorization": p.authHeader(core.Auth{}),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("grok: list models: %w", err)

@@ -12,7 +12,6 @@ import (
 
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
-	appconfig "github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware/hook"
 	"github.com/bizshuk/agentsdk/prompt"
@@ -23,12 +22,12 @@ import (
 )
 
 // appCfg builds an AppConfig backed by a temp dir and in-memory stores.
-// Bootstrap must never need config.OpenForCLI, which would write into the
+// Bootstrap must never need agent.OpenForCLI, which would write into the
 // developer's real ~/.config.
-func appCfg(t *testing.T) *appconfig.AppConfig {
+func appCfg(t *testing.T) *agent.AppConfig {
 	t.Helper()
 	dir := t.TempDir()
-	return &appconfig.AppConfig{
+	return &agent.AppConfig{
 		DataDir:    filepath.Join(dir, "data"),
 		LogDir:     filepath.Join(dir, "logs"),
 		RunID:      "test-run",
@@ -453,11 +452,11 @@ func TestAgentSatisfiesRunner(t *testing.T) {
 	// lifecycle rather than replacing it.
 	var _ interface {
 		Name() string
-		Bootstrap(context.Context, *appconfig.AppConfig) (*runtime.Engine, core.State, error)
+		Bootstrap(context.Context, *agent.AppConfig) (*runtime.Engine, core.State, error)
 	} = (*agent.Agent)(nil)
 
 	var _ interface {
-		Preflight(context.Context, *appconfig.AppConfig) error
+		Preflight(context.Context, *agent.AppConfig) error
 	} = (*agent.Agent)(nil)
 }
 

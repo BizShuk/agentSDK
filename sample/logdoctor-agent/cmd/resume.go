@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 
 	"github.com/bizshuk/agentsdk/action"
-	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory/filestore"
+	"github.com/bizshuk/agentsdk/middleware/preset"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
@@ -20,7 +20,7 @@ import (
 
 // resumeFlags holds CLI flags for the `resume` verb.
 type resumeFlags struct {
-	runID  string
+	runID   string
 	dataDir string
 }
 
@@ -106,7 +106,7 @@ func resumeExecute(cmd *cobra.Command, f *resumeFlags) error {
 	})
 
 	loop := runtime.NewEngine(step, provider, reg)
-	loop.Middleware = config.SecureMiddleware(nil, action.DefaultApprovalPolicy{})
+	loop.Middleware = preset.Secure(nil, action.DefaultApprovalPolicy{})
 	loop.Emitter = func(eff core.Instruction) {
 		writeEnvelope(cmd, eff)
 	}

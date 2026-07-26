@@ -1,4 +1,4 @@
-package config_test
+package credential_test
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider/credential"
 	"github.com/bizshuk/auth/model"
 	svc "github.com/bizshuk/auth/svc"
 	utils "github.com/bizshuk/auth/utils"
@@ -20,8 +20,8 @@ type recordingProvider struct {
 	calls int
 }
 
-func (p *recordingProvider) ID() string         { return "recording" }
-func (p *recordingProvider) Name() string       { return "recording" }
+func (p *recordingProvider) ID() string   { return "recording" }
+func (p *recordingProvider) Name() string { return "recording" }
 func (p *recordingProvider) Models() []core.ModelSpec {
 	return []core.ModelSpec{{ID: "recording-1", Family: "recording"}}
 }
@@ -86,7 +86,7 @@ func TestRefreshingProviderRefreshesExpiredBeforeCall(t *testing.T) {
 	}, nil)
 
 	builds := 0
-	provider, err := config.NewRefreshingProvider(resolver, "openai", func(cred *model.Credential) (core.Provider, error) {
+	provider, err := credential.NewRefreshingProvider(resolver, "openai", func(cred *model.Credential) (core.Provider, error) {
 		builds++
 		return &recordingProvider{token: cred.AccessToken}, nil
 	})
@@ -111,7 +111,7 @@ func TestRefreshingProviderRebuildsOnRotation(t *testing.T) {
 	resolver := svc.NewResolver(store, nil, nil)
 
 	builds := 0
-	provider, err := config.NewRefreshingProvider(resolver, "openai", func(cred *model.Credential) (core.Provider, error) {
+	provider, err := credential.NewRefreshingProvider(resolver, "openai", func(cred *model.Credential) (core.Provider, error) {
 		builds++
 		return &recordingProvider{token: cred.AccessToken}, nil
 	})
@@ -139,7 +139,7 @@ func TestRefreshingProviderSurfacesResolveFailure(t *testing.T) {
 	require.NoError(t, err)
 	resolver := svc.NewResolver(store, nil, nil)
 
-	provider, err := config.NewRefreshingProvider(resolver, "openai", func(*model.Credential) (core.Provider, error) {
+	provider, err := credential.NewRefreshingProvider(resolver, "openai", func(*model.Credential) (core.Provider, error) {
 		t.Fatal("build must not run without a credential")
 		return nil, nil
 	})
@@ -156,10 +156,10 @@ func TestNewRefreshingProviderValidatesArguments(t *testing.T) {
 	resolver := svc.NewResolver(store, nil, nil)
 	build := func(*model.Credential) (core.Provider, error) { return &recordingProvider{}, nil }
 
-	_, err = config.NewRefreshingProvider(nil, "openai", build)
+	_, err = credential.NewRefreshingProvider(nil, "openai", build)
 	assert.ErrorContains(t, err, "resolver is required")
-	_, err = config.NewRefreshingProvider(resolver, "", build)
+	_, err = credential.NewRefreshingProvider(resolver, "", build)
 	assert.ErrorContains(t, err, "provider family is required")
-	_, err = config.NewRefreshingProvider(resolver, "openai", nil)
+	_, err = credential.NewRefreshingProvider(resolver, "openai", nil)
 	assert.ErrorContains(t, err, "build func is required")
 }

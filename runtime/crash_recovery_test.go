@@ -8,7 +8,6 @@ import (
 
 	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/memory/checkpoint"
 	"github.com/bizshuk/agentsdk/memory/filestore"
 	"github.com/bizshuk/agentsdk/middleware"
@@ -16,6 +15,7 @@ import (
 	"github.com/bizshuk/agentsdk/middleware/loopguard"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

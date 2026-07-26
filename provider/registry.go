@@ -60,6 +60,13 @@ type Options struct {
 	// The CLI passes a viper-backed lookup so .env files participate.
 	LookupEnv func(string) string
 
+	// Decorator resolves the credential before every outbound request.
+	// nil keeps the construction-time credential, which is what the env
+	// path wants: an API key read from the environment does not expire.
+	// provider/credential supplies one when the application stores
+	// credentials rather than exporting them.
+	Decorator Decorator
+
 	// CredentialKind selects which credential class is consulted. The
 	// values are core.CREDENTIAL_KIND_* — they are core vocabulary
 	// because they are what core.Provider.AuthSchemes reports.
@@ -253,5 +260,5 @@ func New(name string, o Options) (Adapter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: %w", e.Name, err)
 	}
-	return p, nil
+	return WithDecorator(p, resolved.Decorator), nil
 }

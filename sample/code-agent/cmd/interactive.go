@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/tui"
+	"github.com/bizshuk/agentsdk/sample/code-agent/tui"
 )
 
 const (

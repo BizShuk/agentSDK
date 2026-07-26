@@ -1,4 +1,4 @@
-package config_test
+package agent_test
 
 import (
 	"log/slog"
@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bizshuk/agentsdk/config"
+	"github.com/bizshuk/agentsdk/agent"
 )
 
 // TestOpenForCLIRequiresAppName confirms empty appName returns an error.
 func TestOpenForCLIRequiresAppName(t *testing.T) {
-	_, err := config.OpenForCLI("", slog.LevelInfo)
+	_, err := agent.OpenForCLI("", slog.LevelInfo)
 	if err == nil {
 		t.Fatal("expected error for empty appName, got nil")
 	}
@@ -36,14 +36,14 @@ func TestMustOpenForCLIPanicsOnEmptyAppName(t *testing.T) {
 			t.Errorf("panic message should mention appName, got: %v", err)
 		}
 	}()
-	_ = config.MustOpenForCLI("", slog.LevelInfo)
+	_ = agent.MustOpenForCLI("", slog.LevelInfo)
 }
 
 // TestOpenForCLISetsAppName ensures OpenForCLI internally calls gosdk/config
 // and correctly binds appName — part of the helper contract.
 func TestOpenForCLISetsAppName(t *testing.T) {
 	appName := "agentsdk-config-test-app"
-	cfg, err := config.OpenForCLI(appName, slog.LevelInfo)
+	cfg, err := agent.OpenForCLI(appName, slog.LevelInfo)
 	if err != nil {
 		t.Fatalf("OpenForCLI: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestOpenForCLISetsAppName(t *testing.T) {
 
 // TestOpenForCLICreatesFiles verifies states/, wal/, log file exist on disk.
 func TestOpenForCLICreatesFiles(t *testing.T) {
-	cfg, err := config.OpenForCLI("agentsdk-config-test-create", slog.LevelInfo)
+	cfg, err := agent.OpenForCLI("agentsdk-config-test-create", slog.LevelInfo)
 	if err != nil {
 		t.Fatalf("OpenForCLI: %v", err)
 	}

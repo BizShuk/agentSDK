@@ -46,10 +46,10 @@ func NewListTodos(s *domain.TodoStore) *ListTodos {
 	return &ListTodos{Inner: t, Store: s}
 }
 
-func (l *ListTodos) Name() string              { return l.Inner.Name() }
-func (l *ListTodos) Description() string       { return l.Inner.Description() }
+func (l *ListTodos) Name() string             { return l.Inner.Name() }
+func (l *ListTodos) Description() string      { return l.Inner.Description() }
 func (l *ListTodos) Schema() sdkcore.ToolSpec { return l.Inner.Schema() }
-func (l *ListTodos) Risk() sdkcore.RiskLevel    { return l.Inner.Risk() }
+func (l *ListTodos) Risk() sdkcore.RiskLevel  { return l.Inner.Risk() }
 func (l *ListTodos) Call(ctx context.Context, args []byte) (sdkcore.ToolResult, error) {
 	return l.Inner.Call(ctx, args)
 }

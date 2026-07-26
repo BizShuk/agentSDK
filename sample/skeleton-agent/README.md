@@ -73,8 +73,8 @@ cd /Users/shuk/projects/ai/agentSDK
 go run . w -y --tier basic -o - --print-go
 ```
 
-To customize, edit `skeleton-agent.yaml` directly. `agent.LoadFile` reads it
-through `spec.Decode`, which rejects unknown fields — typos surface
+To customize, edit `skeleton-agent.yaml` directly. `agentconfig.LoadFile` reads
+it through `agentconfig.Decode`, which rejects unknown fields — typos surface
 immediately at startup. No rebuild needed.
 
 ## When to reach for this pattern vs. code-agent's
