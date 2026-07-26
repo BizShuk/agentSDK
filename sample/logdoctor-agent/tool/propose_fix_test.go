@@ -4,15 +4,15 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/sample/logdoctor-agent/tool"
+	sdktool "github.com/bizshuk/agentsdk/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestProposeFixIsHighRisk(t *testing.T) {
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewProposeFix().Register(reg)
 	tl, ok := reg.Get("propose_fix")
 	require.True(t, ok)
@@ -21,7 +21,7 @@ func TestProposeFixIsHighRisk(t *testing.T) {
 }
 
 func TestProposeFixDispatches(t *testing.T) {
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewProposeFix().Register(reg)
 	res := reg.Call(context.Background(), core.ToolCall{
 		ID:   "c1",
@@ -32,7 +32,7 @@ func TestProposeFixDispatches(t *testing.T) {
 }
 
 func TestProposeFixRejectsMissingTitle(t *testing.T) {
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewProposeFix().Register(reg)
 	res := reg.Call(context.Background(), core.ToolCall{
 		ID:   "c1",

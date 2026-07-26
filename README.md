@@ -4,15 +4,15 @@ Go Agentic Loop SDK：以`宣告式設定`組裝目標導向控制迴圈 (Goal-d
 
 ## 範疇 (Scope)
 
-四大支柱對應到頂層 package,架構即文件:
+五大支柱對應到頂層 package,架構即文件:
 
 | 支柱        | 套件                       | 角色                                                                                         |
 | ----------- | -------------------------- | -------------------------------------------------------------------------------------------- |
 | 1. 認知架構 | `core` (ObservationSource) | 觀察來源 port (Percepts channel);原 `perception/` 套件無 consumer 已移除                     |
 | 2. 系統韌性 | `memory/`                  | Window / Compactor / Checkpoint (M2)                                                         |
-| 3. 工具生態 | `action/`                  | TypedTool / Registry / Sandbox / ApprovalPolicy                                              |
+| 3. 工具生態 | `action/`                  | `RegisterFunc` / Registry / Sandbox / ApprovalPolicy                                         |
 | 4. 規劃     | `planning/`                | 6 種 ThinkingPattern (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router) |
-| 5. 組裝     | `agent/` + `agent/spec/`   | 宣告式 `Config` → 8 stage pipeline → `*runtime.Engine`；`prompt/` 管進 context window 的內容 |
+| 5. 組裝     | `agent/` + `agent/spec/`   | 宣告式 `Config` → 8 stage pipeline → `*agent.Engine`；`prompt/` 管進 context window 的內容   |
 
 `core/` 是純狀態機 (state + event + instruction + step),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
 
@@ -37,7 +37,7 @@ out, err := agent.Once(ctx, agent.Config{Model: agent.Model{Provider: "minimax"}
 
 ```go
 func main() {
-    agent.Main(agent.MustNew(agent.Config{
+    cli.Main(agent.MustNew(agent.Config{
         Name:  "my-agent",
         Tier:  "standard",
         Model: agent.Model{Provider: "minimax"},
@@ -49,7 +49,7 @@ func main() {
 
 ```go
 cfg, err := agentconfig.LoadFile("agent.yaml")
-agent.Main(agent.MustNew(cfg))
+cli.Main(agent.MustNew(cfg))
 ```
 
 ```yaml
@@ -89,12 +89,12 @@ go run . w --list model.provider # 列出單一欄位的選項
 | Option | 為什麼不能寫進設定 |
 | --- | --- |
 | `WithProvider` | 活物件（測試 fake、已建好的 client）；API key 是密鑰，不該進設定檔 |
-| `WithTools` | 應用自有工具的實作 |
+| `WithToolRegistrar` / `WithToolFunc` | 應用自有工具的實作 |
 | `WithHooks` | closure 安全閘：要看實際參數內容，任何 specifier pattern 都做不到 |
 | `WithSources` | 自訂 prompt 內容來源 |
 | `WithRules` | 超出內建六個的推理策略 |
 | `WithSink` / `WithNotifier` | 呈現與通知的實作 |
-| `WithCustomize` | 最終逃生艙：拿到組好的 `*runtime.Engine` 再改 |
+| `WithCustomize` | 最終逃生艙：拿到組好的 `*agent.Engine` 再改 |
 
 ## 模組結構
 
@@ -104,7 +104,8 @@ agentsdk/
 ├── go.mod                     # module github.com/bizshuk/agentsdk
 ├── main.go                    # cobra root binary;掛載 `provider` 與 `wizard` 兩個子指令
 ├── cmd/                       # root subcommands (provider: smoke-test CLI；wizard/w: 設定產生器)
-├── agent/                     # 組裝層：spec.Config → 8 stage pipeline → *runtime.Engine（實作 agent.Runner；含 CLI lifecycle 與 Interactive seam）
+├── agent/                     # 組裝層：Config → 8 stage pipeline → Engine；公開契約集中於 agent.go
+│   ├── cli/                   # process host：signal、slog、os.Exit
 │   ├── spec/                  # 宣告層：Config / Choice / tier 展開 / 驗證（只 import core）
 │   ├── permission/            # permission rules × mode (allow/ask/deny specifier, deny > ask > allow)
 │   ├── session/               # session 管理層 (list / resume / fork / tree; WAL JSONL 為 transcript 真相)
@@ -113,7 +114,7 @@ agentsdk/
 ├── core/                      # 純狀態機 (stdlib only, 含 ObservationSource port)
 ├── memory/                    # 支柱 2 (M2)
 ├── planning/                  # 6 thinking patterns
-├── action/                    # TypedTool + Registry
+├── action/                    # RegisterFunc + Registry
 ├── middleware/                # (M2 鏈)
 │   └── hook/                  # lifecycle hooks (PreToolUse/PostToolUse/...; command hook exit 2 = block)
 ├── runtime/                   # Loop: dispatch + checkpoint + WAL
@@ -128,7 +129,7 @@ agentsdk/
 ├── sample/logdoctor-agent/          # 驗證 sample (cobra CLI + 兩個 tool)
 ```
 
-`auth` 與 `proxy` 都已脫離本 repo，是外部獨立 repo（無 `auth/`、`proxy/` 目錄，也無 `.gitmodules`）。`auth` 仍是 root 的 direct require——`config/provider.go` 用它的 `model`/`svc` 做 credential 解析、`config/app.go` 用 `utils.FileStore` 存憑證；`proxy` 已無任何殘留（無目錄、無 require、無 import）。Root `main.go` 只掛載 root module 自己的兩個子指令：`provider`（wire-format smoke test，直接打 `core.Provider`）與 `wizard`（設定產生器）。
+`auth` 與 `proxy` 都已脫離本 repo，是外部獨立 repo（無 `auth/`、`proxy/` 目錄，也無 `.gitmodules`）。`auth` 只由 `provider/credential` 使用；`proxy` 已無任何殘留（無目錄、無 require、無 import）。Root `main.go` 只掛載 root module 自己的兩個子指令：`provider`（wire-format smoke test，直接打 `core.Provider`）與 `wizard`（設定產生器）。
 
 ## Proxy protocol bridge
 

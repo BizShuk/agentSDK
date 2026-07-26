@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/bizshuk/agentsdk/action"
 	sdkcore "github.com/bizshuk/agentsdk/core"
+	sdktool "github.com/bizshuk/agentsdk/tool"
 )
 
 // NotifyArgs argument shape.
@@ -30,9 +30,9 @@ func NewNotify(w io.Writer) *Notify {
 	return &Notify{w: w}
 }
 
-// Register registers Notify into the given action.Registry.
-func (n *Notify) Register(reg *action.Registry) {
-	action.RegisterFunc(reg, "notify", "Print a notification line to the operator", sdkcore.RISK_LEVEL_LOW, n.Handle)
+// Register registers Notify into the given sdktool.Registry.
+func (n *Notify) Register(reg *sdktool.Registry) {
+	sdktool.RegisterFunc(reg, "notify", "Print a notification line to the operator", sdkcore.RISK_LEVEL_LOW, n.Handle)
 }
 
 // Handle is pure business logic.

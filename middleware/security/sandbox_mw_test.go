@@ -4,16 +4,16 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/security"
+	"github.com/bizshuk/agentsdk/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSandboxMWAllowsAllowedCall(t *testing.T) {
-	policy := action.DefaultPolicy()
+	policy := tool.DefaultPolicy()
 	mw := security.Sandbox(policy)
 
 	var last core.Instruction
@@ -30,7 +30,7 @@ func TestSandboxMWAllowsAllowedCall(t *testing.T) {
 }
 
 func TestSandboxMWDeniesDisallowedCall(t *testing.T) {
-	policy := action.DefaultPolicy()
+	policy := tool.DefaultPolicy()
 	mw := security.Sandbox(policy)
 
 	var observed []core.Instruction
@@ -58,7 +58,7 @@ func TestSandboxMWDeniesDisallowedCall(t *testing.T) {
 }
 
 func TestSandboxMWNonCallEffectsUntouched(t *testing.T) {
-	policy := action.DefaultPolicy()
+	policy := tool.DefaultPolicy()
 	mw := security.Sandbox(policy)
 
 	var seen core.Instruction
@@ -74,7 +74,7 @@ func TestSandboxMWNonCallEffectsUntouched(t *testing.T) {
 }
 
 func TestSandboxMWDeniesDangerousCommand(t *testing.T) {
-	policy := action.DefaultPolicy()
+	policy := tool.DefaultPolicy()
 	mw := security.Sandbox(policy)
 
 	var observed []core.Instruction

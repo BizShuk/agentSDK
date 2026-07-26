@@ -4,12 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bizshuk/agentsdk/action"
+	"github.com/bizshuk/agentsdk/agent/permission"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory/filestore"
 	"github.com/bizshuk/agentsdk/middleware/preset"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,8 +24,8 @@ type hrOut struct {
 	Fixed string `json:"fixed"`
 }
 
-func registerHighRiskTool(reg *action.Registry, called *int) {
-	action.RegisterFunc(reg, "propose_fix", "propose a high-risk fix", core.RISK_LEVEL_HIGH,
+func registerHighRiskTool(reg *tool.Registry, called *int) {
+	tool.RegisterFunc(reg, "propose_fix", "propose a high-risk fix", core.RISK_LEVEL_HIGH,
 		func(_ context.Context, a hrArgs) (hrOut, error) {
 			*called++
 			return hrOut{Fixed: a.What}, nil
@@ -53,7 +54,7 @@ func TestM4E2EApprovalPauseThenResumeApprove(t *testing.T) {
 	// Turn 2 (after resume): model is done.
 	prov.EnqueueEndTurn("fix applied")
 
-	reg := action.NewRegistry()
+	reg := tool.NewRegistry()
 	called1 := 0
 	registerHighRiskTool(reg, &called1)
 
@@ -63,8 +64,8 @@ func TestM4E2EApprovalPauseThenResumeApprove(t *testing.T) {
 	loop := runtime.NewEngine(step, prov, reg)
 	// Full security chain with the real L0-L4 approval policy. Sandbox is
 	// nil: propose_fix has no "path"/"command" arg.
-	loop.Middleware = preset.Secure(nil, action.DefaultApprovalPolicy{})
-	loop.Approval = action.DefaultApprovalPolicy{}
+	loop.Middleware = preset.Secure(nil, permission.DefaultApprovalPolicy{})
+	loop.Approval = permission.DefaultApprovalPolicy{}
 	loop.Store = store
 	loop.Emitter = func(eff core.Instruction) {}
 
@@ -112,7 +113,7 @@ func TestM4E2EApprovalRejectTerminates(t *testing.T) {
 	prov := testutil.NewScriptedProvider()
 	prov.EnqueueToolCall("call-1", "propose_fix", map[string]any{"what": "drop table"})
 
-	reg := action.NewRegistry()
+	reg := tool.NewRegistry()
 	called2 := 0
 	registerHighRiskTool(reg, &called2)
 
@@ -120,8 +121,8 @@ func TestM4E2EApprovalRejectTerminates(t *testing.T) {
 		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, reg)
-	loop.Middleware = preset.Secure(nil, action.DefaultApprovalPolicy{})
-	loop.Approval = action.DefaultApprovalPolicy{}
+	loop.Middleware = preset.Secure(nil, permission.DefaultApprovalPolicy{})
+	loop.Approval = permission.DefaultApprovalPolicy{}
 	loop.Store = store
 	loop.Emitter = func(eff core.Instruction) {}
 

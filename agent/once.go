@@ -9,27 +9,9 @@ import (
 	"github.com/bizshuk/agentsdk/agent/spec"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/planning"
-	"github.com/bizshuk/agentsdk/provider"
-	"github.com/bizshuk/agentsdk/runtime"
 )
 
-// Once runs a single prompt and returns the assistant's reply.
-//
-// It is a facade over the one-shot tier, NOT a second code path: the call
-// still goes through core.Decide and runtime.Engine, with every optional
-// port left nil. Nil is no-op throughout the engine, so the cost is one
-// State and one loop iteration, and the payoff is that climbing to a
-// higher tier changes configuration rather than API.
-//
-// Do not be tempted to replace this with a no-op DecisionRule that emits
-// [CALL_MODEL, DONE] every step. That breaks core.Decide's pure-function
-// invariant — a retry or a WAL replay would re-issue the model call.
-// planning.OneShotReasoning already solves it with a two-phase FSM: think
-// fires exactly once, then every subsequent step returns DONE.
-//
-// The config is prepared with tier forced to oneshot, so persistence stays
-// off and Name is not required. A caller who wants a trace should build a
-// full Agent instead.
+// Once runs one model call without persistence or a required agent name.
 func Once(ctx context.Context, cfg Config, prompt string, opts ...Option) (string, error) {
 	eng, state, err := oneshot(cfg, prompt, opts)
 	if err != nil {
@@ -42,11 +24,7 @@ func Once(ctx context.Context, cfg Config, prompt string, opts ...Option) (strin
 	return LastAssistantText(final), nil
 }
 
-// OnceStream is Once with incremental delivery: fn receives each stream
-// event as the engine emits it, and the assembled reply is returned at
-// the end.
-//
-// fn runs on the engine's goroutine, so it must not block for long.
+// OnceStream is Once with incremental events delivered to fn.
 func OnceStream(ctx context.Context, cfg Config, prompt string, fn func(core.StreamEvent), opts ...Option) (string, error) {
 	eng, state, err := oneshot(cfg, prompt, opts)
 	if err != nil {
@@ -62,12 +40,7 @@ func OnceStream(ctx context.Context, cfg Config, prompt string, fn func(core.Str
 	return LastAssistantText(final), nil
 }
 
-// oneshot builds the engine and opening state for a single call.
-//
-// M4 will fold this into the full build pipeline; until then it is the
-// pipeline's first two stages (config → provider) plus a minimal
-// assembly, kept deliberately small so the refactor is a deletion.
-func oneshot(cfg Config, prompt string, opts []Option) (*runtime.Engine, core.State, error) {
+func oneshot(cfg Config, prompt string, opts []Option) (*Engine, core.State, error) {
 	if strings.TrimSpace(prompt) == "" {
 		return nil, core.State{}, fmt.Errorf("agent: once: prompt must not be empty")
 	}
@@ -83,35 +56,16 @@ func oneshot(cfg Config, prompt string, opts []Option) (*runtime.Engine, core.St
 		return nil, core.State{}, err
 	}
 
-	// An injected provider wins outright; otherwise the registry builds the
-	// configured adapter. CredentialKind is passed through verbatim so the
-	// strict modes ("oauth" / "api_key") error here with a clear message
-	// rather than silently falling back to the legacy OAuth>API-key order.
-	prov := b.provider
-	if prov == nil {
-		prov, err = provider.New(prepared.Model.Provider, provider.Options{
-			Model:          prepared.Model.Name,
-			BaseURL:        prepared.Model.BaseURL,
-			APIKeyEnv:      prepared.Model.APIKeyEnv,
-			CredentialKind: prepared.Model.CredentialKind,
-		})
-		if err != nil {
-			return nil, core.State{}, err
-		}
+	prov, err := b.buildProvider(prepared.Model)
+	if err != nil {
+		return nil, core.State{}, err
 	}
 
-	// One-shot always runs the one-shot rule, whatever style the config
-	// carries: Once is by definition a single call. A config that wants a
-	// multi-step strategy should build an Agent instead — which is why
-	// spec treats tier and reasoning as orthogonal rather than rejecting
-	// the combination.
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_ONE_SHOT: planning.NewOneShotReasoning(),
 	})
 
-	// Tools nil: with no tool specs the model cannot emit a tool call, so
-	// the engine short-circuits to COMPLETED after the single reply.
-	eng := runtime.NewEngine(step, prov, nil)
+	eng := NewEngine(step, prov, nil)
 	eng.Sink = b.sink
 	eng.Notifier = b.notifier
 

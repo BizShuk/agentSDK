@@ -5,17 +5,17 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
 	logdoctorcore "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
 	"github.com/bizshuk/agentsdk/sample/logdoctor-agent/tool"
+	sdktool "github.com/bizshuk/agentsdk/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAddAndListTodos(t *testing.T) {
 	store := logdoctorcore.NewTodoStore()
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewAddTodo(store).Register(reg)
 	tool.NewListTodos(store).Register(reg)
 
@@ -38,7 +38,7 @@ func TestAddAndListTodos(t *testing.T) {
 
 func TestCompleteTodo(t *testing.T) {
 	store := logdoctorcore.NewTodoStore()
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewAddTodo(store).Register(reg)
 	tool.NewCompleteTodo(store).Register(reg)
 	tool.NewListTodos(store).Register(reg)
@@ -63,7 +63,7 @@ func TestCompleteTodo(t *testing.T) {
 
 func TestCompleteTodoUnknownID(t *testing.T) {
 	store := logdoctorcore.NewTodoStore()
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewCompleteTodo(store).Register(reg)
 
 	res := reg.Call(context.Background(), core.ToolCall{ID: "c1", Name: "complete_todo", Args: map[string]any{"id": "missing"}})
@@ -73,7 +73,7 @@ func TestCompleteTodoUnknownID(t *testing.T) {
 
 func TestAddTodoSchemaMarksTitleRequired(t *testing.T) {
 	store := logdoctorcore.NewTodoStore()
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewAddTodo(store).Register(reg)
 
 	tl, ok := reg.Get("add_todo")

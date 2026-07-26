@@ -107,8 +107,8 @@ step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{
 
 ```go
 import (
-    "github.com/bizshuk/agentsdk/action"
-    sdkcore "github.com/bizshuk/agentsdk/core"
+    "github.com/bizshuk/agentsdk/core"
+    "github.com/bizshuk/agentsdk/tool"
 )
 
 // Step 1: 定義 args 與 output struct
@@ -242,14 +242,14 @@ if input.ModelResult != nil && len(input.ModelResult.ToolCalls) > 0 {
 
 ```go
 import (
-    "github.com/bizshuk/agentsdk/action"
     "github.com/bizshuk/agentsdk/core"
     "github.com/bizshuk/agentsdk/planning"
     "github.com/bizshuk/agentsdk/runtime"
+    "github.com/bizshuk/agentsdk/tool"
 )
 
 // 1. 工具註冊表
-reg := action.NewRegistry()
+reg := tool.NewRegistry()
 reg.Register(greetTool)
 
 // 2. ThinkingPattern
@@ -385,8 +385,8 @@ import (
     "encoding/json"
     "fmt"
 
-    "github.com/bizshuk/agentsdk/action"
     sdkcore "github.com/bizshuk/agentsdk/core"
+    sdktool "github.com/bizshuk/agentsdk/tool"
 )
 
 type GreetArgs struct {
@@ -486,19 +486,19 @@ import (
     "os"
     "time"
 
-    "github.com/bizshuk/agentsdk/action"
     "github.com/bizshuk/agentsdk/core"
     "github.com/bizshuk/agentsdk/planning"
     "github.com/bizshuk/agentsdk/runtime"
+    "github.com/bizshuk/agentsdk/tool"
 
     "greet-agent/internal/fake"
-    "greet-agent/tool"
+    agenttool "greet-agent/tool"
 )
 
 func main() {
     // 1. 註冊工具
-    reg := action.NewRegistry()
-    reg.Register(tool.NewGreet())
+    reg := tool.NewRegistry()
+    reg.Register(agenttool.NewGreet())
 
     // 2. 選擇 ReAct pattern
     step := core.NewStep(map[core.ThinkingKind]core.ThinkingPattern{

@@ -7,12 +7,13 @@ import (
 	"path/filepath"
 
 	"github.com/bizshuk/agentsdk/agent"
-	"github.com/bizshuk/agentsdk/action"
+	"github.com/bizshuk/agentsdk/agent/permission"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware/preset"
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
 	"github.com/bizshuk/agentsdk/sample/logdoctor-agent/internal/fake"
 	"github.com/bizshuk/agentsdk/sample/logdoctor-agent/tool"
+	builtin "github.com/bizshuk/agentsdk/tool"
 	"github.com/spf13/cobra"
 )
 
@@ -100,7 +101,7 @@ func resumeExecute(cmd *cobra.Command, f *resumeFlags) error {
 	if err != nil {
 		return err
 	}
-	reg := action.NewRegistry()
+	reg := builtin.NewRegistry()
 	rdt := tool.NewReadLogTail(listener)
 	rdt.Register(reg)
 	nt := tool.NewNotify(cmd.OutOrStdout())
@@ -109,11 +110,11 @@ func resumeExecute(cmd *cobra.Command, f *resumeFlags) error {
 	step := agent.ReActStep()
 
 	engine := agent.NewEngine(step, provider, reg)
-	engine.Middleware = preset.Secure(nil, action.DefaultApprovalPolicy{})
+	engine.Middleware = preset.Secure(nil, permission.DefaultApprovalPolicy{})
 	engine.Emitter = func(eff core.Instruction) {
 		writeEnvelope(cmd, eff)
 	}
-	engine.Approval = action.DefaultApprovalPolicy{}
+	engine.Approval = permission.DefaultApprovalPolicy{}
 	if engine.Store == nil {
 		engine.Store = host.StateStore
 	}

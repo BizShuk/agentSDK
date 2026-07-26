@@ -3,8 +3,8 @@ package tool
 import (
 	"context"
 
-	"github.com/bizshuk/agentsdk/action"
 	sdkcore "github.com/bizshuk/agentsdk/core"
+	sdktool "github.com/bizshuk/agentsdk/tool"
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
 )
 
@@ -29,9 +29,9 @@ func NewAddTodo(s *domain.TodoStore) *AddTodo {
 	return &AddTodo{Store: s}
 }
 
-// Register registers AddTodo into the given action.Registry.
-func (a *AddTodo) Register(reg *action.Registry) {
-	action.RegisterFunc(reg, "add_todo", "Add a remediation todo to the operator's queue", sdkcore.RISK_LEVEL_LOW, a.Handle)
+// Register registers AddTodo into the given sdktool.Registry.
+func (a *AddTodo) Register(reg *sdktool.Registry) {
+	sdktool.RegisterFunc(reg, "add_todo", "Add a remediation todo to the operator's queue", sdkcore.RISK_LEVEL_LOW, a.Handle)
 }
 
 // Handle is pure business logic.

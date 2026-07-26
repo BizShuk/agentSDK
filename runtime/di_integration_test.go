@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,8 +18,8 @@ import (
 // run the loop twice with different FakeProviders, each producing a
 // distinct scripted transcript; both should reach RUN_STATUS_COMPLETED.
 func TestDIProviderSwap(t *testing.T) {
-	reg := action.NewRegistry()
-	action.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
+	reg := tool.NewRegistry()
+	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
@@ -75,7 +75,7 @@ func TestImageChunkSurvivesRunLoop(t *testing.T) {
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
-	loop := runtime.NewEngine(step, prov, action.NewRegistry())
+	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
 	loop.Emitter = func(eff core.Instruction) {}
 
 	state := core.State{

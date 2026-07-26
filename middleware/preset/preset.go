@@ -17,12 +17,12 @@ package preset
 import (
 	"time"
 
-	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/harness"
 	"github.com/bizshuk/agentsdk/middleware/loopguard"
 	"github.com/bizshuk/agentsdk/middleware/security"
+	"github.com/bizshuk/agentsdk/tool"
 )
 
 // Default returns the M2 chain: retry → timeout → budget → loopguard.
@@ -57,15 +57,15 @@ func Default() middleware.Middleware {
 //	sandbox → approval → spotlight → sanitizer → base
 //
 // The approval gate consults `policy` for every CALL_TOOL, reading the
-// run's AutonomyLevel from state (per-run). Pass action.DefaultApprovalPolicy{}
+// run's AutonomyLevel from state (per-run). Pass permission.DefaultApprovalPolicy{}
 // for the L0-L4 enterprise grid, or a custom policy. sandboxPolicy gates
-// path/command args; pass action.DefaultPolicy() for the standard
+// path/command args; pass tool.DefaultPolicy() for the standard
 // denylist + /tmp allowlist.
 //
 // Nil policy disables the approval gate (every tool call passes); nil
 // sandboxPolicy disables the sandbox. Both nil is equivalent to
 // Default() plus spotlight/sanitizer.
-func Secure(sandboxPolicy action.Sandbox, approval core.ApprovalPolicy) middleware.Middleware {
+func Secure(sandboxPolicy tool.Sandbox, approval core.ApprovalPolicy) middleware.Middleware {
 	chain := []middleware.Middleware{
 		harness.Retry(harness.RetryConfig{N: 3, BaseBackoff: 100 * time.Millisecond, MaxBackoff: 5 * time.Second}),
 		harness.Timeout(harness.TimeoutConfig{PerEffect: 60 * time.Second}),

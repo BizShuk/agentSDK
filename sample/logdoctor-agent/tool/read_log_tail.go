@@ -6,8 +6,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/bizshuk/agentsdk/action"
 	sdkcore "github.com/bizshuk/agentsdk/core"
+	sdktool "github.com/bizshuk/agentsdk/tool"
 )
 
 // Source is the minimal surface read_log_tail needs from a listener.
@@ -36,9 +36,9 @@ func NewReadLogTail(src Source) *ReadLogTail {
 	return &ReadLogTail{src: src}
 }
 
-// Register registers ReadLogTail into the given action.Registry.
-func (r *ReadLogTail) Register(reg *action.Registry) {
-	action.RegisterFunc(reg, "read_log_tail", "Read up to N lines from the watched log file", sdkcore.RISK_LEVEL_LOW, r.Handle)
+// Register registers ReadLogTail into the given sdktool.Registry.
+func (r *ReadLogTail) Register(reg *sdktool.Registry) {
+	sdktool.RegisterFunc(reg, "read_log_tail", "Read up to N lines from the watched log file", sdkcore.RISK_LEVEL_LOW, r.Handle)
 }
 
 // Handle is pure business logic.

@@ -16,7 +16,7 @@ import (
 	"github.com/bizshuk/agentsdk/middleware/hook"
 	"github.com/bizshuk/agentsdk/prompt"
 	"github.com/bizshuk/agentsdk/runtime"
-	"github.com/bizshuk/agentsdk/tool"
+	"github.com/bizshuk/agentsdk/tool/builtin"
 	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -154,7 +154,7 @@ func TestBootstrapWiresBlocksToEngineFields(t *testing.T) {
 		{
 			name: "tools allowlist narrows the registry",
 			cfg: agent.Config{Name: "x", Tier: spec.TIER_STANDARD,
-				Tools: &spec.Tools{Builtin: []string{tool.NAME_READ, tool.NAME_GLOB, tool.NAME_GREP}}},
+				Tools: &spec.Tools{Builtin: []string{builtin.NAME_READ, builtin.NAME_GLOB, builtin.NAME_GREP}}},
 			verify: func(t *testing.T, e *runtime.Engine) {
 				require.NotNil(t, e.Tools)
 				var names []string
@@ -241,6 +241,13 @@ func TestBootstrapEveryStyleBuilds(t *testing.T) {
 	}
 }
 
+func TestBuiltinToolChoicesMatchRegistryNames(t *testing.T) {
+	assert.ElementsMatch(t,
+		builtin.BuiltinNames(),
+		spec.Values(spec.VariantChoices("tools.builtin")),
+	)
+}
+
 // --- injection ---
 
 func TestOptionsReachTheEngine(t *testing.T) {
@@ -311,7 +318,11 @@ func TestOptionsReachTheEngine(t *testing.T) {
 
 func TestNilInjectionsAreRejected(t *testing.T) {
 	cases := map[string]agent.Option{
-		"tools":     agent.WithTools(nil),
+		"tools":          agent.WithTools(nil),
+		"tool registrar": agent.WithToolRegistrar(nil),
+		"tool function": agent.WithToolFunc[struct{}, struct{}](
+			"test", "test", core.RISK_LEVEL_LOW, nil,
+		),
 		"sources":   agent.WithSources(nil),
 		"rules":     agent.WithRules(nil),
 		"customize": agent.WithCustomize(nil),

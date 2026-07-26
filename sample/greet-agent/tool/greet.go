@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/bizshuk/agentsdk/action"
 	sdkcore "github.com/bizshuk/agentsdk/core"
+	sdktool "github.com/bizshuk/agentsdk/tool"
 )
 
 // GreetArgs is the input shape the LLM sees for the greet tool.
@@ -33,9 +33,9 @@ func NewGreet() *Greet {
 // SetRisk lets the caller mark this tool as high-risk (triggers HITL approval).
 func (g *Greet) SetRisk(r sdkcore.RiskLevel) { g.risk = r }
 
-// Register registers Greet into the given action.Registry.
-func (g *Greet) Register(reg *action.Registry) {
-	action.RegisterFunc(reg, "greet", "Greet someone by name and return a friendly reply", g.risk, g.Handle)
+// Register registers Greet into the given sdktool.Registry.
+func (g *Greet) Register(reg *sdktool.Registry) {
+	sdktool.RegisterFunc(reg, "greet", "Greet someone by name and return a friendly reply", g.risk, g.Handle)
 }
 
 // Handle is pure business logic.

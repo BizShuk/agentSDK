@@ -1,23 +1,23 @@
 package agent
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory/filestore"
 	gosdkconfig "github.com/bizshuk/gosdk/config"
 )
 
-// Host is the embeddable container agent needs to drive a run. It owns
-// the process-identity paths and the file-backed persistence the engine
-// reads through, and nothing else. Process-level concerns — signal
-// handling, global slog default, mkdir for logs — live in agent/cli,
-// so a host can be embedded in an HTTP server, a test harness, or any
-// other caller that wants the agent without surrendering those knobs.
-//
-// AppConfig is the deprecated alias kept for one release; new code
-// should write *Host.
+var (
+	errNilEngine = errors.New("agent: engine must not be nil")
+	errNoHost    = errors.New("agent: host must not be nil for this operation")
+)
+
+// Host contains run identity, paths, logging, and persistence ports.
 type Host struct {
 	DataDir    string             // ~/.config/<name>/data
 	LogDir     string             // ~/.config/<name>/logs
@@ -28,20 +28,13 @@ type Host struct {
 	WAL        core.WriteAheadLog // file-backed WriteAheadLog, ready to use
 }
 
-// AppConfig is the historical name for Host.
-//
 // Deprecated: use Host. Kept for one release so existing callers and
 // tests keep compiling; cli.OpenForCLI is the new home for the process
 // side of AppConfig.
 type AppConfig = Host
 
-// Open is the embeddable half of the prior OpenForCLI split. It binds
-// appName under gosdk/config, opens the file-backed StateStore and WAL
-// under ~/.config/<Name>/, and returns the resulting Host. It does NOT
-// create directories, open log files, or install a slog handler — those
-// are process-side concerns that belong to agent/cli.OpenForCLI.
-//
-// RunID, LogFile, Logger are left for the caller (or for cli) to set.
+// Open binds the conventional app directories and file-backed persistence.
+// Process logging and signal handling remain in agent/cli.
 func Open(appName string) (*Host, error) {
 	if appName == "" {
 		return nil, fmt.Errorf("agent: appName must not be empty")
@@ -66,4 +59,74 @@ func Open(appName string) (*Host, error) {
 		StateStore: store,
 		WAL:        wal,
 	}, nil
+}
+
+// Perform runs an engine after filling unset persistence and run identity
+// from host.
+func Perform(ctx context.Context, host *Host, engine *Engine, state core.State) (core.State, error) {
+	if engine == nil {
+		return core.State{}, errNilEngine
+	}
+	bindHost(host, engine, &state)
+	return engine.Run(ctx, state)
+}
+
+// ResumeRun resumes a persisted run after filling unset persistence from
+// host.
+func ResumeRun(ctx context.Context, host *Host, engine *Engine, runID string) (core.State, error) {
+	if engine == nil {
+		return core.State{}, errNilEngine
+	}
+	bindHost(host, engine, nil)
+	return engine.Resume(ctx, runID)
+}
+
+// ListRuns lists run IDs in host's state store.
+func ListRuns(ctx context.Context, host *Host) ([]string, error) {
+	if host == nil || host.StateStore == nil {
+		return nil, nil
+	}
+	return host.StateStore.List(ctx)
+}
+
+// Approve records a decision on every undecided approval in a persisted run.
+func Approve(ctx context.Context, host *Host, runID string, decision core.ApprovalDecision, by string) error {
+	if host == nil || host.StateStore == nil {
+		return errNoHost
+	}
+	state, err := host.StateStore.Load(ctx, runID)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	changed := false
+	for i := range state.PendingApprovals {
+		pending := &state.PendingApprovals[i]
+		if pending.DecidedAt != nil {
+			continue
+		}
+		pending.Decision = decision
+		pending.DecidedAt = &now
+		pending.DecidedBy = by
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return host.StateStore.Save(ctx, state)
+}
+
+func bindHost(host *Host, engine *Engine, state *core.State) {
+	if host == nil {
+		return
+	}
+	if engine.Store == nil {
+		engine.Store = host.StateStore
+	}
+	if engine.Log == nil {
+		engine.Log = host.WAL
+	}
+	if state != nil && state.RunID == "" {
+		state.RunID = host.RunID
+	}
 }

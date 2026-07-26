@@ -7,23 +7,23 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware"
+	"github.com/bizshuk/agentsdk/tool"
 )
 
 // Sandbox returns a Middleware that consults the given Sandbox before
 // allowing CALL_TOOL through. Denied calls are rewritten as
 // EFFECT_NOTIFY (level=error) followed by EFFECT_DONE so the run
 // stops cleanly rather than continuing with a phantom tool result.
-func Sandbox(policy action.Sandbox) middleware.Middleware {
+func Sandbox(policy tool.Sandbox) middleware.Middleware {
 	return func(next middleware.Next) middleware.Next {
 		return func(ctx context.Context, state core.State, eff core.Instruction) (core.State, *core.Event, bool, error) {
 			if eff.Kind != core.INSTRUCTION_CALL_TOOL || eff.CallTool == nil {
 				return next(ctx, state, eff)
 			}
 			v := policy.Check(eff.CallTool.Call.Name, eff.CallTool.Call.Args)
-			if v == action.VERDICT_ALLOW {
+			if v == tool.VERDICT_ALLOW {
 				return next(ctx, state, eff)
 			}
 			// Denied — emit NOTIFY first so the operator sees the reason,

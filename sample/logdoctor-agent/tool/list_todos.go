@@ -3,34 +3,34 @@ package tool
 import (
 	"context"
 
-	"github.com/bizshuk/agentsdk/action"
 	sdkcore "github.com/bizshuk/agentsdk/core"
+	sdktool "github.com/bizshuk/agentsdk/tool"
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
 )
 
-// ListTodosArgs argument shape.
+// ListTodosArgs is the input shape for the list_todos tool.
 type ListTodosArgs struct {
-	Status string `json:"status,omitempty"`
+	Status string `json:"status,omitempty"` // "pending", "done", or "" for all
 }
 
-// ListTodosOutput output shape.
+// ListTodosOutput is the output shape returned to the LLM.
 type ListTodosOutput struct {
 	Todos []domain.Todo `json:"todos"`
 }
 
-// ListTodos lists todos filtered by status.
+// ListTodos lists remediation todos from the Store.
 type ListTodos struct {
 	Store *domain.TodoStore
 }
 
-// NewListTodos constructs a ListTodos tool.
+// NewListTodos constructs a list_todos tool backed by store.
 func NewListTodos(s *domain.TodoStore) *ListTodos {
 	return &ListTodos{Store: s}
 }
 
-// Register registers ListTodos into the given action.Registry.
-func (l *ListTodos) Register(reg *action.Registry) {
-	action.RegisterFunc(reg, "list_todos", "List todos, optionally filtered by status", sdkcore.RISK_LEVEL_LOW, l.Handle)
+// Register registers ListTodos into the given sdktool.Registry.
+func (l *ListTodos) Register(reg *sdktool.Registry) {
+	sdktool.RegisterFunc(reg, "list_todos", "List todos, optionally filtered by status", sdkcore.RISK_LEVEL_LOW, l.Handle)
 }
 
 // Handle is pure business logic.

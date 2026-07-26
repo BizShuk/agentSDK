@@ -1,9 +1,6 @@
 package spec
 
-import (
-	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/tool"
-)
+import "github.com/bizshuk/agentsdk/core"
 
 // Permission modes. The strings are the config-file vocabulary; the
 // runtime type lives in agent/permission as an alias of
@@ -124,12 +121,12 @@ func VariantChoices(key string) []Choice {
 		}
 	case "tools.builtin":
 		return []Choice{
-			{Value: tool.NAME_READ, Label: "read", Default: true},
-			{Value: tool.NAME_WRITE, Label: "write", Default: true},
-			{Value: tool.NAME_EDIT, Label: "edit", Default: true},
-			{Value: tool.NAME_BASH, Label: "bash", Default: true, Note: "highest risk — gate it with safety rules"},
-			{Value: tool.NAME_GLOB, Label: "glob", Default: true},
-			{Value: tool.NAME_GREP, Label: "grep", Default: true},
+			{Value: "read", Label: "read", Default: true},
+			{Value: "write", Label: "write", Default: true},
+			{Value: "edit", Label: "edit", Default: true},
+			{Value: "bash", Label: "bash", Default: true, Note: "highest risk — gate it with safety rules"},
+			{Value: "glob", Label: "glob", Default: true},
+			{Value: "grep", Label: "grep", Default: true},
 		}
 	case "limits.autonomy":
 		return []Choice{

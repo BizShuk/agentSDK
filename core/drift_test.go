@@ -7,7 +7,7 @@ import (
 
 	"github.com/bizshuk/agentsdk/agent/spec"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/tool"
+	"github.com/bizshuk/agentsdk/tool/builtin"
 )
 
 // TestAutonomyDefaultStringMatchesTyped pins the two-layer default:
@@ -69,7 +69,7 @@ func TestStyleDefaultTracesToCore(t *testing.T) {
 // at runtime. The cross-check is the only way to catch both.
 func TestBuiltinNamesTracesToSpec(t *testing.T) {
 	choices := spec.VariantChoices("tools.builtin")
-	for _, n := range tool.BuiltinNames() {
+	for _, n := range builtin.BuiltinNames() {
 		found := false
 		for _, c := range choices {
 			if c.Value == n {
@@ -82,7 +82,7 @@ func TestBuiltinNamesTracesToSpec(t *testing.T) {
 	}
 	for _, c := range choices {
 		found := false
-		for _, n := range tool.BuiltinNames() {
+		for _, n := range builtin.BuiltinNames() {
 			if n == c.Value {
 				found = true
 				break

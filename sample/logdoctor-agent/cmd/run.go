@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/agent"
-	"github.com/bizshuk/agentsdk/action"
+	"github.com/bizshuk/agentsdk/agent/permission"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware/preset"
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
 	"github.com/bizshuk/agentsdk/sample/logdoctor-agent/internal/fake"
 	"github.com/bizshuk/agentsdk/sample/logdoctor-agent/tool"
-	builtin "github.com/bizshuk/agentsdk/tool"
+	sdktool "github.com/bizshuk/agentsdk/tool"
+	"github.com/bizshuk/agentsdk/tool/builtin"
 	"github.com/spf13/cobra"
 )
 
@@ -74,9 +75,9 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 	// Tool registry.
 	// 內建工具 (Read/Write/Edit/Bash/Glob/Grep) 透過 RegisterDefaults 一次註冊,
 	// 與既有 read_log_tail / notify 並存。Write/Edit/Bash 需要 non-nil Policy。
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	if err := builtin.RegisterDefaults(reg, builtin.Options{
-		Policy:     action.DefaultPolicy(),
+		Policy:     sdktool.DefaultPolicy(),
 		WorkingDir: ".",
 	}); err != nil {
 		return fmt.Errorf("register built-in tools: %w", err)
@@ -95,11 +96,11 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 	// (HIGH risk) triggers a REQUEST_APPROVAL at L2. sandbox policy must
 	// be non-nil so the built-in Write/Edit/Bash tools can path-check
 	// their args — matches the Policy passed to RegisterDefaults above.
-	engine.Middleware = preset.Secure(action.DefaultPolicy(), action.DefaultApprovalPolicy{})
+	engine.Middleware = preset.Secure(sdktool.DefaultPolicy(), permission.DefaultApprovalPolicy{})
 	engine.Emitter = func(eff core.Instruction) {
 		writeEnvelope(cmd, eff)
 	}
-	engine.Approval = action.DefaultApprovalPolicy{}
+	engine.Approval = permission.DefaultApprovalPolicy{}
 
 	// Optional persistence — if --data-dir or env, wire up store+WAL.
 	dataDir := f.dataDir

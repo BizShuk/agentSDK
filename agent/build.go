@@ -7,151 +7,48 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/agent/permission"
 	"github.com/bizshuk/agentsdk/agent/session"
 	"github.com/bizshuk/agentsdk/agent/spec"
 	"github.com/bizshuk/agentsdk/agent/wire"
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/preset"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/prompt"
-	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/skill"
 	"github.com/bizshuk/agentsdk/tool"
+	"github.com/bizshuk/agentsdk/tool/builtin"
 )
 
-// Agent is a prepared configuration plus its injected dependencies. It
-// implements Runner, so a binary reduces to:
-//
-//	func main() { agent.Main(agent.MustNew(cfg)) }
-//
-// Construction is split in two on purpose. New validates and expands
-// without touching the filesystem, so a bad config fails immediately and
-// a test can build one without side effects. Bootstrap does the actual
-// assembly, because it needs the AppConfig — data dir, run ID, state
-// store, WAL — that agent.Run opens in its first step.
-type Agent struct {
-	cfg   Config
-	deps  builder
-	parts *Parts
+// NewEngine constructs the runtime container without exposing runtime in
+// application signatures.
+func NewEngine(decide core.Decide, provider core.Provider, tools core.ToolRegistry) *Engine {
+	return runtime.NewEngine(decide, provider, tools)
 }
 
-// Parts exposes what Bootstrap assembled, for callers that drive the
-// engine themselves instead of handing it to agent.Run: an interactive
-// front end needs the session manager, a slash-command surface needs the
-// skill registry.
-//
-// It is nil until Bootstrap has run.
-type Parts struct {
-	Engine    *runtime.Engine
-	Sessions  *session.Manager
-	Skills    *skill.Registry
-	Prompt    prompt.Builder
-	Config    Config
-	AppConfig *AppConfig
-	Cwd       string
-}
-
-// New prepares an agent. It expands the tier, validates the result, and
-// records the injected dependencies — no I/O, no directories created, no
-// provider contacted.
-func New(cfg Config, opts ...Option) (*Agent, error) {
-	// Checked before Prepare so the caller gets the actionable message.
-	// spec would also reject a nameless config once persistence is on,
-	// but it can only say "memory.store needs a name" — it does not know
-	// that Once exists as the nameless alternative.
-	if cfg.Name == "" {
-		return nil, fmt.Errorf("agent: name is required (use Once for a nameless single call)")
-	}
-	prepared, err := cfg.Prepare()
-	if err != nil {
-		return nil, err
-	}
-	var b builder
-	if err := b.apply(opts); err != nil {
-		return nil, err
-	}
-	return &Agent{cfg: prepared, deps: b}, nil
-}
-
-// MustNew is New for entry points where a bad config is a programming
-// error rather than a runtime condition.
-func MustNew(cfg Config, opts ...Option) *Agent {
-	a, err := New(cfg, opts...)
-	if err != nil {
-		panic(err)
-	}
-	return a
-}
-
-// Name implements Runner.
-func (a *Agent) Name() string { return a.cfg.Name }
-
-// Config returns the expanded, validated configuration.
-func (a *Agent) Config() Config { return a.cfg }
-
-// Parts returns what Bootstrap assembled, or nil before it has run.
-func (a *Agent) Parts() *Parts { return a.parts }
-
-// Preflight implements Preflighter: it builds the provider so a bad
-// credential surfaces before the run leaves any trace on disk.
-//
-// A run that discovers a bad API key on its first model call has already
-// created state and a WAL entry that will sit in `running` forever.
-func (a *Agent) Preflight(_ context.Context, _ *AppConfig) error {
-	if a.deps.provider != nil {
-		return nil
-	}
-	_, err := provider.New(a.cfg.Model.Provider, provider.Options{
-		Model:          a.cfg.Model.Name,
-		BaseURL:        a.cfg.Model.BaseURL,
-		APIKeyEnv:      a.cfg.Model.APIKeyEnv,
-		CredentialKind: a.cfg.Model.CredentialKind,
+// ReActStep returns the default think-then-act dispatcher.
+func ReActStep() core.Decide {
+	return core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
-	return err
 }
 
-// Bootstrap implements Runner: it runs the assembly pipeline and
-// returns the engine plus the opening state.
-//
-// The stage order is the knowledge this layer exists to hold. Each stage
-// establishes what the next may assume, and three of the dependencies are
-// not obvious from reading the stages alone:
-//
-//   - tools come after the provider, because the subagent task tool needs
-//     a provider to run delegated work with
-//   - the prompt comes after tools and skills, because the skill index is
-//     part of the system message it seeds
-//   - one permission.Engine instance feeds BOTH Engine.Approval and the
-//     middleware chain; building two would let the gate and the chain
-//     disagree about the same call
-func (a *Agent) Bootstrap(ctx context.Context, ac *AppConfig) (*runtime.Engine, core.State, error) {
+// Bootstrap assembles the configured pipeline and opening state. Ordering
+// matters: tools may need the provider, prompts may need skills, and one
+// permission engine must feed both middleware and Engine.Approval.
+func (a *Agent) Bootstrap(ctx context.Context, ac *Host) (*Engine, core.State, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, core.State{}, fmt.Errorf("agent: getwd: %w", err)
 	}
-	// ~/.config/<name>, the parent of the data dir — where user-level
-	// skills, commands and agent definitions live.
 	userDir := filepath.Dir(ac.DataDir)
 
 	// --- stage 1: provider ---
-	// An injected provider wins outright; otherwise the registry builds the
-	// configured adapter. CredentialKind is passed through verbatim so the
-	// strict modes ("oauth" / "api_key") error here with a clear message
-	// rather than silently falling back to the legacy OAuth>API-key order.
-	prov := a.deps.provider
-	if prov == nil {
-		prov, err = provider.New(a.cfg.Model.Provider, provider.Options{
-			Model:          a.cfg.Model.Name,
-			BaseURL:        a.cfg.Model.BaseURL,
-			APIKeyEnv:      a.cfg.Model.APIKeyEnv,
-			CredentialKind: a.cfg.Model.CredentialKind,
-		})
-		if err != nil {
-			return nil, core.State{}, err
-		}
+	prov, err := a.deps.buildProvider(a.cfg.Model)
+	if err != nil {
+		return nil, core.State{}, err
 	}
 
 	// --- stage 2: tools ---
@@ -192,7 +89,7 @@ func (a *Agent) Bootstrap(ctx context.Context, ac *AppConfig) (*runtime.Engine, 
 	sink := a.buildSink()
 
 	// --- stage 8: assemble ---
-	eng := runtime.NewEngine(step, prov, tools)
+	eng := NewEngine(step, prov, tools)
 	eng.Middleware = a.buildMiddleware(sandbox, perm)
 	eng.Store = store
 	eng.Log = wal
@@ -216,10 +113,7 @@ func (a *Agent) Bootstrap(ctx context.Context, ac *AppConfig) (*runtime.Engine, 
 		}
 	}
 
-	// Spawn the listener pump last so the engine is fully wired before any
-	// observation can Steer into it. The goroutine terminates when ctx is
-	// cancelled (signal or deadline) OR when the listener closes its
-	// channel — whichever happens first.
+	// Start listeners only after the engine is fully wired.
 	if a.deps.listener != nil {
 		go pumpListener(ctx, eng, a.deps.listener)
 	}
@@ -233,17 +127,13 @@ func (a *Agent) Bootstrap(ctx context.Context, ac *AppConfig) (*runtime.Engine, 
 
 // --- stage 2 ---
 
-// buildTools assembles the tool registry: the built-in allowlist, then
-// injected tools, then the subagent task tool.
-//
-// A nil registry is returned when nothing is configured. That is not an
-// oversight — runtime treats a nil ToolRegistry as "no tools", the model
-// then receives no tool specs, and the loop reduces to plain conversation.
+// buildTools registers built-ins, injected tools, then subagents. It returns
+// nil when no tools are configured.
 func (a *Agent) buildTools(cwd, userDir string, prov core.Provider) (core.ToolRegistry, error) {
 	if a.cfg.Tools == nil && a.cfg.Subagents == nil && len(a.deps.tools) == 0 && len(a.deps.toolRegistrars) == 0 {
 		return nil, nil
 	}
-	reg := action.NewRegistry()
+	reg := tool.NewRegistry()
 
 	if a.cfg.Tools != nil {
 		workDir := a.cfg.Tools.WorkingDir
@@ -271,57 +161,52 @@ func (a *Agent) buildTools(cwd, userDir string, prov core.Provider) (core.ToolRe
 	return reg, nil
 }
 
-// registerBuiltins registers the requested built-in tools. An empty
-// allowlist means all six — the config says which tools to have, and
-// saying nothing means the standard set.
-func registerBuiltins(reg *action.Registry, allow []string, workDir string) error {
-	policy := action.DefaultPolicy()
+// registerBuiltins treats an empty allowlist as all built-ins.
+func registerBuiltins(reg *tool.Registry, allow []string, workDir string) error {
+	policy := tool.DefaultPolicy()
 	if len(allow) == 0 {
-		if err := tool.RegisterDefaults(reg, tool.Options{Policy: policy, WorkingDir: workDir}); err != nil {
+		if err := builtin.RegisterDefaults(reg, builtin.Options{Policy: policy, WorkingDir: workDir}); err != nil {
 			return fmt.Errorf("agent: register built-in tools: %w", err)
 		}
 		return nil
 	}
 	for _, name := range allow {
 		switch name {
-		case tool.NAME_READ:
-			r := tool.NewRead(tool.ReadOptions{}, policy, workDir)
-			action.RegisterFunc(reg, r.ToolName(), tool.ReadDesc, r.ToolRisk(), r.Handle)
-		case tool.NAME_GLOB:
-			g := tool.NewGlob(tool.GlobOptions{}, policy, workDir)
-			action.RegisterFunc(reg, g.ToolName(), tool.GlobDesc, g.ToolRisk(), g.Handle)
-		case tool.NAME_GREP:
-			gr := tool.NewGrep(tool.GrepOptions{}, policy, workDir)
-			action.RegisterFunc(reg, gr.ToolName(), tool.GrepDesc, gr.ToolRisk(), gr.Handle)
-		case tool.NAME_WRITE:
-			w, err := tool.NewWrite(tool.WriteOptions{}, policy, workDir)
+		case builtin.NAME_READ:
+			r := builtin.NewRead(policy, workDir)
+			tool.RegisterTyped(reg, r)
+		case builtin.NAME_GLOB:
+			g := builtin.NewGlob(policy, workDir)
+			tool.RegisterTyped(reg, g)
+		case builtin.NAME_GREP:
+			gr := builtin.NewGrep(policy, workDir)
+			tool.RegisterTyped(reg, gr)
+		case builtin.NAME_WRITE:
+			w, err := builtin.NewWrite(policy, workDir)
 			if err != nil {
 				return fmt.Errorf("agent: write tool: %w", err)
 			}
-			action.RegisterFunc(reg, w.ToolName(), tool.WriteDesc, w.ToolRisk(), w.Handle)
-		case tool.NAME_EDIT:
-			e, err := tool.NewEdit(tool.EditOptions{}, policy, workDir)
+			tool.RegisterTyped(reg, w)
+		case builtin.NAME_EDIT:
+			e, err := builtin.NewEdit(policy, workDir)
 			if err != nil {
 				return fmt.Errorf("agent: edit tool: %w", err)
 			}
-			action.RegisterFunc(reg, e.ToolName(), tool.EditDesc, e.ToolRisk(), e.Handle)
-		case tool.NAME_BASH:
-			b, err := tool.NewBash(tool.BashOptions{}, policy, workDir)
+			tool.RegisterTyped(reg, e)
+		case builtin.NAME_BASH:
+			b, err := builtin.NewBash(policy, workDir)
 			if err != nil {
 				return fmt.Errorf("agent: bash tool: %w", err)
 			}
-			action.RegisterFunc(reg, b.ToolName(), tool.BashDesc, b.ToolRisk(), b.Handle)
+			tool.RegisterTyped(reg, b)
 		default:
-			// spec.Validate rejects unknown names; reaching here means
-			// the two lists drifted.
 			return fmt.Errorf("agent: unknown built-in tool %q", name)
 		}
 	}
 	return nil
 }
 
-// discoverSubagentDefs merges user-level and project-level definitions.
-// Project comes second so it wins a name clash.
+// discoverSubagentDefs lets project definitions override user definitions.
 func discoverSubagentDefs(cfg Config, userDir, cwd string) []skill.Def {
 	dirs := cfg.Subagents.Dirs
 	if len(dirs) == 0 {
@@ -338,13 +223,12 @@ func discoverSubagentDefs(cfg Config, userDir, cwd string) []skill.Def {
 	return defs
 }
 
-// subagentRunner gives each delegation a scoped, ephemeral engine over the
-// same provider: no store, no WAL, its own turn budget. A subagent's work
-// is part of the parent's turn, not a run of its own.
+// subagentRunner uses an ephemeral engine with the shared provider and its
+// own turn budget.
 func (a *Agent) subagentRunner(prov core.Provider) skill.RunFunc {
 	maxTurns := a.cfg.Subagents.MaxTurns
 	return func(ctx context.Context, def skill.Def, promptText string) (string, error) {
-		reg := action.NewRegistry()
+		reg := tool.NewRegistry()
 		if a.cfg.Tools != nil {
 			workDir := a.cfg.Tools.WorkingDir
 			if workDir == "" {
@@ -363,7 +247,7 @@ func (a *Agent) subagentRunner(prov core.Provider) skill.RunFunc {
 		step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 			core.REASON_REACT: planning.NewThinkThenAct(),
 		})
-		sub := runtime.NewEngine(step, prov, reg)
+		sub := NewEngine(step, prov, reg)
 		perm, sandbox := a.buildSafety()
 		sub.Middleware = a.buildMiddleware(sandbox, perm)
 		if perm != nil {
@@ -391,11 +275,7 @@ func (a *Agent) subagentRunner(prov core.Provider) skill.RunFunc {
 
 // --- stage 3 ---
 
-// buildDecide registers every enabled rule and returns the dispatcher.
-//
-// Enable decides what is registered; State.ReasoningStyle decides which
-// one runs. Registering only the selected style is the common case, and
-// spec.Validate has already guaranteed the selected style is in the list.
+// buildDecide registers enabled rules; injected rules override by Kind.
 func (a *Agent) buildDecide() (core.Decide, error) {
 	rules := map[core.ReasoningStyle]core.DecisionRule{}
 	for _, name := range a.cfg.Reasoning.Enable {
@@ -405,17 +285,13 @@ func (a *Agent) buildDecide() (core.Decide, error) {
 		}
 		rules[rule.Kind()] = rule
 	}
-	// Injected rules win, so an application can replace a built-in
-	// strategy with its own implementation of the same Kind.
 	for _, rule := range a.deps.rules {
 		rules[rule.Kind()] = rule
 	}
 	return core.NewDecide(rules), nil
 }
 
-// ruleFor maps a style name to its implementation. This is the one place
-// that knows planning exists, which is why spec can enumerate styles from
-// core's constants without importing planning.
+// ruleFor maps declarative reasoning styles to implementations.
 func ruleFor(style core.ReasoningStyle) (core.DecisionRule, error) {
 	switch style {
 	case core.REASON_REACT:
@@ -437,21 +313,13 @@ func ruleFor(style core.ReasoningStyle) (core.DecisionRule, error) {
 
 // --- stage 5 ---
 
-// buildSafety returns the approval engine and the sandbox. Both may be
-// nil, which the engine and the middleware chain treat as "no gate".
-//
-// The SAME *permission.Engine goes to Engine.Approval and into the
-// middleware chain. Two instances would be two policies that happen to
-// look alike today and diverge tomorrow.
-func (a *Agent) buildSafety() (*permission.Engine, action.Sandbox) {
+// buildSafety creates the shared approval engine and optional sandbox.
+func (a *Agent) buildSafety() (*permission.Engine, tool.Sandbox) {
 	if a.cfg.Safety == nil {
 		return nil, nil
 	}
 	rules := make([]permission.Rule, 0,
 		len(a.cfg.Safety.Deny)+len(a.cfg.Safety.Ask)+len(a.cfg.Safety.Allow))
-	// Deny first, then ask, then allow. The engine applies deny > ask >
-	// allow regardless of order, but keeping the slice in precedence
-	// order makes a dump of the rules readable.
 	for _, s := range a.cfg.Safety.Deny {
 		rules = append(rules, permission.Rule{Behavior: permission.BEHAVIOR_DENY, Spec: s})
 	}
@@ -464,20 +332,18 @@ func (a *Agent) buildSafety() (*permission.Engine, action.Sandbox) {
 
 	eng := &permission.Engine{Mode: permission.Mode(a.cfg.Safety.Mode), Rules: rules}
 	if a.cfg.Safety.Fallback == spec.SAFETY_FALLBACK_AUTONOM {
-		eng.Fallback = action.DefaultApprovalPolicy{}
+		eng.Fallback = permission.DefaultApprovalPolicy{}
 	}
 
-	var sandbox action.Sandbox
+	var sandbox tool.Sandbox
 	if a.cfg.Safety.Sandbox {
-		sandbox = action.DefaultPolicy()
+		sandbox = tool.DefaultPolicy()
 	}
 	return eng, sandbox
 }
 
-// buildMiddleware resolves the preset. The chain's ORDER is a correctness
-// property, not a preference, so config picks a preset rather than
-// composing layers.
-func (a *Agent) buildMiddleware(sandbox action.Sandbox, perm core.ApprovalPolicy) middlewareChain {
+// buildMiddleware resolves the configured ordered preset.
+func (a *Agent) buildMiddleware(sandbox tool.Sandbox, perm core.ApprovalPolicy) middleware.Middleware {
 	if a.cfg.Middleware == nil {
 		return nil
 	}
@@ -498,21 +364,16 @@ func (a *Agent) buildMiddleware(sandbox action.Sandbox, perm core.ApprovalPolicy
 
 // --- stage 6 ---
 
-// buildPersistence returns the state store and WAL, or nils when the
-// memory block is off. agent.Run backfills from AppConfig only when the
-// engine leaves them nil, so returning nils here genuinely disables
-// persistence rather than deferring to the default.
-func (a *Agent) buildPersistence(ac *AppConfig) (core.StateStore, core.WriteAheadLog) {
+// buildPersistence returns Host persistence only when file memory is enabled.
+func (a *Agent) buildPersistence(ac *Host) (core.StateStore, core.WriteAheadLog) {
 	if a.cfg.Memory == nil || a.cfg.Memory.Store != spec.MEMORY_STORE_FILE {
 		return nil, nil
 	}
 	return ac.StateStore, ac.WAL
 }
 
-// buildSessions adds lineage — list, resume, fork, tree — on top of the
-// store. Without persistence there is nothing to have lineage over, which
-// spec.Validate already rejects.
-func (a *Agent) buildSessions(ac *AppConfig, store core.StateStore, wal core.WriteAheadLog) (*session.Manager, error) {
+// buildSessions adds lineage management when sessions are enabled.
+func (a *Agent) buildSessions(ac *Host, store core.StateStore, wal core.WriteAheadLog) (*session.Manager, error) {
 	if a.cfg.Sessions == nil || store == nil {
 		return nil, nil
 	}
@@ -552,7 +413,7 @@ func (a *Agent) buildSink() core.EventSink {
 
 // seedState builds the opening State: budget and autonomy from Limits,
 // messages from the prompt builder.
-func (a *Agent) seedState(ctx context.Context, ac *AppConfig, b prompt.Builder, cwd string) (core.State, error) {
+func (a *Agent) seedState(ctx context.Context, ac *Host, b prompt.Builder, cwd string) (core.State, error) {
 	state := core.State{
 		RunID:          ac.RunID,
 		ReasoningStyle: core.ReasoningStyle(a.cfg.Reasoning.Style),
@@ -598,16 +459,9 @@ func autonomyLevel(s string) core.AutonomyLevel {
 	}
 }
 
-// pumpListener drains an ObservationSource and forwards each payload to
-// Engine.Steer so the next Decide cycle sees it as a user message. The
-// goroutine exits when ctx is cancelled OR when the source closes its
-// channel — whichever happens first.
-//
-// Engine.Steer is concurrent-safe, so the goroutine can run alongside
-// the engine loop without further synchronization. Empty payloads are
-// dropped here rather than queued, since the engine's no-message-loop
-// would otherwise block on them.
-func pumpListener(ctx context.Context, eng *runtime.Engine, src core.ObservationSource) {
+// pumpListener forwards non-empty observations to the concurrent-safe
+// steering queue.
+func pumpListener(ctx context.Context, eng *Engine, src core.ObservationSource) {
 	for obs := range src.Observations(ctx) {
 		if ctx.Err() != nil {
 			return
@@ -618,12 +472,7 @@ func pumpListener(ctx context.Context, eng *runtime.Engine, src core.Observation
 	}
 }
 
-// payloadToString flattens an observation payload into a single user
-// message. The most common case is a string from a log listener; the
-// Stringer fallback covers structured payloads that know how to render
-// themselves; the catch-all handles anything else with %v formatting.
-// Empty results drop the observation (Engine.Steer would also filter
-// empties, but skipping here keeps the queue clean).
+// payloadToString flattens an observation into user text.
 func payloadToString(p any) string {
 	switch v := p.(type) {
 	case nil:

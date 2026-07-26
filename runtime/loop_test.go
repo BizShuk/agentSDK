@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/harness"
 	"github.com/bizshuk/agentsdk/middleware/security"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,7 +47,7 @@ func TestReActEndTurnExitsLoop(t *testing.T) {
 		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
 
-	loop := runtime.NewEngine(step, prov, action.NewRegistry())
+	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
 	loop.Emitter = func(eff core.Instruction) {}
 	state := core.State{
 		RunID:          "r1",
@@ -71,8 +71,8 @@ func TestReActOneToolCallThenEnd(t *testing.T) {
 	prov.EnqueueToolCall("c1", "add", map[string]any{"n1": 2, "n2": 3})
 	prov.EnqueueEndTurn("the sum is 5")
 
-	reg := action.NewRegistry()
-	action.RegisterFunc(reg, "add", "add two ints", core.RISK_LEVEL_LOW,
+	reg := tool.NewRegistry()
+	tool.RegisterFunc(reg, "add", "add two ints", core.RISK_LEVEL_LOW,
 		func(_ context.Context, a addArgs) (addOut, error) {
 			return addOut{Sum: a.N1 + a.N2}, nil
 		})
@@ -116,8 +116,8 @@ func TestPlannerExecutorDispatchesBlueprint(t *testing.T) {
 	// Two steps; neither requires an LLM call (blueprint seeded via scratch).
 	prov.EnqueueEndTurn("unused")
 
-	reg := action.NewRegistry()
-	action.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
+	reg := tool.NewRegistry()
+	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, a addArgs) (addOut, error) { return addOut{}, nil })
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
@@ -157,8 +157,8 @@ func TestBudgetExceededStopsLoop(t *testing.T) {
 		prov.EnqueueToolCall(fmt.Sprintf("c%d", i), "noop", map[string]any{})
 	}
 
-	reg := action.NewRegistry()
-	action.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
+	reg := tool.NewRegistry()
+	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, a addArgs) (addOut, error) { return addOut{}, nil })
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
@@ -192,7 +192,7 @@ func TestStoreAndWAL(t *testing.T) {
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
-	loop := runtime.NewEngine(step, prov, action.NewRegistry())
+	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
 	loop.Emitter = func(eff core.Instruction) {}
 	loop.Store = store
 	loop.Log = wal
@@ -231,7 +231,7 @@ func TestNotifyIsCalled(t *testing.T) {
 	})
 
 	notifier := &testutil.RecordingNotifier{}
-	loop := runtime.NewEngine(step, prov, action.NewRegistry())
+	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
 	loop.Notifier = notifier
 	loop.Emitter = func(eff core.Instruction) {}
 
@@ -256,7 +256,7 @@ func TestRunWithInputSeedsFirstTurn(t *testing.T) {
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
-	loop := runtime.NewEngine(step, prov, action.NewRegistry())
+	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
 	loop.Emitter = func(eff core.Instruction) {}
 
 	state := core.State{
@@ -307,8 +307,8 @@ func toolResultsOf(s core.State) []core.ToolResultPart {
 // ReAct, an always-allow approval stub.
 func batchEngine(t *testing.T, prov *testutil.ScriptedProvider) *runtime.Engine {
 	t.Helper()
-	reg := action.NewRegistry()
-	action.RegisterFunc(reg, "add", "add two ints", core.RISK_LEVEL_LOW,
+	reg := tool.NewRegistry()
+	tool.RegisterFunc(reg, "add", "add two ints", core.RISK_LEVEL_LOW,
 		func(_ context.Context, a addArgs) (addOut, error) {
 			return addOut{Sum: a.N1 + a.N2}, nil
 		})

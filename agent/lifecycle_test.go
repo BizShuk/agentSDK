@@ -12,13 +12,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/security"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
 )
 
@@ -86,7 +86,7 @@ func (a *testAgent) Bootstrap(_ context.Context, _ *agent.AppConfig) (*runtime.E
 	provider.EnqueueToolCall("call-1", a.tool.Name(), map[string]any{"msg": "hi"})
 	provider.EnqueueEndTurn("done")
 
-	reg := action.NewRegistry()
+	reg := tool.NewRegistry()
 	reg.Register(a.tool)
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
@@ -269,7 +269,7 @@ func pausingEngine() (*runtime.Engine, core.State) {
 	prov := testutil.NewScriptedProvider()
 	prov.EnqueueToolCall("c1", "echo", map[string]any{"msg": "hi"})
 	prov.EnqueueEndTurn("done")
-	reg := action.NewRegistry()
+	reg := tool.NewRegistry()
 	reg.Register(echoTool{})
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_REACT: planning.NewThinkThenAct(),
@@ -292,7 +292,7 @@ func chatEngine() (*runtime.Engine, core.State) {
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
-	eng := runtime.NewEngine(step, prov, action.NewRegistry())
+	eng := runtime.NewEngine(step, prov, tool.NewRegistry())
 	return eng, core.State{ReasoningStyle: core.REASON_REACT, Budget: core.Budget{MaxTurns: 10}}
 }
 

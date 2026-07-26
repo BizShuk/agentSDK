@@ -14,7 +14,6 @@
 package permission
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
@@ -65,79 +64,51 @@ type Engine struct {
 	// present of args "command", "path", "file_path" (stringly).
 	Targets map[string]TargetFunc
 
-	// Fallback decides when no rule matches under MODE_DEFAULT — inject
-	// action.DefaultApprovalPolicy to keep the autonomy grid. nil falls back
-	// to risk-only: low → allow, high → ask.
+	// Fallback decides when no rule matches under MODE_DEFAULT — default fallback
+	// is DefaultApprovalPolicy (the autonomy L0-L4 grid).
 	Fallback core.ApprovalPolicy
 }
 
 // Decide implements core.ApprovalPolicy.
 func (e *Engine) Decide(ctx struct{}, autonomy core.AutonomyLevel, eff core.CallToolInstruction, schema core.ToolSpec) core.ApprovalAction {
 	if e.Mode == MODE_BYPASS {
-		return core.APPROVAL_ACTION_ALLOW
+		return BypassApprovalPolicy{}.Decide(ctx, autonomy, eff, schema)
 	}
-	if b, ok := e.matchRules(eff.Call); ok {
-		switch b {
-		case BEHAVIOR_DENY:
-			return core.APPROVAL_ACTION_DENY
-		case BEHAVIOR_ASK:
-			return core.APPROVAL_ACTION_ASK
-		case BEHAVIOR_ALLOW:
-			return core.APPROVAL_ACTION_ALLOW
-		}
+	if action, ok := (RulesApprovalPolicy{Rules: e.Rules, Targets: e.Targets}).DecideMatch(eff.Call); ok {
+		return action
 	}
 	switch e.Mode {
 	case MODE_PLAN:
-		if schema.Risk == core.RISK_LEVEL_LOW {
-			return core.APPROVAL_ACTION_ALLOW
-		}
-		return core.APPROVAL_ACTION_DENY
+		return PlanApprovalPolicy{}.Decide(ctx, autonomy, eff, schema)
 	case MODE_ACCEPT_EDITS:
-		if schema.Risk == core.RISK_LEVEL_LOW {
-			return core.APPROVAL_ACTION_ALLOW
-		}
-		return core.APPROVAL_ACTION_ASK
+		return AcceptEditsApprovalPolicy{}.Decide(ctx, autonomy, eff, schema)
 	default:
 		if e.Fallback != nil {
 			return e.Fallback.Decide(ctx, autonomy, eff, schema)
 		}
-		if schema.Risk == core.RISK_LEVEL_LOW {
-			return core.APPROVAL_ACTION_ALLOW
-		}
-		return core.APPROVAL_ACTION_ASK
+		return DefaultApprovalPolicy{}.Decide(ctx, autonomy, eff, schema)
 	}
 }
 
-// matchRules evaluates deny > ask > allow: the strongest behavior with any
-// matching specifier wins, mirroring claude-code rule precedence.
+// matchRules evaluates deny > ask > allow: delegates to RulesApprovalPolicy.
 func (e *Engine) matchRules(call core.ToolCall) (Behavior, bool) {
-	target := e.target(call)
-	for _, b := range []Behavior{BEHAVIOR_DENY, BEHAVIOR_ASK, BEHAVIOR_ALLOW} {
-		for _, r := range e.Rules {
-			if r.Behavior != b {
-				continue
-			}
-			if MatchSpec(r.Spec, call.Name, target) {
-				return b, true
-			}
-		}
+	action, ok := (RulesApprovalPolicy{Rules: e.Rules, Targets: e.Targets}).DecideMatch(call)
+	if !ok {
+		return "", false
+	}
+	switch action {
+	case core.APPROVAL_ACTION_DENY:
+		return BEHAVIOR_DENY, true
+	case core.APPROVAL_ACTION_ASK:
+		return BEHAVIOR_ASK, true
+	case core.APPROVAL_ACTION_ALLOW:
+		return BEHAVIOR_ALLOW, true
 	}
 	return "", false
 }
 
 func (e *Engine) target(call core.ToolCall) string {
-	if fn, ok := e.Targets[call.Name]; ok && fn != nil {
-		return fn(call)
-	}
-	for _, key := range []string{"command", "path", "file_path"} {
-		if v, ok := call.Args[key]; ok {
-			if s, ok := v.(string); ok {
-				return s
-			}
-			return fmt.Sprintf("%v", v)
-		}
-	}
-	return ""
+	return extractTarget(e.Targets, call)
 }
 
 // MatchSpec matches one specifier against a (toolName, target) pair.

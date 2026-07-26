@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
 	sdkcore "github.com/bizshuk/agentsdk/core"
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
 	"github.com/bizshuk/agentsdk/sample/logdoctor-agent/tool"
+	sdktool "github.com/bizshuk/agentsdk/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +47,7 @@ func TestReadLogTailExtractsFirstN(t *testing.T) {
 		ObservedAt: time.Unix(0, 0),
 		Payload:    "a\nb\nc\nd\ne",
 	})
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewReadLogTail(src).Register(reg)
 
 	res := reg.Call(context.Background(), core.ToolCall{
@@ -70,7 +70,7 @@ func TestReadLogTailDefaultsTo20(t *testing.T) {
 		ObservedAt: time.Unix(0, 0),
 		Payload:    "a\nb",
 	})
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewReadLogTail(src).Register(reg)
 
 	res := reg.Call(context.Background(), core.ToolCall{
@@ -83,7 +83,7 @@ func TestReadLogTailDefaultsTo20(t *testing.T) {
 
 func TestReadLogTailBadArgs(t *testing.T) {
 	src := newStubSource(sdkcore.Observation{Payload: "x"})
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewReadLogTail(src).Register(reg)
 
 	res := reg.Call(context.Background(), core.ToolCall{
@@ -102,7 +102,7 @@ func TestNotifyWritesLine(t *testing.T) {
 	require.NoError(t, err)
 	defer f.Close()
 
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewNotify(f).Register(reg)
 
 	res := reg.Call(context.Background(), core.ToolCall{
@@ -125,7 +125,7 @@ func TestNotifyDefaultsToInfo(t *testing.T) {
 	require.NoError(t, err)
 	defer f.Close()
 
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewNotify(f).Register(reg)
 
 	res := reg.Call(context.Background(), core.ToolCall{
@@ -141,7 +141,7 @@ func TestNotifyDefaultsToInfo(t *testing.T) {
 
 func TestNotifyErrorPropagates(t *testing.T) {
 	fw := &failsWriter{}
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewNotify(fw).Register(reg)
 
 	res := reg.Call(context.Background(), core.ToolCall{
@@ -165,7 +165,7 @@ func TestListenerAndReadLogTailIntegrated(t *testing.T) {
 	l, err := domain.NewLogFileListener(p)
 	require.NoError(t, err)
 
-	reg := action.NewRegistry()
+	reg := sdktool.NewRegistry()
 	tool.NewReadLogTail(l).Register(reg)
 
 	res := reg.Call(context.Background(), core.ToolCall{

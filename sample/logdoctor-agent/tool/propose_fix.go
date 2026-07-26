@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/bizshuk/agentsdk/action"
 	sdkcore "github.com/bizshuk/agentsdk/core"
+	sdktool "github.com/bizshuk/agentsdk/tool"
 )
 
 // ProposeFixArgs argument shape.
@@ -29,9 +29,9 @@ func NewProposeFix() *ProposeFix {
 	return &ProposeFix{}
 }
 
-// Register registers ProposeFix into the given action.Registry.
-func (p *ProposeFix) Register(reg *action.Registry) {
-	action.RegisterFunc(reg, "propose_fix", "Propose a fix for the operator to approve", sdkcore.RISK_LEVEL_HIGH, p.Handle)
+// Register registers ProposeFix into the given sdktool.Registry.
+func (p *ProposeFix) Register(reg *sdktool.Registry) {
+	sdktool.RegisterFunc(reg, "propose_fix", "Propose a fix for the operator to approve", sdkcore.RISK_LEVEL_HIGH, p.Handle)
 }
 
 // Handle is pure business logic.

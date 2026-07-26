@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory/checkpoint"
 	"github.com/bizshuk/agentsdk/memory/filestore"
@@ -15,6 +14,7 @@ import (
 	"github.com/bizshuk/agentsdk/middleware/loopguard"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,8 +36,8 @@ func TestCrashRecoveryFullCycle(t *testing.T) {
 	prov.EnqueueToolCall("c1", "noop", map[string]any{}) // ReAct phase 1
 	prov.EnqueueEndTurn("done")                          // final
 
-	reg := action.NewRegistry()
-	action.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
+	reg := tool.NewRegistry()
+	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
@@ -91,8 +91,8 @@ func TestChainComposesOverRetryThroughLoopguard(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		prov.EnqueueToolCall("c", "noop", map[string]any{})
 	}
-	reg := action.NewRegistry()
-	action.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
+	reg := tool.NewRegistry()
+	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{

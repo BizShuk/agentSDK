@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,7 +36,7 @@ type collectSink struct{ kinds []core.StreamEventKind }
 
 func (c *collectSink) OnStreamEvent(ev core.StreamEvent) { c.kinds = append(c.kinds, ev.Kind) }
 
-func newHarnessEngine(prov *testutil.ScriptedProvider, reg *action.Registry) *runtime.Engine {
+func newHarnessEngine(prov *testutil.ScriptedProvider, reg *tool.Registry) *runtime.Engine {
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_REACT: planning.NewThinkThenAct(),
 	})
@@ -53,8 +53,8 @@ func reactState(runID string) core.State {
 	}
 }
 
-func addCounterTool(reg *action.Registry, calls *int) {
-	action.RegisterFunc(reg, "add", "add two ints", core.RISK_LEVEL_LOW,
+func addCounterTool(reg *tool.Registry, calls *int) {
+	tool.RegisterFunc(reg, "add", "add two ints", core.RISK_LEVEL_LOW,
 		func(_ context.Context, a struct {
 			N1 int `json:"n1"`
 			N2 int `json:"n2"`
@@ -83,7 +83,7 @@ func TestPreToolUseHookBlocksExecution(t *testing.T) {
 	prov.EnqueueToolCall("c1", "add", map[string]any{"n1": 2, "n2": 3})
 	prov.EnqueueEndTurn("stopped")
 
-	reg := action.NewRegistry()
+	reg := tool.NewRegistry()
 	calls := 0
 	addCounterTool(reg, &calls)
 
@@ -108,7 +108,7 @@ func TestPostToolUseHookAppendsSystemNote(t *testing.T) {
 	prov.EnqueueToolCall("c1", "add", map[string]any{"n1": 2, "n2": 3})
 	prov.EnqueueEndTurn("done")
 
-	reg := action.NewRegistry()
+	reg := tool.NewRegistry()
 	calls := 0
 	addCounterTool(reg, &calls)
 
@@ -128,7 +128,7 @@ func TestSteeringMessageReachesConversation(t *testing.T) {
 	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("done")
 
-	loop := newHarnessEngine(prov, action.NewRegistry())
+	loop := newHarnessEngine(prov, tool.NewRegistry())
 	loop.Steer("also check the logs")
 
 	final, err := loop.Run(context.Background(), reactState("steer"))
@@ -141,7 +141,7 @@ func TestFollowUpExtendsRun(t *testing.T) {
 	prov.EnqueueEndTurn("first answer")
 	prov.EnqueueEndTurn("second answer")
 
-	loop := newHarnessEngine(prov, action.NewRegistry())
+	loop := newHarnessEngine(prov, tool.NewRegistry())
 	loop.FollowUp("one more thing")
 
 	final, err := loop.Run(context.Background(), reactState("follow-up"))
@@ -156,7 +156,7 @@ func TestSinkReceivesStreamEvents(t *testing.T) {
 	prov.EnqueueToolCall("c1", "add", map[string]any{"n1": 1, "n2": 1})
 	prov.EnqueueEndTurn("done")
 
-	reg := action.NewRegistry()
+	reg := tool.NewRegistry()
 	calls := 0
 	addCounterTool(reg, &calls)
 

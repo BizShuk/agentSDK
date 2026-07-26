@@ -10,9 +10,6 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 )
 
-// Exit codes. pm2 and any other supervisor read these to decide whether a
-// tick errored, so they are part of the contract.
-//
 // Deprecated: exit-code constants moved to agent/cli. The values are
 // unchanged (0 / 1); new code should import cli.EXIT_OK / cli.EXIT_ERROR.
 const (
@@ -20,22 +17,10 @@ const (
 	EXIT_ERROR = 1
 )
 
-// Run is the testable core of cli.Main: the full lifecycle, returning
-// an exit code rather than calling os.Exit. The host is provided
-// pre-built (by cli.OpenForCLI, by a test fixture, or by any caller that
-// wants to embed the agent).
-//
-// The sequence is fixed, and the order is the point — each step
-// establishes what the next one may assume:
-//
-//  1. ctx check — already-dead contexts return immediately
-//  2. preflight— validate credentials and dependencies (optional)
-//  3. deadline — bound total wall-clock time
-//  4. bootstrap— the agent assembles its Engine and opening State
-//  5. run      — drive the loop under panic recovery
-//  6. complete — hand the final State back to the agent (optional)
+// Run executes preflight, bootstrap, engine rounds, and completion without
+// taking ownership of the process.
 func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
-	o := defaultRunOpts()
+	o := DefaultRunOpts()
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -45,23 +30,16 @@ func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
 		log = slog.Default().With(slog.String("app", a.Name()))
 	}
 
-	// Empty name was historically a setup error: state and WAL would
-	// resolve under an empty path. cli.Open already rejects this with a
-	// clearer message, so we surface the error pre-Bootstrap to keep
-	// the contract tested.
 	if a.Name() == "" {
 		log.Error("run: Runner.Name must not be empty")
 		return EXIT_ERROR
 	}
 
-	// 1. Ctx check. A deadline that already expired gives the caller a
-	//    failing exit without invoking Bootstrap.
 	if err := ctx.Err(); err != nil {
 		log.Error("run context cancelled before bootstrap", "err", err)
 		return EXIT_ERROR
 	}
 
-	// 2. Preflight. Fail before the run leaves any trace.
 	if p, ok := a.(Preflighter); ok {
 		if err := p.Preflight(ctx, host); err != nil {
 			log.Error("preflight failed", "err", err)
@@ -69,15 +47,12 @@ func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
 		}
 	}
 
-	// 3. Deadline. A non-positive timeout opts out.
 	if o.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, o.Timeout)
 		defer cancel()
 	}
 
-	// 4. Bootstrap. The agent owns composition; we only backfill the
-	//    persistence and run ID it did not set for itself.
 	engine, state, err := a.Bootstrap(ctx, host)
 	if err != nil {
 		log.Error("bootstrap failed", "err", err)
@@ -87,17 +62,8 @@ func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
 		log.Error("bootstrap returned a nil Engine")
 		return EXIT_ERROR
 	}
-	if engine.Store == nil {
-		engine.Store = host.StateStore
-	}
-	if engine.Log == nil {
-		engine.Log = host.WAL
-	}
-	if state.RunID == "" {
-		state.RunID = host.RunID
-	}
+	bindHost(host, engine, &state)
 
-	// 5. Run under panic recovery.
 	start := time.Now()
 	log.Info("run_start", "run_id", state.RunID)
 	final, runErr := safeRun(ctx, engine, state)
@@ -110,11 +76,6 @@ func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
 		return EXIT_ERROR
 	}
 
-	// 5a. Interactive rounds. A run that stopped is asking the application
-	//     a question — approve this call, or give me the next input. A
-	//     Runner that does not implement Interactive skips this entirely
-	//     and keeps the out-of-process semantics (Run returns,
-	//     PendingApprovals left for an external verb).
 	if in, ok := a.(Interactive); ok {
 		for {
 			reason, asks := pauseReason(final)
@@ -145,8 +106,6 @@ func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
 		}
 	}
 
-	// 6. Completion hook. A run whose results could not be delivered did
-	//    not succeed, so an error here fails the process.
 	if c, ok := a.(Completer); ok {
 		if err := c.OnComplete(ctx, final); err != nil {
 			log.Error("on_complete failed", "run_id", final.RunID, "err", err)
@@ -163,10 +122,6 @@ func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
 	return EXIT_OK
 }
 
-// pauseReason classifies a stop into a question for the application, or
-// reports that there is nothing to ask. FAILED and ABORTED return false:
-// they are terminal, and asking the application to continue a failed run
-// would paper over the failure.
 func pauseReason(s core.State) (PauseReason, bool) {
 	switch s.Status {
 	case core.RUN_STATUS_PAUSED_APPROVAL:
@@ -178,9 +133,6 @@ func pauseReason(s core.State) (PauseReason, bool) {
 	}
 }
 
-// resolveRound bounds one NextRound call. cancel is deferred inside THIS
-// function, which returns per call — a defer placed in the caller's loop
-// would hold every pause's timer alive until Run itself returned.
 func resolveRound(ctx context.Context, in Interactive, d time.Duration, p Pause) (Resume, error) {
 	if d <= 0 {
 		return in.NextRound(ctx, p)
@@ -190,21 +142,8 @@ func resolveRound(ctx context.Context, in Interactive, d time.Duration, p Pause)
 	return in.NextRound(rctx, p)
 }
 
-// advance applies one Resume and drives the engine to its next stop.
-//
-// Two non-obvious mechanics:
-//
-// SubmitHumanDecision ALREADY re-enters runStep and drives the run forward
-// (see runtime/loop.go). Calling Resume afterwards would load the persisted
-// state, find no undecided approval, fall through to WAL replay, and
-// re-execute every logged event — duplicate tool and model calls. So it is
-// deliberately NOT called here.
-//
-// Steer, not FollowUp, carries the new input. FollowUp only fires from
-// inside runStep when the loop would otherwise complete; by the time Run
-// sees a status the engine has already returned, so the queue would never
-// be read. Steer is drained at the top of the next Decide, which is exactly
-// where a new user message belongs.
+// advance submits approval directly because SubmitHumanDecision drives the
+// engine. A completed round is reopened before its steered follow-up.
 func advance(ctx context.Context, e *Engine, s core.State, reason PauseReason, res Resume) (core.State, error) {
 	if res.Input != "" {
 		e.Steer(res.Input)
@@ -216,32 +155,17 @@ func advance(ctx context.Context, e *Engine, s core.State, reason PauseReason, r
 		}
 		decision := res.Decision
 		if decision == "" {
-			// No answer is not consent for a call the policy flagged.
 			decision = core.APPROVAL_DECISION_REJECT
 		}
 		return e.SubmitHumanDecision(ctx, s.RunID, decision, by)
 	}
-	// PAUSE_ROUND_END: runStep short-circuits on a COMPLETED status, so the
-	// run has to be reopened before the steered message can be seen. Reset
-	// the FSM phase so it re-enters reasoning instead of emitting DONE on
-	// stale dispatch memory (the same seam the follow-up queue uses).
 	next := s.Clone()
 	next.Status = core.RUN_STATUS_RUNNING
 	delete(next.WorkingMemory, "think_then_act.phase")
 	return e.Run(ctx, next)
 }
 
-// safeRun drives the engine with panic recovery.
-//
-// A panic inside a tool would otherwise unwind straight through
-// Engine.runStep, skipping the Store.Save that closes out the step — the
-// run would be left persisted as `running` forever, and a later Resume
-// would replay from that stale snapshot. So on recovery we reload
-// whatever the engine last committed and mark it FAILED, making the crash
-// visible and the run terminal.
-//
-// Recovery covers the calling goroutine only. A Runner that spawns its
-// own goroutines must guard them itself.
+// safeRun converts a loop panic into a persisted failed run.
 func safeRun(ctx context.Context, e *Engine, state core.State) (final core.State, err error) {
 	defer func() {
 		rec := recover()
@@ -255,14 +179,8 @@ func safeRun(ctx context.Context, e *Engine, state core.State) (final core.State
 	return e.Run(ctx, state)
 }
 
-// markFailed persists a terminal FAILED status for a crashed run. It
-// reads back the engine's own last checkpoint rather than the seed state,
-// so the recorded turn count and message history reflect how far the run
-// actually got.
-//
-// It runs on a cancellation-detached context: the panic may well have
-// been preceded by ctx expiring, and a store write that fails because of
-// the very condition it is recording would defeat the purpose.
+// markFailed reloads the latest checkpoint and persists a failed status on
+// a cancellation-detached context.
 func markFailed(ctx context.Context, e *Engine, seed core.State) core.State {
 	out := seed
 	out.Status = core.RUN_STATUS_FAILED

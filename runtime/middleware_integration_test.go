@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/memory/filestore"
 	"github.com/bizshuk/agentsdk/middleware"
@@ -12,6 +11,7 @@ import (
 	"github.com/bizshuk/agentsdk/middleware/loopguard"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,8 +25,8 @@ func TestRuntimeLoopguardTripInRealtime(t *testing.T) {
 	prov := testutil.NewScriptedProvider()
 	// Provider is irrelevant — pattern bypasses LLM entirely.
 
-	reg := action.NewRegistry()
-	action.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
+	reg := tool.NewRegistry()
+	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
@@ -71,8 +71,8 @@ func TestRuntimeBudgetExceededExitsRun(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		prov.EnqueueToolCall("c", "noop", map[string]any{})
 	}
-	reg := action.NewRegistry()
-	action.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
+	reg := tool.NewRegistry()
+	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
 
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
@@ -109,7 +109,7 @@ func TestRuntimeResumeFromWAL(t *testing.T) {
 	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
 		core.REASON_PICK_AGENT: planning.NewChooseAgent(),
 	})
-	loop := runtime.NewEngine(step, prov, action.NewRegistry())
+	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
 	loop.Middleware = identityChain()
 	loop.Store = store
 	loop.Log = wal

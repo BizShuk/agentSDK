@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/bizshuk/agentsdk/action"
 	sdkcore "github.com/bizshuk/agentsdk/core"
+	sdktool "github.com/bizshuk/agentsdk/tool"
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
 )
 
@@ -30,9 +30,9 @@ func NewCompleteTodo(s *domain.TodoStore) *CompleteTodo {
 	return &CompleteTodo{Store: s}
 }
 
-// Register registers CompleteTodo into the given action.Registry.
-func (c *CompleteTodo) Register(reg *action.Registry) {
-	action.RegisterFunc(reg, "complete_todo", "Mark a todo as done by ID", sdkcore.RISK_LEVEL_LOW, c.Handle)
+// Register registers CompleteTodo into the given sdktool.Registry.
+func (c *CompleteTodo) Register(reg *sdktool.Registry) {
+	sdktool.RegisterFunc(reg, "complete_todo", "Mark a todo as done by ID", sdkcore.RISK_LEVEL_LOW, c.Handle)
 }
 
 // Handle is pure business logic.
