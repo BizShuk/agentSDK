@@ -74,7 +74,7 @@ newState(MaxTurns=20, Autonomy=L2, Budget, system prompt)
 層 2 variant — block 內的具名字串：空字串 = 該 feature 的預設實作
 ```
 
-`reasoning` 再多一層正交軸：`reasoning.enable`（註冊哪些策略進 `core.NewDecide`）vs `reasoning.style`（這次跑哪個）。
+`reasoning` 再多一層正交軸：`reasoning.enable`（註冊哪些策略進 `reasoning.NewDecide`）vs `reasoning.style`（這次跑哪個）。
 
 把這條規則記住，後面所有的 block 都不用單獨說明。
 
@@ -99,7 +99,7 @@ safety:
   deny: ["bash(sudo:*)"]  # 永遠拒絕 sudo
 ```
 
-第 `1` 種寫法對 `core.NewDecide` 而言 `eng.Approval == nil`——runtime 與 middleware chain 都視為「no gate」，模型呼叫的工具全放行。第 `2` 種寫法建一個有預設規則的 `*permission.Engine`，配上 `config.SecureMiddleware(sandbox, perm)`——`Sandbox=false` 這條是 `Expand` 不會覆寫的特例（`ApplyBlockDefaults` 只填 `Mode`/`Fallback`），所以 `&Safety{}` 不會自動 sandbox。第 `3` 種寫法等於自填一份檢查清單。
+第 `1` 種寫法對 `reasoning.NewDecide` 而言 `eng.Approval == nil`——runtime 與 middleware chain 都視為「no gate」，模型呼叫的工具全放行。第 `2` 種寫法建一個有預設規則的 `*permission.Engine`，配上 `config.SecureMiddleware(sandbox, perm)`——`Sandbox=false` 這條是 `Expand` 不會覆寫的特例（`ApplyBlockDefaults` 只填 `Mode`/`Fallback`），所以 `&Safety{}` 不會自動 sandbox。第 `3` 種寫法等於自填一份檢查清單。
 
 判定時機：`Expand` 跑完才判定，所以 `MustNew` 與 `LoadFile` 會在檔案讀入後自動套用展開。手寫 `Config{}` literal 也可以先呼叫 `cfg.Expand()` 自己看結果。
 
@@ -110,13 +110,13 @@ safety:
 ```yaml
 reasoning:
   style: choose_agent          # 這次跑哪個 → seed core.State.ReasoningStyle
-  enable:                     # 註冊哪些到 core.NewDecide 的 map
+  enable:                     # 註冊哪些到 reasoning.NewDecide 的 map
     - choose_agent            # 一定要含 style，否則 NewDecide 報 NOTIFY error
     - think_then_act          # router 委派的對象
     - plan_then_run
 ```
 
-`Style` 沒在 `Enable[]` 裡是常見拼寫錯誤——`core.NewDecide` 未註冊的 style 不會 reason，會 emit `INSTRUCTION_NOTIFY` 說 `unknown reasoning style`。`Validate` 在讀檔階段就擋下，所以這是設定期錯誤不是執行期錯誤。`TestReasoningStyleNotRegistered` 鎖住這條。
+`Style` 沒在 `Enable[]` 裡是常見拼寫錯誤——`reasoning.NewDecide` 未註冊的 style 不會 reason，會 emit `INSTRUCTION_NOTIFY` 說 `unknown reasoning style`。`Validate` 在讀檔階段就擋下，所以這是設定期錯誤不是執行期錯誤。`TestReasoningStyleNotRegistered` 鎖住這條。
 
 ## 步驟 1 (Step 1)：寫最小的設定
 
@@ -222,7 +222,7 @@ prompt: {sources: [files, skills, env, reminder]}  # ⬇ 開 env 與 reminder
 
 ### 為什麼不直接叫 `engagement`
 
-`tier` 借自 `core.NewDecide` 與 `core.ReasoningStyle` 的對應層——它本來就表示「這個 plan 跑哪一階」。skeleton 沿用這個詞，是要讓設定層與核心層共享同一份心智模型。如果哪天 core 改名，整個設定詞彙也跟著改——這是刻意的耦合，避免「『one-shot』與『REASON_ONE_SHOT』是兩件事」這種漂移。
+`tier` 借自 `reasoning.NewDecide` 與 `core.State.ReasoningStyle` 的對應層——它本來就表示「這個 plan 跑哪一階」。skeleton 沿用這個詞，是要讓設定層與核心層共享同一份心智模型。如果哪天 core 改名，整個設定詞彙也跟著改——這是刻意的耦合，避免「『one-shot』與『REASON_ONE_SHOT』是兩件事」這種漂移。
 
 ## 步驟 3 (Step 3)：用 `MustNew` 建 Agent
 
@@ -251,7 +251,7 @@ func main() {
 
 `Bootstrap` 會做：
 
-- 建 `core.NewDecide`，註冊 `Reasoning.Enable` 列出的策略
+- 建 `reasoning.NewDecide`，註冊 `Reasoning.Enable` 列出的策略
 - 走 8 stage pipeline：provider → tools → reasoning → prompt → safety → memory → output → assemble
 - 回傳 `*runtime.Engine` + opening `core.State`
 
@@ -356,7 +356,7 @@ YAML 與 JSON 共用同一份 `json` tag（轉譯在中間發生，`agent/load.g
 | `WithTools` | 加應用自有工具（部署、回滾、custom API call） | `agent.WithTools(myDeployTool)` —— 實作 `core.Tool` 的 `Name`、`Spec`、`Call` |
 | `WithHooks` | 阻擋高風險呼叫 | 見下面完整範例 |
 | `WithSources` | 自訂 prompt 來源 | `agent.WithSources(prompt.Static(prompt.SLOT_SYSTEM, "brand", "語氣：簡潔", prompt.ORDER_PERSONA))` |
-| `WithRules` | 註冊自訂推理策略 | 實作 `core.DecisionRule`（`Kind() ReasoningStyle` + `NextStep(state)`），`Kind` 會贏過同名的內建 rule |
+| `WithRules` | 註冊自訂推理策略 | 實作 `reasoning.DecisionRule`（`Kind() string` + `NextStep(state)`），`Kind` 會贏過同名的內建 rule |
 | `WithSink` | 接自訂呈現 | `agent.WithSink(agent.SinkFunc(func(ev core.StreamEvent) { ... }))` |
 | `WithNotifier` | 接通知系統 | 配合 `auth/notify` 或外部服務 |
 | `WithCustomize` | 拿到組好的 Engine 再改 | `agent.WithCustomize(func(e *runtime.Engine) error { e.Store = myCustomStore; return nil })` |
@@ -563,19 +563,19 @@ agent.WithCustomize(func(e *runtime.Engine) error {
 
 ```text
 // 失敗：在 core 與 reasoning 加完，回 spec 加 Choice，忘記更新 wizard
-// core/reasoning.go: REASON_REFLECT = "reflect"
+// core/decision.go: REASON_REFLECT = "reflect"
 // reasoning/reflect.go: NewReflectiveReasoning()
 // agent/spec/choice.go: StyleChoices() 不含 "reflect"
 ```
 
 ```bash
 # 症狀：wizard --list reasoning.style 看不到新策略，但 NewDecide 不報錯
-# 因為 core/reasoning.go 已宣告，Validate 通過，但 wizard 給人選的清單少一項
+# 因為 core/decision.go 已宣告，Validate 通過，但 wizard 給人選的清單少一項
 ```
 
 ```text
 // 正確：三處同步（且 TestStyleChoicesMatchCoreConstants 防呆）
-// 1. core/reasoning.go：新增 ReasoningStyle 常數
+// 1. core/decision.go：新增 REASON_* 字串常數
 // 2. reasoning/reflect.go：實作 DecisionRule
 // 3. agent/spec/choice.go：StyleChoices() 加一筆 Choice
 ```

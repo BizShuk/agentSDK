@@ -231,14 +231,6 @@ output:
                                      # text = human-readable fold of events
 
 # ---------------------------------------------------------------------------
-# Telemetry — OpenTelemetry tracing
-# ---------------------------------------------------------------------------
-
-telemetry:
-  enabled: false                     # off by default; gosdk pushes to inf (VictoriaMetrics/Loki)
-  service: ""                        # empty = Config.Name
-
-# ---------------------------------------------------------------------------
 # Worked examples — three common shapes
 # ---------------------------------------------------------------------------
 
@@ -307,6 +299,3 @@ telemetry:
 #   dir: /srv/app/.agentsdk/sessions
 # output:
 #   format: json
-# telemetry:
-#   enabled: true
-#   service: prod-agent

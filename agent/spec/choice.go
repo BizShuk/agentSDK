@@ -46,22 +46,22 @@ func TierChoices() []Choice {
 
 // StyleChoices lists the reasoning strategies.
 //
-// The values come from core's ReasoningStyle constants rather than from
+// The values come from core's REASON_* string constants rather than from
 // the reasoning package: enumerating a style needs only the name, while
 // constructing its rule needs reasoning — so spec stays core-only.
 func StyleChoices() []Choice {
 	return []Choice{
-		{Value: string(core.REASON_REACT), Label: "think then act", Default: true,
+		{Value: core.REASON_REACT, Label: "think then act", Default: true,
 			Note: "reason → tool → observe → repeat (ReAct)"},
-		{Value: string(core.REASON_PLAN_THEN_RUN), Label: "plan then run",
+		{Value: core.REASON_PLAN_THEN_RUN, Label: "plan then run",
 			Note: "blueprint first, then execute each step"},
-		{Value: string(core.REASON_DO_THEN_REVIEW), Label: "do then review",
+		{Value: core.REASON_DO_THEN_REVIEW, Label: "do then review",
 			Note: "execute, then critique and iterate"},
-		{Value: string(core.REASON_ONE_SHOT), Label: "one shot",
+		{Value: core.REASON_ONE_SHOT, Label: "one shot",
 			Note: "single chain-of-thought call, then done"},
-		{Value: string(core.REASON_LEARN_FROM_FAILURE), Label: "learn from failure",
+		{Value: core.REASON_LEARN_FROM_FAILURE, Label: "learn from failure",
 			Note: "retry with reflection over past failures"},
-		{Value: string(core.REASON_PICK_AGENT), Label: "choose agent",
+		{Value: core.REASON_PICK_AGENT, Label: "choose agent",
 			Note: "router — register the styles it may delegate to in enable[]"},
 	}
 }

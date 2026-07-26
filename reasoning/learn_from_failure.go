@@ -17,19 +17,20 @@ const (
 	LFF_ACT     = "act"     // first attempt
 	LFF_REFLECT = "reflect" // ask LLM to critique the attempt
 	LFF_RETRY   = "retry"   // decide pass / fail / retry from the critique
-	LFF_DONE    = "done"   // terminal
+	LFF_DONE    = "done"    // terminal
 )
 
 // LearnFromFailure remembers failures and retries with reflection (Shinn 2023).
 //
 // working memory[LEARN_FROM_FAILURE_PHASE] drives a four-phase FSM:
-//   act     → emit INSTRUCTION_CALL_MODEL (first attempt), advance to reflect
-//   reflect → emit INSTRUCTION_CALL_MODEL (ask LLM to critique), advance to retry
-//   retry   → read latestAssistantText(state): if critique starts with "OK:"
-//            emit DONE; otherwise append the critique to LFF_REFLECTIONS,
-//            bump iteration, emit INSTRUCTION_CALL_MODEL (retry with accumulated
-//            reflection) and stay in retry; if no critique text, DONE (conservative)
-//   done    → emit INSTRUCTION_DONE
+//
+//	act     → emit INSTRUCTION_CALL_MODEL (first attempt), advance to reflect
+//	reflect → emit INSTRUCTION_CALL_MODEL (ask LLM to critique), advance to retry
+//	retry   → read latestAssistantText(state): if critique starts with "OK:"
+//	         emit DONE; otherwise append the critique to LFF_REFLECTIONS,
+//	         bump iteration, emit INSTRUCTION_CALL_MODEL (retry with accumulated
+//	         reflection) and stay in retry; if no critique text, DONE (conservative)
+//	done    → emit INSTRUCTION_DONE
 //
 // Failure is judged by the LLM critique's "OK:" prefix (same predicate as
 // DoThenReview's startsWithPassed) — not by ToolResult.OK. This keeps the
@@ -46,7 +47,7 @@ type LearnFromFailure struct{}
 func NewLearnFromFailure() *LearnFromFailure { return &LearnFromFailure{} }
 
 // Kind returns REASON_LEARN_FROM_FAILURE.
-func (p *LearnFromFailure) Kind() core.ReasoningStyle { return core.REASON_LEARN_FROM_FAILURE }
+func (p *LearnFromFailure) Kind() string { return core.REASON_LEARN_FROM_FAILURE }
 
 func (p *LearnFromFailure) NextStep(state core.State) (core.State, []core.Instruction) {
 	state.UpdatedAt = nowOrZero(state)

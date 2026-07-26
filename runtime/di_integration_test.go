@@ -22,7 +22,7 @@ func TestDIProviderSwap(t *testing.T) {
 	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 
@@ -72,7 +72,7 @@ func TestImageChunkSurvivesRunLoop(t *testing.T) {
 	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("seen")
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, tool.NewRegistry())

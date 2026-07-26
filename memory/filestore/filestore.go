@@ -259,11 +259,11 @@ func v1ToV2JSON(raw []byte) []byte {
 
 // migrateFromV1 translates a v1 (pre-rename) State into the v2 shape.
 // v1 used the academic names: Percept/Input/Effect/Chunk/ThinkingKind/
-// ReAct/etc.; v2 uses Observation/Event/Instruction/Part/ReasoningStyle/
+// ReAct/etc.; v2 uses Observation/Event/Instruction/Part/reasoning-style
 // think_then_act/etc. JSON tag shapes also changed ("chunks"→"parts",
 // "percept"→"observation", etc.).
 func migrateFromV1(s *core.State) {
-	// Map ReasoningStyle values. The JSON tag "thinking_kind" is preserved
+	// Map reasoning-style values. The JSON tag "thinking_kind" is preserved
 	// across the rename — only the value is translated.
 	switch s.ReasoningStyle {
 	case "react":
@@ -290,6 +290,6 @@ func migrateFromV1(s *core.State) {
 	}
 	// WorkingMemory already loads under the "scratch" JSON tag (we kept
 	// the tag), so no field-rename needed.
-	// ReasoningStyle JSON tag "thinking_kind" is also preserved — only
+	// The reasoning-style JSON tag "thinking_kind" is also preserved — only
 	// the value is translated above.
 }

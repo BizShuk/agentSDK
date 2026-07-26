@@ -25,9 +25,10 @@ const (
 // ThinkThenAct implements the classic Reason+Act loop (Yao 2023).
 //
 // working memory[THINK_THEN_ACT_PHASE] drives the FSM:
-//   reason   → emit INSTRUCTION_CALL_MODEL
-//   dispatch → emit INSTRUCTION_CALL_TOOL for working memory[THINK_THEN_ACT_PENDING_CALL]
-//   reflect  → emit INSTRUCTION_CALL_MODEL to reason over the prior result
+//
+//	reason   → emit INSTRUCTION_CALL_MODEL
+//	dispatch → emit INSTRUCTION_CALL_TOOL for working memory[THINK_THEN_ACT_PENDING_CALL]
+//	reflect  → emit INSTRUCTION_CALL_MODEL to reason over the prior result
 //
 // In M1 ThinkThenAct does not parse the model output — working memory is
 // the lingua franca between the runtime and the rule. Sample / fixtures
@@ -39,7 +40,7 @@ type ThinkThenAct struct{}
 func NewThinkThenAct() *ThinkThenAct { return &ThinkThenAct{} }
 
 // Kind returns REASON_REACT.
-func (p *ThinkThenAct) Kind() core.ReasoningStyle { return core.REASON_REACT }
+func (p *ThinkThenAct) Kind() string { return core.REASON_REACT }
 
 // NextStep reads working memory and emits the next instruction, advancing
 // working memory in place.

@@ -168,7 +168,7 @@ func scratchSet(s *core.State, key string, val any) {
 func callModelFromMessages(state core.State) core.Instruction {
 	return core.Instruction{
 		Kind: core.INSTRUCTION_CALL_MODEL,
-		CallModel: &core.CallModelInstruction{
+		CallModel: &core.ModelRequest{
 			RequestID: newID(),
 			Messages:  state.Messages,
 		},
@@ -177,7 +177,7 @@ func callModelFromMessages(state core.State) core.Instruction {
 
 func callToolInstruction(call core.ToolCall) core.Instruction {
 	return core.Instruction{
-		Kind:    core.INSTRUCTION_CALL_TOOL,
+		Kind:     core.INSTRUCTION_CALL_TOOL,
 		CallTool: &core.CallToolInstruction{Call: call},
 	}
 }

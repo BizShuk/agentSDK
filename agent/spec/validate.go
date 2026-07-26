@@ -67,7 +67,7 @@ func (c Config) Validate() error {
 		}
 		seen[s] = true
 	}
-	// Style must be registered, else core.NewDecide dispatches to a
+	// Style must be registered, else reasoning.NewDecide dispatches to a
 	// missing rule and emits NOTIFY error instead of reasoning. That is a
 	// typo, not a design choice, so it fails here rather than at runtime.
 	if slices.Contains(styles, c.Reasoning.Style) && !seen[c.Reasoning.Style] {

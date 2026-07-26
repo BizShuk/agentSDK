@@ -58,7 +58,7 @@ func TestM4E2EApprovalPauseThenResumeApprove(t *testing.T) {
 	called1 := 0
 	registerHighRiskTool(reg, &called1)
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, reg)
@@ -117,7 +117,7 @@ func TestM4E2EApprovalRejectTerminates(t *testing.T) {
 	called2 := 0
 	registerHighRiskTool(reg, &called2)
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, reg)

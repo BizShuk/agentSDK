@@ -37,7 +37,7 @@ type collectSink struct{ kinds []core.StreamEventKind }
 func (c *collectSink) OnStreamEvent(ev core.StreamEvent) { c.kinds = append(c.kinds, ev.Kind) }
 
 func newHarnessEngine(prov *testutil.ScriptedProvider, reg *tool.Registry) *runtime.Engine {
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, reg)

@@ -15,7 +15,7 @@ type State struct {
 	RunID            string            `json:"run_id"`
 	Turn             int               `json:"turn"`
 	Autonomy         AutonomyLevel     `json:"autonomy"`
-	ReasoningStyle   ReasoningStyle    `json:"thinking_kind"` // tag preserved for back-compat
+	ReasoningStyle   string            `json:"thinking_kind"` // tag preserved for back-compat
 	Messages         []Message         `json:"messages"`
 	WorkingMemory    map[string]any    `json:"scratch,omitempty"` // Go field renamed; wire tag kept
 	PendingApprovals []PendingApproval `json:"pending_approvals,omitempty"`

@@ -22,6 +22,7 @@ const (
 
 // ModelRequest is what runtime sends to a Provider.
 type ModelRequest struct {
+	RequestID   string     `json:"request_id,omitempty"`
 	Messages    []Message  `json:"messages"`
 	Tools       []ToolSpec `json:"tools,omitempty"`
 	MaxTokens   int        `json:"max_tokens,omitempty"`

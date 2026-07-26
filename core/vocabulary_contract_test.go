@@ -29,7 +29,7 @@ func TestAutonomyDefaultStringMatchesTyped(t *testing.T) {
 // the runtime contract. A future change renaming REASON_REACT in core
 // would silently desync spec unless this is asserted.
 func TestStyleDefaultTracesToCore(t *testing.T) {
-	assert.Equal(t, spec.DEFAULT_STYLE, string(core.REASON_REACT),
+	assert.Equal(t, spec.DEFAULT_STYLE, core.REASON_REACT,
 		"spec.DEFAULT_STYLE must mirror the runtime contract")
 }
 

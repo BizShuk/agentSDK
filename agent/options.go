@@ -10,6 +10,7 @@ import (
 	"github.com/bizshuk/agentsdk/middleware/hook"
 	"github.com/bizshuk/agentsdk/prompt"
 	"github.com/bizshuk/agentsdk/provider"
+	"github.com/bizshuk/agentsdk/reasoning"
 	"github.com/bizshuk/agentsdk/tool"
 )
 
@@ -25,7 +26,7 @@ type builder struct {
 	toolRegistrars []func(*tool.Registry)
 	hooks          []hook.Rule
 	sources        []prompt.Source
-	rules          []core.DecisionRule
+	rules          []reasoning.DecisionRule
 	customize      func(*Engine) error
 }
 
@@ -168,7 +169,7 @@ func WithSources(sources ...prompt.Source) Option {
 }
 
 // WithRules adds or replaces reasoning strategies by Kind.
-func WithRules(rules ...core.DecisionRule) Option {
+func WithRules(rules ...reasoning.DecisionRule) Option {
 	return func(b *builder) error {
 		for i, r := range rules {
 			if r == nil {

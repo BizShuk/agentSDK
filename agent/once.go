@@ -61,7 +61,7 @@ func oneshot(cfg Config, prompt string, opts []Option) (*Engine, core.State, err
 		return nil, core.State{}, err
 	}
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_ONE_SHOT: reasoning.NewOneShotReasoning(),
 	})
 

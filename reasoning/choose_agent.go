@@ -43,7 +43,7 @@ type ChooseAgent struct{}
 func NewChooseAgent() *ChooseAgent { return &ChooseAgent{} }
 
 // Kind returns REASON_PICK_AGENT.
-func (p *ChooseAgent) Kind() core.ReasoningStyle { return core.REASON_PICK_AGENT }
+func (p *ChooseAgent) Kind() string { return core.REASON_PICK_AGENT }
 
 func (p *ChooseAgent) NextStep(state core.State) (core.State, []core.Instruction) {
 	state.UpdatedAt = nowOrZero(state)
@@ -87,7 +87,7 @@ func (p *ChooseAgent) NextStep(state core.State) (core.State, []core.Instruction
 		msgs = append(msgs, next.Messages...)
 		return next, []core.Instruction{{
 			Kind: core.INSTRUCTION_CALL_MODEL,
-			CallModel: &core.CallModelInstruction{
+			CallModel: &core.ModelRequest{
 				RequestID: newID(),
 				Messages:  msgs,
 			},

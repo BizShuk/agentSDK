@@ -23,14 +23,6 @@ const (
 	INSTRUCTION_DONE InstructionKind = "done"
 )
 
-// CallModelInstruction is dispatched to Provider.Generate / Stream.
-type CallModelInstruction struct {
-	RequestID string     `json:"request_id"`
-	Messages  []Message  `json:"messages"`
-	Tools     []ToolSpec `json:"tools,omitempty"`
-	MaxTokens int        `json:"max_tokens,omitempty"`
-}
-
 // CallToolInstruction is dispatched to the tool Registry.
 type CallToolInstruction struct {
 	Call ToolCall `json:"call"`
@@ -67,7 +59,7 @@ type EmitInstruction struct {
 // In-process dispatch is a type switch on the active pointer.
 type Instruction struct {
 	Kind            InstructionKind             `json:"kind"`
-	CallModel       *CallModelInstruction       `json:"call_model,omitempty"`
+	CallModel       *ModelRequest               `json:"call_model,omitempty"`
 	CallTool        *CallToolInstruction        `json:"call_tool,omitempty"`
 	RequestApproval *RequestApprovalInstruction `json:"request_approval,omitempty"`
 	Notify          *NotifyInstruction          `json:"notify,omitempty"`

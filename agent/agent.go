@@ -30,7 +30,6 @@ type (
 	Subagents  = spec.Subagents
 	Sessions   = spec.Sessions
 	Output     = spec.Output
-	Telemetry  = spec.Telemetry
 
 	// Engine hides the runtime package from application signatures.
 	Engine = runtime.Engine

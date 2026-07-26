@@ -14,8 +14,9 @@ const (
 // OneShotReasoning is the one-shot chain-of-thought rule (Wei 2022).
 //
 // working memory[ONE_SHOT_PHASE] drives a two-phase FSM:
-//   think → emit INSTRUCTION_CALL_MODEL, advance to done
-//   done  → emit INSTRUCTION_DONE
+//
+//	think → emit INSTRUCTION_CALL_MODEL, advance to done
+//	done  → emit INSTRUCTION_DONE
 //
 // The phase FSM matters: the old STUB emitted [CALL_MODEL, DONE] on every
 // NextStep call, which violates the pure-function invariant (same state must
@@ -28,7 +29,7 @@ type OneShotReasoning struct{}
 func NewOneShotReasoning() *OneShotReasoning { return &OneShotReasoning{} }
 
 // Kind returns REASON_ONE_SHOT.
-func (p *OneShotReasoning) Kind() core.ReasoningStyle { return core.REASON_ONE_SHOT }
+func (p *OneShotReasoning) Kind() string { return core.REASON_ONE_SHOT }
 
 // NextStep reads working memory and emits the next instruction, advancing
 // working memory in place.

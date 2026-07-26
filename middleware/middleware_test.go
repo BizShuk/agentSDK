@@ -173,7 +173,7 @@ func TestLoopguardResetsAfterObservation(t *testing.T) {
 
 	var err error
 	state, _, _, err = mw(loopguardDispatcher(d))(context.Background(), state,
-		core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL, CallModel: &core.CallModelInstruction{RequestID: "r1"}})
+		core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL, CallModel: &core.ModelRequest{RequestID: "r1"}})
 	require.NoError(t, err)
 
 	for i := 0; i < 2; i++ {

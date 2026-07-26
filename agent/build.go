@@ -30,7 +30,7 @@ func NewEngine(decide core.Decide, provider core.Provider, tools core.ToolRegist
 
 // ReActStep returns the default think-then-act dispatcher.
 func ReActStep() core.Decide {
-	return core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	return reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 }
@@ -158,7 +158,9 @@ func (a *Agent) buildTools(cwd, userDir string, prov core.Provider) (core.ToolRe
 			return nil, err
 		}
 		if len(defs) > 0 {
-			reg.Register(skill.NewSpawner(a.subagentRunner(prov), defs...))
+			spawner := skill.NewSpawner(a.subagentRunner(prov), defs...)
+			spawner.MaxDepth = a.cfg.Subagents.MaxDepth
+			reg.Register(spawner)
 		}
 	}
 	return reg, nil
@@ -245,7 +247,7 @@ func (a *Agent) subagentRunner(prov core.Provider) skill.RunFunc {
 				return "", err
 			}
 		}
-		step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+		step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 			core.REASON_REACT: reasoning.NewThinkThenAct(),
 		})
 		sub := NewEngine(step, prov, reg)
@@ -278,9 +280,9 @@ func (a *Agent) subagentRunner(prov core.Provider) skill.RunFunc {
 
 // buildDecide registers enabled rules; injected rules override by Kind.
 func (a *Agent) buildDecide() (core.Decide, error) {
-	rules := map[core.ReasoningStyle]core.DecisionRule{}
+	rules := map[string]reasoning.DecisionRule{}
 	for _, name := range a.cfg.Reasoning.Enable {
-		rule, err := ruleFor(core.ReasoningStyle(name))
+		rule, err := ruleFor(name)
 		if err != nil {
 			return nil, err
 		}
@@ -289,11 +291,11 @@ func (a *Agent) buildDecide() (core.Decide, error) {
 	for _, rule := range a.deps.rules {
 		rules[rule.Kind()] = rule
 	}
-	return core.NewDecide(rules), nil
+	return reasoning.NewDecide(rules), nil
 }
 
 // ruleFor maps declarative reasoning styles to implementations.
-func ruleFor(style core.ReasoningStyle) (core.DecisionRule, error) {
+func ruleFor(style string) (reasoning.DecisionRule, error) {
 	switch style {
 	case core.REASON_REACT:
 		return reasoning.NewThinkThenAct(), nil
@@ -417,7 +419,7 @@ func (a *Agent) buildSink() core.EventSink {
 func (a *Agent) seedState(ctx context.Context, ac *Host, b prompt.Builder, cwd string) (core.State, error) {
 	state := core.State{
 		RunID:          ac.RunID,
-		ReasoningStyle: core.ReasoningStyle(a.cfg.Reasoning.Style),
+		ReasoningStyle: a.cfg.Reasoning.Style,
 		Autonomy:       autonomyLevel(a.cfg.Limits.Autonomy),
 		Budget: core.Budget{
 			MaxTurns:     a.cfg.Limits.MaxTurns,

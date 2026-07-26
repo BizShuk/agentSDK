@@ -23,12 +23,13 @@ type PlanThenRun struct{}
 func NewPlanThenRun() *PlanThenRun { return &PlanThenRun{} }
 
 // Kind returns REASON_PLAN_THEN_RUN.
-func (p *PlanThenRun) Kind() core.ReasoningStyle { return core.REASON_PLAN_THEN_RUN }
+func (p *PlanThenRun) Kind() string { return core.REASON_PLAN_THEN_RUN }
 
 // NextStep uses working memory[PLAN_THEN_RUN_PHASE]:
-//   plan    → emit INSTRUCTION_CALL_MODEL with a "produce a blueprint" prompt
-//   execute → emit INSTRUCTION_CALL_TOOL for blueprint[step_index] then bump
-//   done    → emit INSTRUCTION_DONE
+//
+//	plan    → emit INSTRUCTION_CALL_MODEL with a "produce a blueprint" prompt
+//	execute → emit INSTRUCTION_CALL_TOOL for blueprint[step_index] then bump
+//	done    → emit INSTRUCTION_DONE
 func (p *PlanThenRun) NextStep(state core.State) (core.State, []core.Instruction) {
 	state.UpdatedAt = nowOrZero(state)
 	phase := scratchString(state, PLAN_THEN_RUN_PHASE, PLAN_PHASE)

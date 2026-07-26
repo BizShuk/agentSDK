@@ -16,6 +16,7 @@ import (
 	"github.com/bizshuk/agentsdk/middleware/hook"
 	"github.com/bizshuk/agentsdk/prompt"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/skill"
 	"github.com/bizshuk/agentsdk/tool/builtin"
 	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
@@ -195,6 +196,35 @@ func TestBootstrapSeedsPersonaAsSystemMessage(t *testing.T) {
 	assert.Contains(t, state.Messages[0].Parts[0].Text, "you are terse")
 }
 
+func TestBootstrapWiresSubagentMaxDepth(t *testing.T) {
+	defsDir := t.TempDir()
+	require.NoError(t, os.WriteFile(
+		filepath.Join(defsDir, "reviewer.md"),
+		[]byte("Review the requested change."),
+		0o600,
+	))
+
+	engine, _, _ := bootstrap(t, agent.Config{
+		Name: "x",
+		Tier: spec.TIER_FULL,
+		Subagents: &spec.Subagents{
+			Dirs:     []string{defsDir},
+			MaxDepth: 1,
+			MaxTurns: 1,
+		},
+	})
+
+	task, ok := engine.Tools.Get(skill.TOOL_NAME)
+	require.True(t, ok)
+	result, err := task.Call(
+		skill.WithDepth(context.Background(), 1),
+		json.RawMessage(`{"agent":"reviewer","prompt":"check it"}`),
+	)
+	require.NoError(t, err)
+	assert.False(t, result.OK)
+	assert.Contains(t, result.Error, "depth limit reached (1)")
+}
+
 func TestBootstrapMergesContextFilesIntoOneSystemMessage(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("PROJECT_RULES"), 0o600))
@@ -236,7 +266,7 @@ func TestBootstrapEveryStyleBuilds(t *testing.T) {
 				Reasoning: spec.Reasoning{Style: style},
 			})
 			require.NotNil(t, eng.Step)
-			assert.Equal(t, core.ReasoningStyle(style), state.ReasoningStyle)
+			assert.Equal(t, style, state.ReasoningStyle)
 		})
 	}
 }

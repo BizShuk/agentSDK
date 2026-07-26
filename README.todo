@@ -57,7 +57,7 @@
 
 計畫見 [`plans/2026-07-22-agent-skeleton-config-opt-in.md`](plans/2026-07-22-agent-skeleton-config-opt-in.md)。
 
-- [x] `M1` `agent/spec`：`Config` + 10 個 feature block、`Choice` 中繼資料、tier 展開、驗證、JSON 編解（`go list -deps` 只見 `core`）
+- [x] `M1` `agent/spec`：`Config` + 9 個 feature block、`Choice` 中繼資料、tier 展開、驗證、JSON 編解（`go list -deps` 只見 `core`）
 - [x] `M2` `agent.Once` / `OnceStream`：走 `one_shot` rule + 全 nil port 的同一條 Engine 路徑，不繞過；順手移除 `core/thinking.go` 三行 stale `STUB` 註解
 - [x] `M3` `prompt` package：`Slot`(system/user/reminder) / `Section` / `Source` / `Builder`，+ `agent` 內五個 adapter（persona / context files / skills / env / reminder）
 - [x] `M4` `agent/build.go` + `agent/options.go`：8 stage pipeline、`New`/`MustNew`/`Bootstrap`/`Preflight`、八個 `With*`
@@ -70,7 +70,6 @@
 
 - [ ] `Parts.Prompt.Turn()` 尚無 production caller —— `sample/code-agent` 的互動迴圈仍自己拼 user message，接上後 reminder slot 才會真的每回合注入
 - [ ] `agent/once.go` 的 `oneshot()` 仍是獨立小路徑（不需要 `AppConfig`，硬折進 `Bootstrap` 會逼它憑空造一個）；若日後 `Once` 要支援持久化再合併
-- [ ] `spec.Telemetry` block 已定義但 `agent` 尚未接上 OTel wiring
 - [ ] `spec.Memory.Compaction` 已定義但 `agent` 尚未把 `memory.Window`/`Compactor` 接進 Engine
 - [ ] `wizard` 尚無 `--verify`（選了才在最後跑一次 `agent.Once` 做 smoke test）
 - [ ] `agent` 尚無 settings 檔階層載入（`~/.config/<app>/agent.yaml` → 專案 `agent.yaml` 的合併），與 hook/permission 的 settings 層一起做

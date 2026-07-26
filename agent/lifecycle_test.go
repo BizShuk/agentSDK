@@ -85,7 +85,7 @@ func (a *testAgent) Bootstrap(_ context.Context, _ *agent.AppConfig) (*runtime.E
 	reg := tool.NewRegistry()
 	reg.Register(a.tool)
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 
@@ -267,7 +267,7 @@ func pausingEngine() (*runtime.Engine, core.State) {
 	prov.EnqueueEndTurn("done")
 	reg := tool.NewRegistry()
 	reg.Register(echoTool{})
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	eng := runtime.NewEngine(step, prov, reg)
@@ -285,7 +285,7 @@ func chatEngine() (*runtime.Engine, core.State) {
 	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("first answer")
 	prov.EnqueueEndTurn("second answer")
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	eng := runtime.NewEngine(step, prov, tool.NewRegistry())

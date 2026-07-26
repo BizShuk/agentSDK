@@ -401,7 +401,7 @@ func TestStyleChoicesMatchCoreConstants(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"think_then_act", "plan_then_run", "do_then_review",
 		"one_shot", "learn_from_failure", "choose_agent",
-	}, got, "StyleChoices must track core's ReasoningStyle constants")
+	}, got, "StyleChoices must track core's REASON_* string constants")
 }
 
 func TestTierChoicesMatchLadder(t *testing.T) {

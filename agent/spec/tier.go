@@ -23,7 +23,7 @@ const (
 // from what the engine actually accepts.
 const (
 	DEFAULT_TIER           = TIER_BASIC
-	DEFAULT_STYLE          = string(core.REASON_REACT)
+	DEFAULT_STYLE          = core.REASON_REACT
 	DEFAULT_PROJECT_DIR    = ".agentsdk"
 	DEFAULT_AUTONOMY       = core.AUTONOMY_DEFAULT_STRING
 	DEFAULT_MAX_TURNS      = 20
@@ -272,8 +272,5 @@ func applyBlockDefaults(c *Config, rank int) {
 	}
 	if c.Output != nil && c.Output.Format == "" {
 		c.Output.Format = OUTPUT_TEXT
-	}
-	if c.Telemetry != nil && c.Telemetry.Service == "" {
-		c.Telemetry.Service = c.Name
 	}
 }

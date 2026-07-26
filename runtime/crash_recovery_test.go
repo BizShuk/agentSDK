@@ -40,7 +40,7 @@ func TestCrashRecoveryFullCycle(t *testing.T) {
 	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, reg)
@@ -95,7 +95,7 @@ func TestChainComposesOverRetryThroughLoopguard(t *testing.T) {
 	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: &stuckPattern{},
 	})
 

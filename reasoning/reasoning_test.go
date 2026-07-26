@@ -109,7 +109,7 @@ func TestRulesReachDone(t *testing.T) {
 	tests := []struct {
 		name string
 		seed func(s *core.State)
-		rule core.DecisionRule
+		rule reasoning.DecisionRule
 	}{
 		{
 			name: "one_shot",
@@ -323,7 +323,7 @@ func TestChooseAgentDelegateEmitsCallModelWithSystemMsg(t *testing.T) {
 			reasoning.CHOOSE_AGENT_CHOSEN: "a",
 		},
 		Messages: []core.Message{{
-			Role: core.ROLE_USER,
+			Role:  core.ROLE_USER,
 			Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "do the thing"}},
 		}},
 	}
@@ -380,7 +380,7 @@ func TestLatestAssistantTextEmpty(t *testing.T) {
 		ReasoningStyle: core.REASON_LEARN_FROM_FAILURE,
 		WorkingMemory:  map[string]any{reasoning.LEARN_FROM_FAILURE_PHASE: reasoning.LFF_RETRY},
 		Messages: []core.Message{{
-			Role: core.ROLE_USER,
+			Role:  core.ROLE_USER,
 			Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "u"}},
 		}},
 	}

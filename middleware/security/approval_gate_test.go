@@ -93,7 +93,7 @@ func TestApprovalGateIgnoresNonCallEffects(t *testing.T) {
 		return core.State{}, nil, false, nil
 	}
 	_, _, _, _ = mw(middleware.Next(d))(context.Background(), core.State{Autonomy: core.AUTONOMY_L2},
-		core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL, CallModel: &core.CallModelInstruction{RequestID: "r1"}})
+		core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL, CallModel: &core.ModelRequest{RequestID: "r1"}})
 	assert.True(t, called)
 	assert.False(t, pol.called, "policy must not be consulted for non-CALL_TOOL")
 }

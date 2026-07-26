@@ -7,7 +7,7 @@ const (
 	RUN_THEN_REVIEW_NOTE      = "do_then_review.note"      // string — last review; empty means none
 	RUN_THEN_REVIEW_ITERATION = "do_then_review.iteration" // int
 
-	RUN_PHASE   = "execute"
+	RUN_PHASE    = "execute"
 	REVIEW_PHASE = "critique"
 	DONE_PHASE   = "done"
 )
@@ -20,7 +20,7 @@ type RunThenReview struct{}
 func NewRunThenReview() *RunThenReview { return &RunThenReview{} }
 
 // Kind returns REASON_DO_THEN_REVIEW.
-func (p *RunThenReview) Kind() core.ReasoningStyle { return core.REASON_DO_THEN_REVIEW }
+func (p *RunThenReview) Kind() string { return core.REASON_DO_THEN_REVIEW }
 
 func (p *RunThenReview) NextStep(state core.State) (core.State, []core.Instruction) {
 	state.UpdatedAt = nowOrZero(state)

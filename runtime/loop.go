@@ -83,9 +83,9 @@ func (e *Engine) runInstruction(ctx context.Context, s core.State, inst core.Ins
 		if e.Model == nil {
 			return s, nil, false, fmt.Errorf("call_model instruction but no Model bound")
 		}
-		tools := inst.CallModel.Tools
-		if len(tools) == 0 && e.Tools != nil {
-			tools = e.Tools.List()
+		request := *inst.CallModel
+		if len(request.Tools) == 0 && e.Tools != nil {
+			request.Tools = e.Tools.List()
 		}
 		// A round is one model request plus the tool calls it triggers.
 		// Counting lives here (the runtime always tracks usage); the cap
@@ -95,10 +95,7 @@ func (e *Engine) runInstruction(ctx context.Context, s core.State, inst core.Ins
 		// a round that only succeeds after N provider attempts still
 		// counts once.
 		s.Budget.UsedRounds++
-		mr, err := e.Model.Generate(ctx, core.ModelRequest{
-			Messages: inst.CallModel.Messages,
-			Tools:    tools,
-		})
+		mr, err := e.Model.Generate(ctx, request)
 		if err != nil {
 			return s, nil, false, fmt.Errorf("model generate: %w", err)
 		}

@@ -73,7 +73,7 @@ func TestTracingMarksErrorOnDispatchFailure(t *testing.T) {
 		return core.State{}, nil, false, errors.New("dispatch failed")
 	}
 	_, _, _, _ = mw(middleware.Next(d))(context.Background(), core.State{},
-		core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL, CallModel: &core.CallModelInstruction{RequestID: "r1"}})
+		core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL, CallModel: &core.ModelRequest{RequestID: "r1"}})
 
 	spans := rec.Ended()
 	require.Len(t, spans, 1)

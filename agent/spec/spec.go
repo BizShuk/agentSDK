@@ -55,7 +55,6 @@ type Config struct {
 	Subagents  *Subagents  `json:"subagents,omitempty"`
 	Sessions   *Sessions   `json:"sessions,omitempty"`
 	Output     *Output     `json:"output,omitempty"`
-	Telemetry  *Telemetry  `json:"telemetry,omitempty"`
 }
 
 // Model selects the provider adapter. Provider is the registry key; the
@@ -82,11 +81,11 @@ type Model struct {
 // Style is WHICH RULE RUNS: it seeds core.State.ReasoningStyle, and the
 // engine dispatches on that field every step.
 //
-// Enable is WHICH RULES ARE REGISTERED in the core.NewDecide map. Empty
+// Enable is WHICH RULES ARE REGISTERED in the reasoning.NewDecide map. Empty
 // means "just Style", which is what almost every agent wants. Register
 // more only when the run legitimately switches mid-flight — choose_agent
 // acting as a router, or learn_from_failure taking over a failed turn.
-// Dispatching to an unregistered style makes NewDecide emit a NOTIFY
+// Dispatching to an unregistered style makes reasoning.NewDecide emit a NOTIFY
 // error rather than reason, so Validate rejects Style ∉ Enable early.
 type Reasoning struct {
 	Style  string   `json:"style,omitempty"`
@@ -179,12 +178,6 @@ type Output struct {
 	Format string `json:"format,omitempty"` // text | json | tui
 }
 
-// Telemetry turns on OpenTelemetry tracing.
-type Telemetry struct {
-	Enabled bool   `json:"enabled,omitempty"`
-	Service string `json:"service,omitempty"` // empty = Config.Name
-}
-
 // Clone returns a deep copy. Tier expansion and validation both mutate,
 // and a caller's literal must never be modified underneath it.
 func (c Config) Clone() Config {
@@ -194,7 +187,6 @@ func (c Config) Clone() Config {
 	out.Memory = clonePtr(c.Memory)
 	out.Sessions = clonePtr(c.Sessions)
 	out.Output = clonePtr(c.Output)
-	out.Telemetry = clonePtr(c.Telemetry)
 	if c.Tools != nil {
 		t := *c.Tools
 		t.Builtin = cloneStrings(c.Tools.Builtin)

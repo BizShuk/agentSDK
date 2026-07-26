@@ -43,7 +43,7 @@ func TestReActEndTurnExitsLoop(t *testing.T) {
 	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("done")
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 
@@ -77,7 +77,7 @@ func TestReActOneToolCallThenEnd(t *testing.T) {
 			return addOut{Sum: a.N1 + a.N2}, nil
 		})
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 
@@ -120,7 +120,7 @@ func TestPlannerExecutorDispatchesBlueprint(t *testing.T) {
 	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, a addArgs) (addOut, error) { return addOut{}, nil })
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_PLAN_THEN_RUN: reasoning.NewPlanThenRun(),
 	})
 
@@ -161,7 +161,7 @@ func TestBudgetExceededStopsLoop(t *testing.T) {
 	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, a addArgs) (addOut, error) { return addOut{}, nil })
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 
@@ -189,7 +189,7 @@ func TestStoreAndWAL(t *testing.T) {
 	store := testutil.NewMemStore()
 	wal := testutil.NewMemWAL()
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
@@ -226,7 +226,7 @@ func TestNotifyIsCalled(t *testing.T) {
 	// ChooseAgent emits a NOTIFY in its select phase when an agent list is
 	// seeded, then a CALL_MODEL in delegate; the scripted end_turn short-
 	// circuits the run to COMPLETED.
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_PICK_AGENT: reasoning.NewChooseAgent(),
 	})
 
@@ -253,7 +253,7 @@ func TestRunWithInputSeedsFirstTurn(t *testing.T) {
 	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("ack")
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
@@ -313,7 +313,7 @@ func batchEngine(t *testing.T, prov *testutil.ScriptedProvider) *runtime.Engine 
 			return addOut{Sum: a.N1 + a.N2}, nil
 		})
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	eng := runtime.NewEngine(step, prov, reg)

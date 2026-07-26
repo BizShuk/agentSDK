@@ -68,7 +68,7 @@ func TestSandboxMWNonCallEffectsUntouched(t *testing.T) {
 	}
 
 	_, _, _, err := mw(middleware.Next(d))(context.Background(), core.State{},
-		core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL, CallModel: &core.CallModelInstruction{RequestID: "r1"}})
+		core.Instruction{Kind: core.INSTRUCTION_CALL_MODEL, CallModel: &core.ModelRequest{RequestID: "r1"}})
 	require.NoError(t, err)
 	assert.Equal(t, core.INSTRUCTION_CALL_MODEL, seen.Kind)
 }

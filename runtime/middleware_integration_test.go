@@ -29,7 +29,7 @@ func TestRuntimeLoopguardTripInRealtime(t *testing.T) {
 	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: &stuckPattern{},
 	})
 	loop := runtime.NewEngine(step, prov, reg)
@@ -53,7 +53,7 @@ func TestRuntimeLoopguardTripInRealtime(t *testing.T) {
 // no CALL_MODEL intervenes to reset the counter.
 type stuckPattern struct{}
 
-func (s *stuckPattern) Kind() core.ReasoningStyle { return core.REASON_REACT }
+func (s *stuckPattern) Kind() string { return core.REASON_REACT }
 func (s *stuckPattern) NextStep(state core.State) (core.State, []core.Instruction) {
 	return state, []core.Instruction{
 		{Kind: core.INSTRUCTION_CALL_TOOL,
@@ -75,7 +75,7 @@ func TestRuntimeBudgetExceededExitsRun(t *testing.T) {
 	tool.RegisterFunc(reg, "noop", "no-op", core.RISK_LEVEL_LOW,
 		func(_ context.Context, _ struct{}) (struct{}, error) { return struct{}{}, nil })
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
 	})
 	loop := runtime.NewEngine(step, prov, reg)
@@ -106,7 +106,7 @@ func TestRuntimeResumeFromWAL(t *testing.T) {
 	prov := testutil.NewScriptedProvider()
 	prov.EnqueueEndTurn("done")
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_PICK_AGENT: reasoning.NewChooseAgent(),
 	})
 	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
