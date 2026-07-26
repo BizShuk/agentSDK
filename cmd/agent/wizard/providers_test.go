@@ -1,7 +1,7 @@
 package wizard_test
 
 // Link every built-in provider adapter into the wizard test binary. The
-// wizard enumerates model.provider choices via registry.Entries(); without
+// wizard enumerates model.provider choices via provider.Entries(); without
 // these blank imports the test binary would see an empty registry and
 // fail with "unknown field model.provider".
 //

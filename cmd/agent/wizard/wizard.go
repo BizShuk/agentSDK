@@ -8,7 +8,6 @@ import (
 
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
-	"github.com/bizshuk/agentsdk/provider"
 )
 
 // wizard carries the prompt loop's I/O and the non-interactive switch.
@@ -39,7 +38,10 @@ func (w *wizard) run(cfg agent.Config) (agent.Config, error) {
 
 	// --- stage 2: model ---
 	w.section("2/9  model — which provider answers")
-	cfg.Model.Provider = w.choose("provider", agent.ProviderChoices(), orDefault(cfg.Model.Provider, registry.DEFAULT))
+	// No fallback argument: choose() falls back to the choice marked
+	// Default, and ProviderChoices marks it from provider.DEFAULT_NAME.
+	// Naming the vendor here too would be a second source of truth.
+	cfg.Model.Provider = w.choose("provider", agent.ProviderChoices(), cfg.Model.Provider)
 
 	modelChoices := agent.ModelChoices(cfg.Model.Provider)
 	if len(modelChoices) > 0 {
@@ -47,6 +49,15 @@ func (w *wizard) run(cfg agent.Config) (agent.Config, error) {
 	} else {
 		cfg.Model.Name = w.ask("model id (empty = the adapter's flagship default)", cfg.Model.Name)
 	}
+
+	// CredentialKind is orthogonal to provider selection: even after
+	// picking the family, callers may want to force one credential class
+	// when both env vars are exported on the same machine.
+	cfg.Model.CredentialKind = w.choose(
+		"credential kind (core.CREDENTIAL_KIND_*; matches --credential-kind on provider cmd)",
+		spec.VariantChoices("model.credential_kind"),
+		cfg.Model.CredentialKind,
+	)
 
 	// Persona check: fallback to CLAUDE.md, then AGENTS.md
 	defaultPersona := detectDefaultPersona()

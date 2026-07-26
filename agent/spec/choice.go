@@ -24,6 +24,12 @@ const (
 	TOOL_GREP  = "grep"
 )
 
+// (CredentialKind values now live in core — see core.CREDENTIAL_KIND_AUTO
+// / APIKey / OAuth. The empty string preserves the legacy "OAuth
+// outranks API key" precedence and matches `provider --credential-kind
+// auto`. The strict modes force a single credential class when both env
+// vars exist on the same machine.)
+
 // Choice is one selectable value for a config field, plus enough metadata
 // to render it in a wizard, a form, or a --list listing.
 //
@@ -139,6 +145,15 @@ func VariantChoices(key string) []Choice {
 			{Value: "L3", Label: "L3"},
 			{Value: "L4", Label: "L4", Note: "fully autonomous"},
 		}
+	case "model.credential_kind":
+		return []Choice{
+			{Value: core.CREDENTIAL_KIND_AUTO, Label: "auto", Default: true,
+				Note: "OAuth outranks API key when both env are set (legacy precedence)"},
+			{Value: core.CREDENTIAL_KIND_APIKEY, Label: "api key",
+				Note: "strict: only the API key env is consulted; missing env → startup error"},
+			{Value: core.CREDENTIAL_KIND_OAUTH, Label: "oauth",
+				Note: "strict: only the OAuth env is consulted; missing env → startup error"},
+		}
 	default:
 		return nil
 	}
@@ -149,6 +164,7 @@ func VariantChoices(key string) []Choice {
 // wizard means adding a variant does not require touching the CLI.
 func VariantKeys() []string {
 	return []string{
+		"model.credential_kind",
 		"middleware.preset",
 		"memory.store",
 		"memory.compaction",

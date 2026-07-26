@@ -85,7 +85,7 @@ func explicitProvider(o composeOptions) (core.Provider, error) {
 	if o.apiKey == "" {
 		return nil, nil
 	}
-	return registry.New(o.provider, registry.Options{
+	return provider.New(o.provider, provider.Options{
 		Model: o.model, APIKey: o.apiKey, BaseURL: o.baseURL,
 	})
 }

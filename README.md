@@ -33,11 +33,11 @@ engagement 是四階`階梯`，不是一堆獨立開關。每一階都是下一�
 out, err := agent.Once(ctx, agent.Config{Model: agent.Model{Provider: "minimax"}}, "ping")
 ```
 
-完整應用——六行，`agent.Agent` 實作 `app.Agent`，直接插進既有 lifecycle：
+完整應用——六行，`*agent.Agent` 實作 `agent.Runner`，直接插進既有 lifecycle：
 
 ```go
 func main() {
-    app.Main(agent.MustNew(agent.Config{
+    agent.Main(agent.MustNew(agent.Config{
         Name:  "my-agent",
         Tier:  "standard",
         Model: agent.Model{Provider: "minimax"},
@@ -49,7 +49,7 @@ func main() {
 
 ```go
 cfg, err := agent.LoadFile("agent.yaml")
-app.Main(agent.MustNew(cfg))
+agent.Main(agent.MustNew(cfg))
 ```
 
 ```yaml
@@ -104,7 +104,7 @@ agentsdk/
 ├── go.mod                     # module github.com/bizshuk/agentsdk
 ├── main.go                    # cobra root binary;掛載 `provider` 與 `wizard` 兩個子指令
 ├── cmd/                       # root subcommands (provider: smoke-test CLI；wizard/w: 設定產生器)
-├── agent/                     # 組裝層：spec.Config → 8 stage pipeline → *runtime.Engine（實作 app.Agent）
+├── agent/                     # 組裝層：spec.Config → 8 stage pipeline → *runtime.Engine（實作 agent.Runner；含 CLI lifecycle 與 Interactive seam）
 │   └── spec/                  # 宣告層：Config / Choice / tier 展開 / 驗證（只 import core）
 ├── prompt/                    # content management：Slot(system/user/reminder)、Source、Builder、LoadContextFiles（AGENTS.md/CLAUDE.md 階層載入）
 ├── core/                      # 純狀態機 (stdlib only, 含 ObservationSource port)
@@ -112,22 +112,21 @@ agentsdk/
 ├── planning/                  # 6 thinking patterns
 ├── action/                    # TypedTool + Registry
 ├── middleware/                # (M2 鏈)
+│   └── hook/                  # lifecycle hooks (PreToolUse/PostToolUse/...; command hook exit 2 = block)
 ├── runtime/                   # Loop: dispatch + checkpoint + WAL
-├── app/                       # CLI agent lifecycle/composition root
 ├── config/                    # AppConfig、middleware presets、RefreshingProvider
 ├── tool/                      # 6 個內建工具
-├── hook/                      # lifecycle hooks (PreToolUse/PostToolUse/...; command hook exit 2 = block)
 ├── permission/                # permission rules × mode (allow/ask/deny specifier, deny > ask > allow)
 ├── session/                   # session 管理層 (list / resume / fork / tree; WAL JSONL 為 transcript 真相)
 ├── skill/                     # SKILL.md skills + slash commands + prompt templates (progressive disclosure) + subagent Def/Spawner ("task" tool)
 ├── wire/                      # headless 表面: stream-json envelope / RPC framing / print formatter
 ├── tui/                       # sub-package (zero-dep)：differential-rendering terminal UI，不 import agentsdk
 ├── provider/                  # 7 個 adapter（已併回 root module）
-│   └── registry/              # name → adapter 的唯一真相；env 查詢用注入，CLI 與 agent 共用
+│   └── registry.go            # name → adapter 的唯一真相；env 查詢用注入，CLI 與 agent 共用
 ├── auth / proxy               # 外部獨立 repo，本 repo 無此目錄（auth 為 go.mod require，proxy 已完全脫離）
-├── internal/testutil/         # FakeProvider / MemStore / CapturingNotifier
+├── utils/                     # 根層共用 utilities umbrella：utils/frontmatter/ + utils/testutil/（FakeProvider / MemStore / CapturingNotifier）
 ├── sample/code-agent/         # 全 harness 組合 CLI（tui 互動 / -p / --json、session flags、.agentsdk 探索）
-├── sample/logdoctor/          # 驗證 sample (cobra CLI + 兩個 tool)
+├── sample/logdoctor-agent/          # 驗證 sample (cobra CLI + 兩個 tool)
 ```
 
 `auth` 與 `proxy` 都已脫離本 repo，是外部獨立 repo（無 `auth/`、`proxy/` 目錄，也無 `.gitmodules`）。`auth` 仍是 root 的 direct require——`config/provider.go` 用它的 `model`/`svc` 做 credential 解析、`config/app.go` 用 `utils.FileStore` 存憑證；`proxy` 已無任何殘留（無目錄、無 require、無 import）。Root `main.go` 只掛載 root module 自己的兩個子指令：`provider`（wire-format smoke test，直接打 `core.Provider`）與 `wizard`（設定產生器）。
@@ -172,10 +171,10 @@ go run . --fake --sessions         # session 列表
 go run . --fake                     # 互動 TUI
 ```
 
-`sample/logdoctor` — M1 e2e：
+`sample/logdoctor-agent` — M1 e2e：
 
 ```bash
-cd sample/logdoctor
+cd sample/logdoctor-agent
 go run . --fake --max-turns=10 run --once --fixture testdata/error.log
 ```
 
@@ -196,9 +195,9 @@ effect done            ← end_turn
 | --------- | ---------------------------------------------------------------------------------------------------- | ----------- |
 | M1        | 核心範式 + sample 骨架 (無 provider / 無 middleware / 無 dedupe)                                     | ✅ 完成     |
 | M2        | 系統韌性 + 循環防禦 (memory / checkpoint / WAL / loopguard / retry)                                  | ✅ 完成     |
-| M3        | 工具生態 + 執行期安全 (schema / sandbox / spotlight / sanitizer / MCP / tracing)                     | ✅ 完成     |
+| M3        | 工具生態 + 執行期安全 (schema / sandbox / spotlight / sanitizer / tracing)                          | ✅ 完成     |
 | M4        | 架構解耦 + HITL 完整 + 三個 LLM provider (anthropic / openaicompat / google)                         | ✅ 完成     |
-| M5        | built-in tools、sample wiring、`app` lifecycle                                                       | ✅ 完成     |
+| M5        | built-in tools、sample wiring、`agent` lifecycle                                                     | ✅ 完成     |
 | M6        | auth mechanism、9 provider ids、auth CLI                                                             | ✅ 完成     |
 | Proxy     | 3×3 pairwise protocol transform、provider profile routing、SSE hardening                             | ✅ 完成     |
 | Format    | 四來源 `37` 個 client/provider wire-format entity catalog                                            | ✅ 完成     |
@@ -214,12 +213,12 @@ effect done            ← end_turn
 
 ## 慣例衝突 (Naming Collision)
 
-`agentsdk/core` (純狀態機) 與 `sample/logdoctor/core` (gosdk noun 層領域邏輯) 撞名,屬不同 module path (`github.com/bizshuk/agentsdk/core` vs `github.com/bizshuk/agentsdk/sample/logdoctor/core`),編譯安全。Sample 端 import 時以 `sdkcore` / `domain` 別名區分。
+`agentsdk/core` (純狀態機) 與 `sample/logdoctor-agent/core` (gosdk noun 層領域邏輯) 撞名,屬不同 module path (`github.com/bizshuk/agentsdk/core` vs `github.com/bizshuk/agentsdk/sample/logdoctor-agent/core`),編譯安全。Sample 端 import 時以 `sdkcore` / `domain` 別名區分。
 
 ## 慣例
 
 - 常數一律 `SCREAMING_SNAKE_CASE` (含 unexported、block-scoped),與 gosdk 一致
-- `go.work` 多模組：目前 9 個 `use` entries（root + 8 samples；`tui` 與 `provider/*` 已併回 root）；`core/` 維持 stdlib-only，root config/app 可使用應用層依賴
+- `go.work` 多模組：目前 9 個 `use` entries（root + 8 samples；`tui` 與 `provider/*` 已併回 root）；`core/` 維持 stdlib-only，root config + agent 可使用應用層依賴
 - 宣告層依賴紀律（CI 可驗）：`go list -deps ./agent/spec | grep agentsdk` 與 `go list -deps ./prompt | grep agentsdk` 都只該出現 `core` 與自己
 - 依賴分析工具已移至獨立 repo `~/projects/go-dependency-analysis`：`go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work --format text`
 - 測試:table-driven + `t.Run` + `testify`

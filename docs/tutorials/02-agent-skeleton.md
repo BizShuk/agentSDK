@@ -48,7 +48,7 @@ newState(MaxTurns=20, Autonomy=L2, Budget, system prompt)
 三個症狀，同時也是骨架設計的目標：
 
 1. **順序是隱性合約**。`buildTools` 必須在 `buildSubagents` 之前，因為後者要前者產出的 Provider。但程式碼沒有強制這點——換順序還是能 compile，只是執行到 `subagent.NewSpawner` 時 provider 是 nil。沒有 type-system、沒有 runtime check。
-2. **重複的 scaffold**。每個新應用都重寫這 333 行的不同切片。`sample/file-agent` 和 `sample/logdoctor` 的 `cmd/*.go` 各有自己的 60 行 `compose`，結構一模一樣，名稱微調。`sample/code-agent` 擴充最多，變成 333 行。
+2. **重複的 scaffold**。每個新應用都重寫這 333 行的不同切片。`sample/file-agent` 和 `sample/logdoctor-agent` 的 `cmd/*.go` 各有自己的 60 行 `compose`，結構一模一樣，名稱微調。`sample/code-agent` 擴充最多，變成 333 行。
 3. **擴充點不明顯**。要新增一個 hook 規則——改 `buildHookRunner`。要新增工具——改 `buildTools`。但這些函式既長又夾著順序約束，新手只能複製貼上再改。
 
 ### skeleton 解掉什麼
@@ -230,12 +230,11 @@ prompt: {sources: [files, skills, env, reminder]}  # ⬇ 開 env 與 reminder
 package main
 
 import (
-    "github.com/bizshuk/agentsdk/app"
     "github.com/bizshuk/agentsdk/agent"
 )
 
 func main() {
-    app.Main(agent.MustNew(agent.Config{
+    agent.Main(agent.MustNew(agent.Config{
         Name:  "greeter",
         Tier:  "basic",
         Model: agent.Model{Provider: "minimax"},
@@ -246,7 +245,7 @@ func main() {
 `agent.MustNew` 做兩件事：
 
 1. `Prepare()`：tier 展開 + 驗證，**不**碰 `core` 與 `runtime`
-2. 把注入 (`agent.Option`) 收集起來，等 `app.Run` 給 `AppConfig` 後再走 `Bootstrap` 真正組裝
+2. 把注入 (`agent.Option`) 收集起來，等 `agent.Run` 給 `AppConfig` 後再走 `Bootstrap` 真正組裝
 
 所以應用層呼叫 `MustNew` 不會建目錄、不打 provider、不驗憑證。失敗只有 schema 錯誤（不會動到磁碟的幾種）。
 
@@ -261,7 +260,7 @@ func main() {
 時序：
 
 ```text
-main()                          app.Run()
+main()                          agent.Run()
 ─────────                       ─────────
 agent.MustNew(cfg)              config.OpenForCLI(name)
   ├ cfg.Prepare()                  ├ 開 ~/.config/<name>
@@ -303,13 +302,12 @@ package main
 
 import (
     "github.com/bizshuk/agentsdk/agent"
-    "github.com/bizshuk/agentsdk/app"
 )
 
 func main() {
     cfg, err := agent.LoadFile("agent.yaml")
     if err != nil { panic(err) }
-    app.Main(agent.MustNew(cfg))
+    agent.Main(agent.MustNew(cfg))
 }
 ```
 
@@ -373,15 +371,14 @@ import (
     "strings"
 
     "github.com/bizshuk/agentsdk/agent"
-    "github.com/bizshuk/agentsdk/app"
     "github.com/bizshuk/agentsdk/core"
-    "github.com/bizshuk/agentsdk/hook"
+    "github.com/bizshuk/agentsdk/middleware/hook"
 )
 
 func main() {
     cfg, _ := agent.LoadFile("agent.yaml")
 
-    app.Main(agent.MustNew(cfg,
+    agent.Main(agent.MustNew(cfg,
         agent.WithHooks(hook.Rule{
             Event: core.HOOK_PRE_TOOL_USE, Match: "bash",
             Handlers: []hook.Handler{hook.Func(func(_ context.Context, ev core.HookEvent) (core.HookDecision, error) {
@@ -498,7 +495,7 @@ model:
 // 正確：API key 走程式注入（env 或密鑰管理），spec 只指名變數名
 // yaml：model: {provider: anthropic, api_key_env: ANTHROPIC_API_KEY}
 // 程式碼：
-app.Main(agent.MustNew(cfg,
+agent.Main(agent.MustNew(cfg,
     agent.WithProvider(anthropicprovider.New(anthropicprovider.WithAPIKey(os.Getenv("ANTHROPIC_API_KEY")))),
 ))
 // 或更乾淨：寫 env 到 process env，registry.LookupEnv 直接撈

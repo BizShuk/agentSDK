@@ -383,7 +383,7 @@ func (p *Provider) applyHeaders(req *http.Request) {
 	}
 }
 
-// Metadata implements registry.Adapter. Returns the package-level
+// Metadata implements provider.Adapter. Returns the package-level
 // codex descriptor so direct constructors (New, NewWithOAuth) produce
 // adapters that agree with the registered Entry.Metadata.
-func (p *Provider) Metadata() registry.Metadata { return adapterMetadata() }
+func (p *Provider) Metadata() provider.Metadata { return adapterMetadata() }

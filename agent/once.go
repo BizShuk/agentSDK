@@ -83,9 +83,21 @@ func oneshot(cfg Config, prompt string, opts []Option) (*runtime.Engine, core.St
 		return nil, core.State{}, err
 	}
 
-	prov, err := resolveProvider(prepared, b)
-	if err != nil {
-		return nil, core.State{}, err
+	// An injected provider wins outright; otherwise the registry builds the
+	// configured adapter. CredentialKind is passed through verbatim so the
+	// strict modes ("oauth" / "api_key") error here with a clear message
+	// rather than silently falling back to the legacy OAuth>API-key order.
+	prov := b.provider
+	if prov == nil {
+		prov, err = provider.New(prepared.Model.Provider, provider.Options{
+			Model:          prepared.Model.Name,
+			BaseURL:        prepared.Model.BaseURL,
+			APIKeyEnv:      prepared.Model.APIKeyEnv,
+			CredentialKind: prepared.Model.CredentialKind,
+		})
+		if err != nil {
+			return nil, core.State{}, err
+		}
 	}
 
 	// One-shot always runs the one-shot rule, whatever style the config
@@ -143,19 +155,4 @@ func LastAssistantText(s core.State) string {
 		}
 	}
 	return ""
-}
-
-// resolveProvider picks the model provider: an injected one wins outright,
-// otherwise the registry builds the configured adapter. Keeping this in
-// one function means Once and the full builder cannot diverge on
-// precedence.
-func resolveProvider(cfg Config, b builder) (core.Provider, error) {
-	if b.provider != nil {
-		return b.provider, nil
-	}
-	return registry.New(cfg.Model.Provider, registry.Options{
-		Model:     cfg.Model.Name,
-		BaseURL:   cfg.Model.BaseURL,
-		APIKeyEnv: cfg.Model.APIKeyEnv,
-	})
 }

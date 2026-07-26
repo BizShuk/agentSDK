@@ -1,4 +1,4 @@
-package registry_test
+package provider_test
 
 // Link every built-in adapter into the registry test binary. Adapters
 // self-register from their package init(); without these blank imports

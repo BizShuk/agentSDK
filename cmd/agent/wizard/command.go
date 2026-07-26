@@ -44,7 +44,7 @@ Examples:
 `),
 	SilenceUsage:  true,
 	SilenceErrors: true,
-	RunE: runWizardCmd,
+	RunE:          runWizardCmd,
 }
 
 func init() {

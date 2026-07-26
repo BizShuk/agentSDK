@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/bizshuk/agentsdk/agent/spec"
+	"github.com/bizshuk/agentsdk/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -315,6 +316,75 @@ func TestValidateWithoutExpandComplains(t *testing.T) {
 	err := spec.Config{Name: "x", Middleware: &spec.Middleware{}}.Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "call Expand before Validate")
+}
+
+// --- credential_kind ---
+
+func TestValidateCredentialKind(t *testing.T) {
+	// The three legal values round-trip; one common typo ("oauth2", "apikey")
+	// is rejected with a clear message; the legacy empty string stays legal
+	// so existing YAMLs keep loading.
+	cases := []struct {
+		name    string
+		kind    string
+		wantErr string
+	}{
+		{"auto is allowed", core.CREDENTIAL_KIND_AUTO, ""},
+		{"api_key is allowed", core.CREDENTIAL_KIND_APIKEY, ""},
+		{"oauth is allowed", core.CREDENTIAL_KIND_OAUTH, ""},
+		{"oauth2 is rejected", "oauth2", "unknown model.credential_kind"},
+		{"apikey (no underscore) is rejected", "apikey", "unknown model.credential_kind"},
+		{"yolo is rejected", "yolo", "unknown model.credential_kind"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := spec.Config{
+				Name:  "x",
+				Tier:  spec.TIER_BASIC,
+				Model: spec.Model{Provider: "anthropic", CredentialKind: tc.kind},
+			}.Prepare()
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestDecodeAcceptsCredentialKind(t *testing.T) {
+	// The whole reason this field exists in the schema: spec.Decode with
+	// DisallowUnknownFields would reject it before, so a YAML hand-written
+	// from config.example.yaml failed at startup.
+	got, err := spec.DecodeBytes([]byte(`{
+		"name": "x",
+		"tier": "basic",
+		"model": {
+			"provider": "anthropic",
+			"credential_kind": "oauth"
+		}
+	}`))
+	require.NoError(t, err)
+	assert.Equal(t, core.CREDENTIAL_KIND_OAUTH, got.Model.CredentialKind)
+}
+
+func TestVariantKeysIncludesCredentialKind(t *testing.T) {
+	keys := spec.VariantKeys()
+	assert.Contains(t, keys, "model.credential_kind",
+		"wizard walks VariantKeys; missing key would silently skip the credential_kind stage")
+}
+
+func TestCredentialKindChoicesMatchRegistryConstants(t *testing.T) {
+	// spec and registry must read from the same core constants; if a
+	// future refactor reintroduces hardcoded strings on either side,
+	// both sides would drift independently — this test catches that.
+	cs := spec.Values(spec.VariantChoices("model.credential_kind"))
+	require.Len(t, cs, 3, "spec variant list must stay in lockstep with core constants")
+	assert.Equal(t, core.CREDENTIAL_KIND_AUTO, cs[0],
+		"spec variant 0 must be core.CREDENTIAL_KIND_AUTO (the only source of truth)")
+	assert.Equal(t, core.CREDENTIAL_KIND_APIKEY, cs[1])
+	assert.Equal(t, core.CREDENTIAL_KIND_OAUTH, cs[2])
 }
 
 // --- serialization ---

@@ -280,7 +280,7 @@ func maxTokensOrDefault(req core.ModelRequest) int {
 	return 4096
 }
 
-// Metadata implements registry.Adapter. Returns the package-level
+// Metadata implements provider.Adapter. Returns the package-level
 // minimax descriptor so direct constructors (New) produce adapters
 // that agree with the registered Entry.Metadata.
-func (p *Provider) Metadata() registry.Metadata { return adapterMetadata() }
+func (p *Provider) Metadata() provider.Metadata { return adapterMetadata() }

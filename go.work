@@ -1,13 +1,17 @@
 go 1.26.0
 
+// Two sample categories, and the directory prefix says which is which:
+//
+//	demo-*   one SDK component wired by hand, no agent framework
+//	*-agent  a complete agent (all but logdoctor-agent go through agent/)
 use (
 	.
 	./sample/code-agent
+	./sample/demo-memory
+	./sample/demo-middleware
+	./sample/demo-strategy
 	./sample/file-agent
 	./sample/greet-agent
-	./sample/logdoctor
-	./sample/memory-demo
-	./sample/middleware-demo
-	./sample/skeleton-demo
-	./sample/strategy-demo
+	./sample/logdoctor-agent
+	./sample/skeleton-agent
 )

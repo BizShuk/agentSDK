@@ -1,0 +1,310 @@
+# agentsdk — `agent.Config` reference example
+#
+# This file documents every field in agent/spec.Config and shows the new
+# credential-resolution surface (Model.credential_kind) introduced by the
+# OAuth routing fix. It is intentionally exhaustive — a working agent can
+# drop the commented sections and keep only the top portion.
+#
+# Usage:
+#   cp config.example.yaml agent.yaml
+#   # edit, then run your sample or `agentsdk run -c agent.yaml`
+#
+# Credential precedence is governed by registry.Options.Resolve (see
+# provider/registry.go). All env reads go through viper by default
+# (config.yaml → ~/.config/<Name>/ → .env → OS env).
+
+# ---------------------------------------------------------------------------
+# Top-level identity & engagement tier
+# ---------------------------------------------------------------------------
+
+name: my-agent                       # ~/.config/<name>/, keys persisted state
+                                     # required from tier=basic upward; tier=oneshot skips persistence
+
+tier: basic                          # oneshot | basic | standard | full
+                                     # each tier is a strict superset of the one below
+                                     # oneshot: single model call, no tools, no state
+                                     # basic:   + reasoning loop + middleware + state/WAL
+                                     # standard:+ built-in tools, permission, sessions, context files
+                                     # full:    + skills, subagents, stream output
+
+persona: "You are a careful code reviewer. Be concise, point at lines, prefer evidence over opinion."
+                                     # fixed identity text; the equivalent of `provider --system`
+                                     # dynamic content (skills, env, files) goes under `prompt:` below
+
+# ---------------------------------------------------------------------------
+# Model — provider adapter selection & credential resolution
+# ---------------------------------------------------------------------------
+
+model:
+  provider: anthropic                # registry key (case-insensitive); empty = "minimax"
+                                     #   anthropic | codex | google | grok | minimax | ollama
+
+  name: claude-sonnet-5              # model id; empty = adapter's flagship default
+                                     # use `agentsdk provider --list-models --provider X` to see options
+
+  base_url: https://api.anthropic.com
+                                     # endpoint override; empty = adapter default
+                                     # useful for internal gateways / proxy setups
+
+  # credential_kind controls how the registry resolves the credential.
+  # Empty string (default) = auto-load from env, OAuth outranks API key globally.
+  # Non-empty values are STRICT: missing env at startup returns an error
+  # instead of silently falling back to the provider's other auth path.
+  credential_kind: ""                # "" | "api_key" | "oauth"
+
+  # Reserved for environments where the credential is supplied out-of-band
+  # (e.g. CI secret injection). When set, the env-lookup step is skipped.
+  # credential_kind becomes REQUIRED alongside this field — leaving it empty
+  # raises "APIKey pre-filled but CredentialKind unset" at startup so the
+  # factory can dispatch to the correct constructor (New vs NewWithOAuth).
+  #
+  # api_key: sk-ant-xxx
+  # credential_kind: api_key
+
+  # -------------------------------------------------------------------------
+  # How credential resolution actually behaves
+  # -------------------------------------------------------------------------
+  #
+  # credential_kind = "" (auto, the default):
+  #   1. Try OAuthEnv from the provider's Metadata:
+  #        anthropic  → ANTHROPIC_OAUTH_TOKEN
+  #        codex      → OPENAI_OAUTH_TOKEN
+  #        google     → GOOGLE_OAUTH_TOKEN
+  #        grok       → XAI_OAUTH_TOKEN
+  #   2. If unset, try APIKeyEnv:
+  #        anthropic  → ANTHROPIC_API_KEY
+  #        google     → GOOGLE_API_KEY
+  #        grok       → XAI_API_KEY
+  #        minimax    → MINIMAX_API_KEY
+  #   3. If both unset, provider constructor returns its own error
+  #      (e.g. "anthropic: API key not set").
+  #
+  # credential_kind = "oauth" (strict):
+  #   Only OAuthEnv is consulted. Missing env → startup error.
+  #   Choose this when:
+  #     - You're running on a Claude Pro/Max or ChatGPT Plus/Pro subscription
+  #     - You want a hard failure if the OAuth token is missing (better than
+  #       silently using a stale API key from the shell)
+  #
+  # credential_kind = "api_key" (strict):
+  #   Only APIKeyEnv is consulted. OAuthEnv is ignored even if exported.
+  #   Choose this when:
+  #     - You're billing to an org API key, not a personal subscription
+  #     - You're testing a model catalog change and want deterministic auth
+  #     - The OAuth env is exported for another tool on the same machine
+  #
+  # All env reads use viper.GetString by default — config.yaml / .env /
+  # ~/.config/agentsdk/.env / shell env all participate. Override the
+  # lookup function in code via registry.Options.LookupEnv.
+
+# ---------------------------------------------------------------------------
+# Reasoning — planning strategy selection
+# ---------------------------------------------------------------------------
+
+reasoning:
+  style: think_then_act              # which rule runs this turn
+                                     # think_then_act | plan_then_run | do_then_review
+                                     # one_shot | learn_from_failure | choose_agent
+
+  enable:                            # which rules are REGISTERED in the decide map
+    - think_then_act                 # at minimum, style must be in enable; otherwise Validate rejects
+                                     # add others only when the run genuinely switches mid-flight
+                                     #   (e.g. choose_agent acting as a router)
+
+# ---------------------------------------------------------------------------
+# Limits — run budgets
+# ---------------------------------------------------------------------------
+
+limits:
+  max_turns: 20                      # Decide iterations; loopguard counts these
+  max_rounds: 10                     # model requests (with their tool calls); operator counts these
+  max_tool_calls: 4                  # bound on a SINGLE round's tool-call batch
+                                     # over the limit → batch is skipped and paused at continue-gate
+  max_wall_time: 10m                 # process-level wall-clock cap (Go duration string)
+  autonomy: L2                       # L0 (read-only) … L4 (full bypass)
+                                     # affects DefaultApprovalPolicy fallback
+
+# ---------------------------------------------------------------------------
+# Middleware chain — preset selection
+# ---------------------------------------------------------------------------
+
+middleware:
+  preset: default                    # none | default | secure
+                                     # default: retry → timeout → budget → loopguard
+                                     # secure:  + sandbox → approval → spotlight → sanitizer
+                                     # chain order is fixed (correctness property, not knob)
+
+# ---------------------------------------------------------------------------
+# Memory — persistence & compaction
+# ---------------------------------------------------------------------------
+
+memory:
+  store: file                        # none | file
+                                     # file → ~/.config/<name>/data/{states,wal}/<runID>.{json,jsonl}
+                                     # enables resume / fork via `agentsdk sessions`
+  compaction: none                   # none | headline
+
+# ---------------------------------------------------------------------------
+# Tools — built-in tool allowlist
+# ---------------------------------------------------------------------------
+
+tools:
+  builtin:                           # empty = all six
+    - read                           # read
+    - write                          # write
+    - edit                           # edit
+    - bash                           # bash
+    - glob                           # glob
+    - grep                           # grep
+  working_dir: ""                    # empty = process working directory
+
+# ---------------------------------------------------------------------------
+# Safety — approval mode & rule gates
+# ---------------------------------------------------------------------------
+
+safety:
+  mode: default                      # default | acceptEdits | plan | bypassPermissions
+                                     # deny > ask > allow, rule specs use permission.MatchSpec syntax
+                                     #   Bash(git:*)   — match command prefix
+                                     #   Edit(src/**)  — match file path glob (** crosses /)
+  deny:
+    - "Bash(rm -rf:*)"               # destructive shell patterns
+    - "Edit(/etc/**)"                # system paths
+  ask:
+    - "Bash(git push:*)"             # state-changing network ops
+    - "Edit(src/**)"                 # project source (matches anywhere under src/)
+  allow:
+    - "Read(**)"                     # safe — read everything
+  sandbox: false                     # restrict tools to working_dir + allowlist
+  fallback: autonomy                 # none | autonomy — when no rule matches, defer to autonomy grid
+
+# ---------------------------------------------------------------------------
+# Prompt — dynamic content sources (vs Persona above, which is fixed)
+# ---------------------------------------------------------------------------
+
+prompt:
+  sources:                           # files | skills | env | reminder
+    - files                          # AGENTS.md / CLAUDE.md hierarchy + @imports
+    - skills                         # SKILL.md index
+    - env                            # process environment block
+    - reminder                       # end-of-context reminders
+  user_dir: ""                       # empty = ~/.config/<name>/
+  project_dir: ""                    # empty = .agentsdk
+  max_bytes: 8192                    # loader's byte budget per source
+
+# ---------------------------------------------------------------------------
+# Skills — discovery roots for SKILL.md / commands / subagents
+# ---------------------------------------------------------------------------
+
+skills:
+  dirs:                              # empty = <user_dir>/skills + <cwd>/<project_dir>/skills
+    # - ~/.config/my-agent/skills
+    # - ./.agentsdk/skills
+
+# ---------------------------------------------------------------------------
+# Subagents — task tool & depth guard
+# ---------------------------------------------------------------------------
+
+subagents:
+  dirs:                              # empty = <user_dir>/agents + <cwd>/<project_dir>/agents
+    # - ~/.config/my-agent/agents
+  max_depth: 1                       # 0 = DEFAULT_SUBAGENT_DEPTH (1)
+  max_turns: 10                      # 0 = min(Limits.MaxTurns, DEFAULT_SUBAGENT_TURNS)
+
+# ---------------------------------------------------------------------------
+# Sessions — lineage on top of state store
+# ---------------------------------------------------------------------------
+
+sessions:
+  dir: ""                            # empty = <data_dir>/sessions
+
+# ---------------------------------------------------------------------------
+# Output — EventSink binding
+# ---------------------------------------------------------------------------
+
+output:
+  format: text                       # text | json | tui
+                                     # tui = interactive Renderer (in-process)
+                                     # json = wire-format envelope (one JSON per line)
+                                     # text = human-readable fold of events
+
+# ---------------------------------------------------------------------------
+# Telemetry — OpenTelemetry tracing
+# ---------------------------------------------------------------------------
+
+telemetry:
+  enabled: false                     # off by default; gosdk pushes to inf (VictoriaMetrics/Loki)
+  service: ""                        # empty = Config.Name
+
+# ---------------------------------------------------------------------------
+# Worked examples — three common shapes
+# ---------------------------------------------------------------------------
+
+# Example A — minimal smoke-test (tier=oneshot, no persistence, default model)
+#
+# name: ping-agent                   # NOTE: tier=oneshot does NOT require name
+# tier: oneshot
+# model:
+#   provider: anthropic
+#   credential_kind: oauth           # strict OAuth for Claude Pro/Max subscribers
+
+# Example B — interactive TUI (tier=basic, file-backed state, default middleware)
+#
+# name: dev-assistant
+# tier: basic
+# model:
+#   provider: anthropic
+#   credential_kind: api_key         # explicit: ignore any OAuth env exported by other tools
+# reasoning:
+#   style: think_then_act
+# limits:
+#   max_turns: 30
+#   autonomy: L2
+# middleware:
+#   preset: default
+# memory:
+#   store: file
+# output:
+#   format: tui
+
+# Example C — production (tier=full, secure middleware, skills & subagents)
+#
+# name: prod-agent
+# tier: full
+# model:
+#   provider: anthropic
+#   name: claude-sonnet-5
+#   credential_kind: oauth           # fail loud if OAuth env missing
+# reasoning:
+#   style: think_then_act
+#   enable: [think_then_act]
+# limits:
+#   max_turns: 50
+#   max_rounds: 30
+#   max_tool_calls: 8
+#   autonomy: L3
+# middleware:
+#   preset: secure
+# memory:
+#   store: file
+#   compaction: headline
+# tools:
+#   working_dir: /srv/app
+# safety:
+#   mode: acceptEdits
+#   sandbox: true
+#   fallback: autonomy
+# prompt:
+#   sources: [files, skills, env]
+#   max_bytes: 16384
+# skills:
+#   dirs: [/srv/app/.agentsdk/skills]
+# subagents:
+#   max_depth: 2
+# sessions:
+#   dir: /srv/app/.agentsdk/sessions
+# output:
+#   format: json
+# telemetry:
+#   enabled: true
+#   service: prod-agent

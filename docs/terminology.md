@@ -10,7 +10,7 @@
 | `feature block`     | (—)                          | `Config` 內的指標欄位（如 `*Safety`）：`nil` = 關閉，`&T{}` = 開啟且用預設值。層 1 opt-in 的載體                                                                                                 | `agent/spec/spec.go`                                                              |
 | `variant`           | (—)                          | feature block 內的具名字串欄位（如 `Safety.Mode = "default"`）：空字串 = 該 feature 的預設實作。層 2 opt-in 的載體                                                                               | `agent/spec/spec.go`                                                              |
 | `Choice`            | (—)                          | 一筆可選值（`Value` + `Label` + `Note` + `Default`），純資料、可序列化、可列舉；wizard 以此呈現設定選項                                                                                          | `agent/spec/choice.go`、`cmd/agent/wizard/wizard.go`                              |
-| `Option`            | (—)                          | `type Option func(*builder) error`：DI 用的 functional option；閉包、不可列舉、只活在本 process                                                                                                  | `agent/options.go`                                                                |
+| `Option`            | (—)                          | `type Option func(*builder) error`：DI 用的 functional option；閉包、不可列舉、只活在本 process                                                                                                  | `agent/builder_options.go`                                                        |
 | `Style`             | reasoning style              | 這次跑哪個推理策略，seed `core.State.ReasoningStyle`；`core.NewDecide` 依此欄位派工                                                                                                              | `agent/spec/spec.go::Reasoning`、`agent/build.go::seedState`                      |
 | `Enable`            | enabled reasoning rules      | 註冊到 `core.NewDecide` map 的策略清單；只跑一個是預設，需要中途切換才註冊多個                                                                                                                   | `agent/spec/spec.go::Reasoning`、`agent/build.go::buildDecide`                    |
 | `build pipeline`    | 8-stage build pipeline       | `agent` 的組裝順序：provider → tools → reasoning → prompt → safety → memory → output → assemble                                                                                                  | `agent/build.go::Bootstrap`                                                       |
@@ -33,7 +33,7 @@
 | `Window`               | context window          | 依 `MaxMessages` 與可選的 `MaxTokens` 保留最新訊息；token trimming 至少保留一則訊息                                                                                 | `memory/window.go::Window.Trim`                                                       |
 | `CharHeuristicCounter` | heuristic token counter | 無 provider-native token counter 時的可決定性 fallback，以每個純文字 part 的 `len(text)/4 + 1` 估算                                                                 | `memory/window.go::CharHeuristicCounter.Count`                                        |
 | `Compactor`            | context compactor       | 把一段 `[]core.Message` 壓縮成一則較小 `core.Message` 的介面；root `memory` package 只保留型別別名相容層                                                            | `memory/compaction/compaction.go::Compactor`、`memory/compactor.go`                   |
-| `HeadlineCompactor`    | headline compactor      | 無 I/O、可決定性地擷取每個純文字 part 的第一行，串成一則 assistant summary；目前只由測試與 `memory-demo` 呼叫，尚未接入 `agent.Memory.Compaction` 的 runtime wiring | `memory/compaction/headline.go::HeadlineCompactor`、`sample/memory-demo/cmd/demos.go` |
+| `HeadlineCompactor`    | headline compactor      | 無 I/O、可決定性地擷取每個純文字 part 的第一行，串成一則 assistant summary；目前只由測試與 `memory-demo` 呼叫，尚未接入 `agent.Memory.Compaction` 的 runtime wiring | `memory/compaction/headline.go::HeadlineCompactor`、`sample/demo-memory/cmd/demos.go` |
 
 ## Core / Runtime
 
@@ -47,8 +47,8 @@
 | `tool call batch` | tool call batch  | 單一 `ModelResult.ToolCalls` 切片，即一個 round 內 model 一次要求的全部 operation；`Budget.MaxToolCalls` 限制其批量大小                  | `core/input.go::ModelResult`、`runtime/loop.go::runStep`                  |
 | `settlement`      | settlement       | batch 內每個 call 在下一次 `CALL_MODEL` 前恰好對應一個 `tool_result`，無論它已執行、被 hook 擋、因 pause 未執行或被 budget skip          | `runtime/harness.go::settleSkipped`、`runtime/harness.go::settleUnrun`    |
 | `continue-gate`   | continue-gate    | `ToolCall == nil` 的 `PendingApproval`：整批工具因 `MaxToolCalls` 超限而 skip 後暫停，決策是 resume 或 stop 整個 run，不是執行單一 call  | `runtime/loop.go::runStep`、`runtime/loop.go::consumeApprovedPendingCall` |
-| `pause reason`    | pause reason     | run 停下但應用仍可續行的原因：`approval`（含 continue-gate）或 `round_end`；`app.Run` 依此呼叫 `Interactive.NextRound`                   | `app/agent.go::PauseReason`、`app/app.go`                                 |
-| `Interactive`     | interactive seam | 單一互動縫 `NextRound(ctx, Pause) (Resume, error)`，統一承接 approval decision 與 follow-up input；未實作時保留 out-of-process verb 語意 | `app/agent.go::Interactive`                                               |
+| `pause reason`    | pause reason     | run 停下但應用仍可續行的原因：`approval`（含 continue-gate）或 `round_end`；`agent.Run` 依此呼叫 `Interactive.NextRound`                   | `agent/contract.go::PauseReason`、`agent/lifecycle.go`                     |
+| `Interactive`     | interactive seam | 單一互動縫 `NextRound(ctx, Pause) (Resume, error)`，統一承接 approval decision 與 follow-up input；未實作時保留 out-of-process verb 語意 | `agent/contract.go::Interactive`                                          |
 | `Steer`           | steering input   | 把 user message 排入佇列，在下一次 `Decide` 前注入 conversation；可與正在執行的 Engine 並行呼叫                                          | `runtime/harness.go::Engine.Steer`                                        |
 | `FollowUp`        | follow-up input  | 當 run 原本要完成時，每次取一則排隊的 user message 續跑，並重設 `think_then_act.phase`                                                   | `runtime/harness.go::Engine.FollowUp`、`runtime/loop.go::runStep`         |
 
@@ -61,8 +61,8 @@
 | `RUN_STATUS_COMPLETED`       | `"completed"`           | run 正常完成                                      | `core/state.go::RunStatus`           |
 | `RUN_STATUS_FAILED`          | `"failed"`              | run 因錯誤失敗                                    | `core/state.go::RunStatus`           |
 | `RUN_STATUS_ABORTED`         | `"aborted"`             | run 已中止                                        | `core/state.go::RunStatus`           |
-| `PAUSE_APPROVAL`             | `"approval"`            | `Interactive` 收到 approval 類 pause              | `app/agent.go::PauseReason`          |
-| `PAUSE_ROUND_END`            | `"round_end"`           | `Interactive` 收到 round 完成後的 follow-up pause | `app/agent.go::PauseReason`          |
+| `PAUSE_APPROVAL`             | `"approval"`            | `Interactive` 收到 approval 類 pause              | `agent/contract.go::PauseReason`     |
+| `PAUSE_ROUND_END`            | `"round_end"`           | `Interactive` 收到 round 完成後的 follow-up pause | `agent/contract.go::PauseReason`     |
 | `APPROVAL_DECISION_APPROVE`  | `"approve"`             | 核准 tool call 或 continue-gate resume            | `core/autonomy.go::ApprovalDecision` |
 | `APPROVAL_DECISION_REJECT`   | `"reject"`              | 拒絕 tool call 或結束 continue-gate run           | `core/autonomy.go::ApprovalDecision` |
 | `APPROVAL_DECISION_ASK`      | `"ask"`                 | 要求更多資訊並重新排隊                            | `core/autonomy.go::ApprovalDecision` |

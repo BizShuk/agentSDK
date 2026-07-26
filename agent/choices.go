@@ -46,14 +46,14 @@ type (
 // adapters are linked in" is only answerable by the package that links
 // them.
 func ProviderChoices() []Choice {
-	entries := registry.Entries()
+	entries := provider.Entries()
 	out := make([]Choice, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, Choice{
 			Value:   e.Name,
 			Label:   e.Metadata.Label,
 			Note:    providerNote(e),
-			Default: e.Name == registry.DEFAULT,
+			Default: e.Name == provider.DEFAULT_NAME,
 		})
 	}
 	return out
@@ -61,7 +61,7 @@ func ProviderChoices() []Choice {
 
 // providerNote combines the entry's own note with the credential it reads,
 // so a wizard can tell the user what to export before they pick.
-func providerNote(e registry.Entry) string {
+func providerNote(e provider.Entry) string {
 	var parts []string
 	if e.Metadata.Note != "" {
 		parts = append(parts, e.Metadata.Note)

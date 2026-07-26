@@ -1,0 +1,32 @@
+# skeleton-agent — sample config
+#
+# This file mirrors the wizard `goLiteral` output for `-t basic`, with the
+# three edits documented in main.go::loadConfig (no persona, think_then_act
+# reasoning, MaxTurns=50). It is the canonical "what wizard emits for this
+# sample" reference and a starter template for customization.
+#
+# Usage:
+#   echo "Payment page throws 500 on /checkout" \
+#       | go run ./sample/skeleton-agent ./sample/skeleton-agent/skeleton-agent.yaml
+#
+# Schema notes:
+# - `tier` matches spec.TIER_BASIC = "basic"; explicit means tier expansion
+#   fills in the default middleware / memory / reasoning.
+# - `model.credential_kind` is part of the post-OAuth-fix schema. Empty =
+#   auto (OAuth > API key). Set to "api_key" or "oauth" for strict mode.
+# - Anything not in spec.Config is rejected by spec.Decode's
+#   DisallowUnknownFields — typos surface immediately.
+
+name: skeleton-agent
+tier: basic
+
+model:
+  provider: minimax
+  # credential_kind: ""       # "" | "api_key" | "oauth"
+
+reasoning:
+  style: think_then_act
+
+limits:
+  max_turns: 50
+  autonomy: L1

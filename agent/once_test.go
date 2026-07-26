@@ -8,8 +8,8 @@ import (
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/provider"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -145,7 +145,7 @@ func TestWithProviderRejectsNil(t *testing.T) {
 
 func TestProviderChoicesTrackRegistry(t *testing.T) {
 	got := agent.ProviderChoices()
-	require.Len(t, got, len(registry.Names()))
+	require.Len(t, got, len(provider.Names()))
 
 	var values []string
 	var defaults int
@@ -157,7 +157,7 @@ func TestProviderChoicesTrackRegistry(t *testing.T) {
 			defaults++
 		}
 	}
-	assert.Equal(t, registry.Names(), values, "choices must follow the registry's order")
+	assert.Equal(t, provider.Names(), values, "choices must follow the registry's order")
 	assert.Equal(t, 1, defaults)
 }
 
@@ -170,5 +170,5 @@ func TestProviderChoiceDefaultMatchesSpec(t *testing.T) {
 			got = c.Value
 		}
 	}
-	assert.Equal(t, spec.DEFAULT_PROVIDER, got)
+	assert.Equal(t, provider.DEFAULT_NAME, got)
 }

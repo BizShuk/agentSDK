@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -216,4 +217,64 @@ func TestProviderCredentialsFromEnv(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "pong from fake")
 	assert.Equal(t, "sk-from-env", *sawKey)
+}
+
+// TestProviderCredentialKindFlagDefaultsToAuto checks that the new
+// --credential-kind flag accepts its documented values and that the
+// default is "auto" (legacy precedence preserved).
+func TestProviderCredentialKindFlagDefaultsToAuto(t *testing.T) {
+	flag := ProviderCmd.Flags().Lookup("credential-kind")
+	require.NotNil(t, flag)
+	assert.Equal(t, "auto", flag.DefValue,
+		"the default must remain 'auto' so existing shell scripts are not broken by the new flag")
+}
+
+// TestProviderFlagDefaultReferencesProviderDefaultName guards the
+// third "minimax" hardcoding site: --provider's default value and
+// ResetFlags both flow from provider.DEFAULT_NAME. If a future refactor
+// reintroduces a string literal here, the test fails before the drift
+// reaches a release.
+func TestProviderFlagDefaultReferencesProviderDefaultName(t *testing.T) {
+	flag := ProviderCmd.Flags().Lookup("provider")
+	require.NotNil(t, flag)
+	assert.Equal(t, provider.DEFAULT_NAME, flag.DefValue,
+		"--provider default must come from provider.DEFAULT_NAME, not a hardcoded literal")
+}
+
+// TestProviderCredentialKindStrictRejectsUnsupportedProvider locks in
+// the failure mode: strict oauth against a provider that has no OAuth
+// env (minimax) must error at startup, not silently fall through.
+//
+// No --api-key is supplied so the strict path actually runs — when an
+// explicit credential is given, Options.Resolve never inspects
+// CredentialKind at all.
+func TestProviderCredentialKindStrictRejectsUnsupportedProvider(t *testing.T) {
+	t.Setenv("MINIMAX_API_KEY", "")
+	_, _, err := runCLI(t,
+		"--provider", "minimax",
+		"--credential-kind", "oauth",
+		"ping",
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not OAuth-capable")
+}
+
+// TestProviderCredentialKindAutoAcceptsExplicitAPIKey verifies that
+// when --api-key is supplied, the strict-mode flag value is ignored —
+// an explicit credential wins regardless of credential_kind. This keeps
+// the flag orthogonal to --api-key instead of requiring operators to
+// unset both.
+func TestProviderCredentialKindAutoAcceptsExplicitAPIKey(t *testing.T) {
+	srv, sawKey := newFakeMessagesServer(t, "minimax-M2")
+	_, _, err := runCLI(t,
+		"--provider", "minimax",
+		"--model", "minimax-M2",
+		"--base-url", srv.URL,
+		"--api-key", "sk-explicit",
+		"--credential-kind", "api_key",
+		"ping",
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "sk-explicit", *sawKey,
+		"--api-key must outrank the strict-mode env lookup so existing scripts keep working")
 }

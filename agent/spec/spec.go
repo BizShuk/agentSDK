@@ -63,10 +63,18 @@ type Config struct {
 // credential and base-URL environment, so an empty Config still works
 // when the environment is set up.
 type Model struct {
-	Provider  string `json:"provider,omitempty"`    // registry key; empty = PROVIDER_DEFAULT
+	Provider  string `json:"provider,omitempty"`    // registry key; empty = provider.DEFAULT_NAME
 	Name      string `json:"name,omitempty"`        // empty = the adapter's own flagship default
 	BaseURL   string `json:"base_url,omitempty"`    // empty = the adapter's own default endpoint
 	APIKeyEnv string `json:"api_key_env,omitempty"` // empty = the adapter's own convention
+
+	// CredentialKind controls how the registry resolves the credential.
+	// Empty (or "auto") = OAuth outranks API key, first non-empty wins —
+	// the legacy precedence. "oauth" / "api_key" are strict modes: only
+	// the chosen class is consulted, and a missing env fails the run at
+	// startup with an explicit error. Empty matches the cmd-line
+	// `provider --credential-kind auto` default.
+	CredentialKind string `json:"credential_kind,omitempty"`
 }
 
 // Reasoning carries the two independent planning decisions.

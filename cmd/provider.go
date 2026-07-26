@@ -9,12 +9,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
-	_ "github.com/bizshuk/agentsdk/provider/all"
 	"github.com/bizshuk/agentsdk/provider"
+	_ "github.com/bizshuk/agentsdk/provider/all"
 	gosdkconfig "github.com/bizshuk/gosdk/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -22,15 +23,16 @@ import (
 )
 
 var (
-	ProviderName       string
-	ProviderModel      string
-	ProviderAPIKey     string
-	ProviderBaseURL    string
-	ProviderSystem     string
-	ProviderMaxTokens  int
-	ProviderStream     bool
-	ProviderAsJSON     bool
-	ProviderListModels bool
+	ProviderName           string
+	ProviderModel          string
+	ProviderAPIKey         string
+	ProviderBaseURL        string
+	ProviderSystem         string
+	ProviderMaxTokens      int
+	ProviderStream         bool
+	ProviderAsJSON         bool
+	ProviderListModels     bool
+	ProviderCredentialKind string
 )
 
 // ProviderCmd is the package-level "provider" subcommand.
@@ -79,22 +81,23 @@ Examples:
 		}
 
 		if listProviders, _ := cmd.Flags().GetBool("list-providers"); listProviders {
-			fmt.Fprintln(out, strings.Join(registry.Names(), ", "))
+			fmt.Fprintln(out, strings.Join(provider.Names(), ", "))
 			return nil
 		}
 
-		entry, ok := registry.Lookup(ProviderName)
+		entry, ok := provider.Lookup(ProviderName)
 		if !ok {
 			return fmt.Errorf("unknown provider %q (registered: %s)",
-				ProviderName, strings.Join(registry.Names(), ", "))
+				ProviderName, strings.Join(provider.Names(), ", "))
 		}
 		label := entry.Name
 
-		prov, err := registry.New(ProviderName, registry.Options{
-			Model:     ProviderModel,
-			APIKey:    ProviderAPIKey,
-			BaseURL:   ProviderBaseURL,
-			LookupEnv: envLookup,
+		prov, err := provider.New(ProviderName, provider.Options{
+			Model:          ProviderModel,
+			APIKey:         ProviderAPIKey,
+			BaseURL:        ProviderBaseURL,
+			LookupEnv:      envLookup,
+			CredentialKind: ProviderCredentialKind,
 		})
 		if err != nil {
 			return err
@@ -123,7 +126,7 @@ Examples:
 
 func init() {
 	flags := ProviderCmd.Flags()
-	flags.StringVar(&ProviderName, "provider", "minimax",
+	flags.StringVar(&ProviderName, "provider", provider.DEFAULT_NAME,
 		"Provider family (minimax | anthropic | google | grok | ollama; case-insensitive).")
 	flags.StringVarP(&ProviderModel, "model", "m", "",
 		"Model id (alias -m); empty = adapter flagship default. "+
@@ -149,11 +152,17 @@ func init() {
 		"Print the provider's static catalog and exit.")
 	flags.Bool("list-providers", false,
 		"Print the registered provider names and exit.")
+	flags.StringVar(&ProviderCredentialKind, "credential-kind", "auto",
+		"Credential preference: auto | api_key | oauth. "+
+			"auto = OAuth outranks API key when both env are set (legacy precedence, current behavior). "+
+			"api_key = strict: only the API key env is consulted; missing env → startup error. "+
+			"oauth = strict: only the OAuth env is consulted; missing env → startup error. "+
+			"Matches agent/spec.Model.CredentialKind and core.CREDENTIAL_KIND_* constants.")
 }
 
 // ResetFlags resets ProviderCmd flag state for clean test execution.
 func ResetFlags() {
-	ProviderName = "minimax"
+	ProviderName = provider.DEFAULT_NAME
 	ProviderModel = ""
 	ProviderAPIKey = ""
 	ProviderBaseURL = ""
@@ -162,6 +171,7 @@ func ResetFlags() {
 	ProviderStream = false
 	ProviderAsJSON = false
 	ProviderListModels = false
+	ProviderCredentialKind = "auto"
 
 	ProviderCmd.Flags().VisitAll(func(f *pflag.Flag) {
 		f.Changed = false
@@ -197,15 +207,22 @@ func bootGosdkConfig() error {
 	return nil
 }
 
-// envLookup returns the merged viper value for `key`, which transparently
-// fans out through: .env / config files (loaded by bootGosdkConfig) →
-// OS env (via BindEnv above). Empty when none are set; callers propagate
-// that to the adapter which then applies its own default.
+// envLookup returns the merged value for `key`, fanning out through
+// viper (config.yaml / .env / gosdk's loaded sources) → OS env. The
+// viper instance does not auto-bind env vars, so an explicit os.Getenv
+// fallback ensures shell-exported credentials still flow through. Empty
+// when nothing is set; callers propagate that to the adapter which then
+// applies its own default.
 //
 // Viper normalizes config-file keys to lowercase, so we look up the
 // lower-cased form while still using uppercase env-var names in the
 // registry (those ARE the literal env-var names, so they stay upper-case).
-func envLookup(key string) string { return viper.GetString(strings.ToLower(key)) }
+func envLookup(key string) string {
+	if v := viper.GetString(strings.ToLower(key)); v != "" {
+		return v
+	}
+	return os.Getenv(key)
+}
 
 // effectiveModel returns the model the provider was built with. Falls back
 // to its ID when the adapter doesn't expose a separate accessor.

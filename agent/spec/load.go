@@ -11,9 +11,9 @@ import (
 //
 // JSON only, and that is the dependency discipline showing: spec imports
 // core and the standard library, nothing else. YAML support lives in
-// agent, which already depends on viper; it converts and hands the result
-// here. Both paths share this validation, so a YAML file and a hand-built
-// literal cannot diverge in what they accept.
+// utils/configfile, which converts and hands the result here. Both paths
+// share this validation, so a YAML file and a hand-built literal cannot
+// diverge in what they accept.
 //
 // Unknown fields are rejected. A silently ignored `tools:` block under a
 // misspelled key is the exact failure mode a config layer exists to

@@ -54,8 +54,8 @@
   <text x="36" y="157" class="sm">→ Engine.Run → std.Exit</text>
 
   <rect x="320" y="88" width="280" height="86" rx="6" class="box"/>
-  <text x="336" y="106" class="h3">app.Main 一次性 CLI</text>
-  <text x="336" y="123" class="mm">app.Main(agent.MustNew(cfg))</text>
+  <text x="336" y="106" class="h3">agent.Main 一次性 CLI</text>
+  <text x="336" y="123" class="mm">agent.Main(agent.MustNew(cfg))</text>
   <text x="336" y="141" class="sm">signal → OpenForCLI → Run → os.Exit</text>
   <text x="336" y="157" class="sm">典型：cmd/provider、cmd/wizard</text>
 
@@ -74,10 +74,10 @@
   <line x1="620" y1="175" x2="620" y2="220" class="arrow"/>
   <text x="628" y="195" class="sm">↓ 都呼叫 同一個 Engine.Run</text>
 
-  <!-- =========== Z2: APP LIFECYCLE =========== -->
-  <text x="20" y="240" class="h2">2. app lifecycle（app/）</text>
+  <!-- =========== Z2: AGENT LIFECYCLE =========== -->
+  <text x="20" y="240" class="h2">2. agent lifecycle（agent/）</text>
   <rect x="20" y="252" width="1200" height="96" rx="6" class="corebox"/>
-  <text x="36" y="272" class="h3">app.Main(a Agent, opts ...Option)</text>
+  <text x="36" y="272" class="h3">agent.Main(a Runner, opts ...Option)</text>
 
   <g font-family="ui-monospace, monospace" font-size="10">
     <rect x="40"  y="286" width="180" height="46" class="box"/>

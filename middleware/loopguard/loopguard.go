@@ -145,7 +145,7 @@ func saveState(state *core.State, gs State) {
 
 // fingerprint produces a stable hash of (tool name, args-minus-volatile).
 // We deliberately use sha1 + hex prefix (cheap, no deps), matching the
-// sample/logdoctor dedupe convention.
+// sample/logdoctor-agent dedupe convention.
 func fingerprint(name string, args map[string]any, volatile map[string]struct{}) string {
 	keys := make([]string, 0, len(args))
 	for k := range args {

@@ -18,16 +18,15 @@ const (
 // magic numbers inside Expand so a reader can see the whole default
 // posture in one place.
 const (
-	DEFAULT_TIER            = TIER_BASIC
-	DEFAULT_STYLE           = "think_then_act"
-	DEFAULT_PROVIDER        = "minimax"
-	DEFAULT_PROJECT_DIR     = ".agentsdk"
-	DEFAULT_AUTONOMY        = "L2"
-	DEFAULT_MAX_TURNS       = 20
-	DEFAULT_SUBAGENT_DEPTH  = 1
-	DEFAULT_SUBAGENT_TURNS  = 10
-	DEFAULT_ONESHOT_TURNS   = 2
-	DEFAULT_STANDARD_TURNS  = 40
+	DEFAULT_TIER           = TIER_BASIC
+	DEFAULT_STYLE          = "think_then_act"
+	DEFAULT_PROJECT_DIR    = ".agentsdk"
+	DEFAULT_AUTONOMY       = "L2"
+	DEFAULT_MAX_TURNS      = 20
+	DEFAULT_SUBAGENT_DEPTH = 1
+	DEFAULT_SUBAGENT_TURNS = 10
+	DEFAULT_ONESHOT_TURNS  = 2
+	DEFAULT_STANDARD_TURNS = 40
 
 	// Rounds are the operator-facing budget; turns are the internal
 	// guard. The ladder mirrors the *_TURNS one branch for branch, and
@@ -42,22 +41,22 @@ const (
 	// that can never be reached.
 	DEFAULT_MAX_TOOL_CALLS      = 4
 	DEFAULT_STANDARD_TOOL_CALLS = 8
-	MIDDLEWARE_NONE         = "none"
-	MIDDLEWARE_DEFAULT      = "default"
-	MIDDLEWARE_SECURE       = "secure"
-	MEMORY_STORE_NONE       = "none"
-	MEMORY_STORE_FILE       = "file"
-	MEMORY_COMPACTION_NONE  = "none"
-	MEMORY_COMPACTION_HEAD  = "headline"
-	SAFETY_FALLBACK_NONE    = "none"
-	SAFETY_FALLBACK_AUTONOM = "autonomy"
-	OUTPUT_TEXT             = "text"
-	OUTPUT_JSON             = "json"
-	OUTPUT_TUI              = "tui"
-	SOURCE_FILES            = "files"
-	SOURCE_SKILLS           = "skills"
-	SOURCE_ENV              = "env"
-	SOURCE_REMINDER         = "reminder"
+	MIDDLEWARE_NONE             = "none"
+	MIDDLEWARE_DEFAULT          = "default"
+	MIDDLEWARE_SECURE           = "secure"
+	MEMORY_STORE_NONE           = "none"
+	MEMORY_STORE_FILE           = "file"
+	MEMORY_COMPACTION_NONE      = "none"
+	MEMORY_COMPACTION_HEAD      = "headline"
+	SAFETY_FALLBACK_NONE        = "none"
+	SAFETY_FALLBACK_AUTONOM     = "autonomy"
+	OUTPUT_TEXT                 = "text"
+	OUTPUT_JSON                 = "json"
+	OUTPUT_TUI                  = "tui"
+	SOURCE_FILES                = "files"
+	SOURCE_SKILLS               = "skills"
+	SOURCE_ENV                  = "env"
+	SOURCE_REMINDER             = "reminder"
 )
 
 // tierRank orders the ladder so Expand can ask "is this tier at least
@@ -102,9 +101,11 @@ func (c Config) Expand() (Config, error) {
 		return Config{}, fmt.Errorf("spec: unknown tier %q (want one of %v)", out.Tier, Tiers())
 	}
 
-	if out.Model.Provider == "" {
-		out.Model.Provider = DEFAULT_PROVIDER
-	}
+	// Model.Provider is deliberately NOT defaulted here. Naming a vendor
+	// would make this declarative layer change whenever the default
+	// vendor does, and spec cannot see which adapters a binary linked in
+	// anyway. An empty name stays empty and is resolved at Lookup time by
+	// provider.DEFAULT_NAME — the one place that can see the linked set.
 
 	// --- reasoning: available at every tier, orthogonal to the ladder ---
 	if out.Reasoning.Style == "" {

@@ -33,7 +33,7 @@
 - [x] `Task 0` `core.Budget` 加 `MaxRounds`/`UsedRounds`/`MaxToolCalls`、`Exceeded()` 加 `round_budget`；`spec.Limits` 三欄位 + tier 預設 + validate + `build.go` 映射
 - [x] `Task 1` batch settlement（修兩個 live bug）：`ThinkThenAct` dispatch phase 一次發 `N` 個 `CALL_TOOL`、`runtime` 播種整批並 `settleSkipped`/`settleUnrun`；`planning.decodeCalls` 修 JSON round-trip 後 pending call 消失
 - [x] `Task 2` `MaxToolCalls` 超限`整批 skip + settle + 暫停 continue-gate`（approve=resume 重讀 / reject=完成）；`MaxRounds` 經 budget middleware 生效
-- [x] `Task 3` 三介面草案收斂為單一 `app.Interactive`（`NextRound`）+ `WithRoundTimeout`；`advance` 只走 `SubmitHumanDecision`（不 double-drive）
+- [x] `Task 3` 三介面草案收斂為單一 `agent.Interactive`（`NextRound`）+ `WithRoundTimeout`；`advance` 只走 `SubmitHumanDecision`（不 double-drive）
 - [x] `Task 4` `sample/skeleton-demo` 實作 `Interactive` 為 stdin REPL（單一背景 reader 餵 channel；live 驗證 `rounds:2`）
 - [x] `Task 5` `docs/terminology.md`（8 詞條）/ `CLAUDE.md`（app/config 列 + 三條核心決策）/ 本檔同步
 
@@ -49,7 +49,7 @@
 - [x] `main.go` 改為掛載 `cmd.NewProviderCommand()`,長敘述列出 `provider` 為唯一 subcommand
 - [x] `CLAUDE.md`：project tree 加 `cmd/`、module mapping 加 `root CLI subcommands` 列、`Development and Verification` 加 provider smoke-test 區塊
 - [x] registry 抽成共用 `provider/registry` package（2026-07-22）：`minimax`/`anthropic`/`google`/`grok`/`ollama` 五個 adapter，env 查詢改為 `LookupEnv` 注入；`cmd/provider.go` 與 `agent` 共用同一份，`--list-providers` 與設定檔不會漂移
-- [ ] `codex` / `antigravity`（OAuth-only adapter）尚未進 registry —— 憑證流程與 API-key 型不同，需先決定 `registry.Options` 怎麼表達 OAuth
+- [x] `codex` / `antigravity`（OAuth-only adapter）已進 registry（2026-07-24）—— `provider/codex` / `provider/antigravity` 各自 `register.go` 走 `init()` 註冊，OAuth 構造走 `NewWithOAuth` 不走 `New`；`Adapter.Metadata()` 為唯一來源，自描述檔頭是 `codex` 的 `Note: "OpenAI Codex Responses via OAuth"`
 
 ## Harness/UX（2026-07-19 skeleton 落地，細節待補）
 

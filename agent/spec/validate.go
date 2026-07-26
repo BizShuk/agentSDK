@@ -43,6 +43,15 @@ func (c Config) Validate() error {
 		add("spec: name %q must not contain a path separator", c.Name)
 	}
 
+	// --- model ---
+	// checkVariant rejects the empty string as "call Expand before
+	// Validate"; credential_kind allows "" on purpose (it means "auto"),
+	// so the check is inlined here instead.
+	credKinds := Values(VariantChoices("model.credential_kind"))
+	if c.Model.CredentialKind != "" && !slices.Contains(credKinds, c.Model.CredentialKind) {
+		add("spec: unknown model.credential_kind %q (want one of %v)", c.Model.CredentialKind, credKinds)
+	}
+
 	// --- reasoning ---
 	styles := Values(StyleChoices())
 	if !slices.Contains(styles, c.Reasoning.Style) {

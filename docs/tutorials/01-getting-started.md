@@ -626,7 +626,7 @@ loop.Notifier = notify.NewMulti(
 ## 下一步
 
 - 閱讀 `docs/specs/` 下的 milestone 規格了解更多細節
-- 參考 `sample/logdoctor/` 看更完整的範例 (含 persistence + resume)
+- 參考 `sample/logdoctor-agent/` 看更完整的範例 (含 persistence + resume)
 - 看 `planning/` 下的其他 pattern 選擇適合的思考模式
 - M3 的 sandbox / MCP / tracing 功能用 `middleware.Chain` 插入
 
@@ -646,4 +646,4 @@ A: `ToolResult.OK = false` + `ToolResult.Error` 字串。LLM 會看到 error 並
 
 **Q: 怎麼測試我的 agent？**
 A: 用 `internal/testutil` 的 `FakeProvider` / `MemStore` / `MemWAL`。
-`ScriptedProvider` pattern (見 `sample/logdoctor/internal/fake/`) 適合 E2E 測試。
+`ScriptedProvider` pattern (見 `sample/logdoctor-agent/internal/fake/`) 適合 E2E 測試。

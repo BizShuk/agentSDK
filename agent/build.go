@@ -14,6 +14,7 @@ import (
 	"github.com/bizshuk/agentsdk/permission"
 	"github.com/bizshuk/agentsdk/planning"
 	"github.com/bizshuk/agentsdk/prompt"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/session"
 	"github.com/bizshuk/agentsdk/skill"
@@ -103,10 +104,13 @@ func (a *Agent) Preflight(_ context.Context, _ *appconfig.AppConfig) error {
 	if a.deps.provider != nil {
 		return nil
 	}
-	if _, err := resolveProvider(a.cfg, a.deps); err != nil {
-		return err
-	}
-	return nil
+	_, err := provider.New(a.cfg.Model.Provider, provider.Options{
+		Model:          a.cfg.Model.Name,
+		BaseURL:        a.cfg.Model.BaseURL,
+		APIKeyEnv:      a.cfg.Model.APIKeyEnv,
+		CredentialKind: a.cfg.Model.CredentialKind,
+	})
+	return err
 }
 
 // Bootstrap implements Runner: it runs the assembly pipeline and
@@ -133,9 +137,21 @@ func (a *Agent) Bootstrap(ctx context.Context, ac *appconfig.AppConfig) (*runtim
 	userDir := filepath.Dir(ac.DataDir)
 
 	// --- stage 1: provider ---
-	prov, err := resolveProvider(a.cfg, a.deps)
-	if err != nil {
-		return nil, core.State{}, err
+	// An injected provider wins outright; otherwise the registry builds the
+	// configured adapter. CredentialKind is passed through verbatim so the
+	// strict modes ("oauth" / "api_key") error here with a clear message
+	// rather than silently falling back to the legacy OAuth>API-key order.
+	prov := a.deps.provider
+	if prov == nil {
+		prov, err = provider.New(a.cfg.Model.Provider, provider.Options{
+			Model:          a.cfg.Model.Name,
+			BaseURL:        a.cfg.Model.BaseURL,
+			APIKeyEnv:      a.cfg.Model.APIKeyEnv,
+			CredentialKind: a.cfg.Model.CredentialKind,
+		})
+		if err != nil {
+			return nil, core.State{}, err
+		}
 	}
 
 	// --- stage 2: tools ---
@@ -303,14 +319,7 @@ func registerBuiltins(reg *action.Registry, allow []string, workDir string) erro
 func discoverSubagentDefs(cfg Config, userDir, cwd string) []skill.Def {
 	dirs := cfg.Subagents.Dirs
 	if len(dirs) == 0 {
-		projectDir := spec.DEFAULT_PROJECT_DIR
-		if cfg.Prompt != nil && cfg.Prompt.ProjectDir != "" {
-			projectDir = cfg.Prompt.ProjectDir
-		}
-		dirs = []string{
-			filepath.Join(userDir, "agents"),
-			filepath.Join(cwd, projectDir, "agents"),
-		}
+		dirs = discoveryRoots(cfg, userDir, cwd, "agents")
 	}
 	var defs []skill.Def
 	for _, dir := range dirs {

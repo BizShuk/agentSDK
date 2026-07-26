@@ -12,8 +12,8 @@ import (
 // the provider's bundled catalog through the registry. The registry owns
 // the name → adapter mapping, so adding a new adapter here is a one-line
 // entry change rather than a second switch statement.
-func ModelChoices(provider string) []Choice {
-	specs, ok := registry.Catalog(provider)
+func ModelChoices(name string) []Choice {
+	specs, ok := provider.Catalog(name)
 	if !ok {
 		return nil
 	}

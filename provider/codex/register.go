@@ -9,23 +9,23 @@ import (
 // return this same value; the function form keeps APIKeyEnv immutable
 // across calls. codex is OAuth-first; NewWithOAuth is the production
 // path. The New() API-key route exists for tests only.
-func adapterMetadata() registry.Metadata {
-	return registry.Metadata{
+func adapterMetadata() provider.Metadata {
+	return provider.Metadata{
 		Label:      "Codex",
-		Note:       "OpenAI Codex Responses via OAuth",
+		Note:       "OpenAI Codex Responses via OAuth (constructor path)",
 		BaseURLEnv: BaseURLEnvVar,
 	}
 }
 
-// Compile-time: ensure *Provider satisfies registry.Adapter.
-var _ registry.Adapter = (*Provider)(nil)
+// Compile-time: ensure *Provider satisfies provider.Adapter.
+var _ provider.Adapter = (*Provider)(nil)
 
 func init() {
 	meta := adapterMetadata()
-	registry.Register(registry.Entry{
+	provider.Register(provider.Entry{
 		Name:     "codex",
 		Metadata: meta,
-		New: func(o registry.Options) (registry.Adapter, error) {
+		New: func(o provider.Options) (provider.Adapter, error) {
 			var opts []Option
 			if o.Model != "" {
 				opts = append(opts, WithModel(o.Model))

@@ -1,7 +1,9 @@
-// Package registry is the single place that maps a provider name to its
-// adapter constructor.
+// Package provider is the layer that talks to LLM services: the adapter
+// contract (Adapter, Metadata), the name → constructor registry, and the
+// credential resolution that stands between a config value and a live
+// client.
 //
-// Adapters register themselves from their package init() — the registry
+// Adapters register themselves from their package init() — this package
 // imports no adapter. Each binary decides which adapters to link by
 // blank-importing them (or provider/all for the full set); Go's linker
 // drops the rest, so a slim binary only pays for the adapters it asked
@@ -17,7 +19,7 @@
 // participate; a library caller usually wants plain os.Getenv. Making it
 // a field keeps viper out of this package and lets each caller keep its
 // own precedence rules.
-package registry
+package provider
 
 import (
 	"fmt"
@@ -29,10 +31,16 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 )
 
-// DEFAULT is the provider used when a name is empty. spec.DEFAULT_PROVIDER
-// must agree with it; TestSpecDefaultProviderIsRegistered guards the pair,
-// since spec is core-only and cannot import this package to check.
-const DEFAULT = "minimax"
+// DEFAULT_NAME is the registry key used when a name is empty.
+//
+// It lives here, not in core and not in agent/spec, because it names a
+// vendor: core is a pure state machine that must not change when the
+// default vendor does, and spec is declarative data that cannot know
+// which adapters a binary linked in. An empty Config.Model.Provider
+// therefore stays empty through validation and expansion, and is
+// resolved here at Lookup time — the one place that can see the linked
+// set.
+const DEFAULT_NAME = "minimax"
 
 // Options are the per-construction overrides. Every field is optional:
 // an empty field means "let the adapter apply its own environment
@@ -51,6 +59,18 @@ type Options struct {
 	// LookupEnv resolves an environment variable. nil means os.Getenv.
 	// The CLI passes a viper-backed lookup so .env files participate.
 	LookupEnv func(string) string
+
+	// CredentialKind selects which credential class is consulted. The
+	// values are core.CREDENTIAL_KIND_* — they are core vocabulary
+	// because they are what core.Provider.AuthSchemes reports.
+	//
+	// AUTO ("") tries OAuthEnv first, then APIKeyEnv (the legacy
+	// precedence). OAUTH restricts to OAuthEnv and returns an error when
+	// no OAuth env resolves. APIKEY restricts to APIKeyEnv and returns an
+	// error when no API key env resolves. The strict modes catch the case
+	// where a stale OAuth token outranks a fresh API key (or vice versa)
+	// on a shared machine.
+	CredentialKind string
 }
 
 func (o Options) lookup(key string) string {
@@ -63,36 +83,73 @@ func (o Options) lookup(key string) string {
 	return os.Getenv(key)
 }
 
-// Resolve fills empty credential fields from the environment, trying the
-// metadata's key names in order, and returns the result. Anthropic
-// relies on the ordering: an OAuth token outranks a long-lived API key
-// when both are present.
+// firstEnv returns the first non-empty value found in keys, or "" when
+// none resolve. The override (when set) restricts the search to that
+// single key.
+func (o Options) firstEnv(keys []string, override string) string {
+	if override != "" {
+		return o.lookup(override)
+	}
+	for _, k := range keys {
+		if v := o.lookup(k); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// Resolve fills empty credential fields from the environment, honouring
+// the strict modes in Options.CredentialKind. The returned Options is
+// always usable; the error is non-nil only when a strict mode rejects
+// the resolved state.
+//
+// Precedence (any mode):
+//  1. An explicit Options.APIKey wins outright, before any env lookup.
+//  2. Otherwise the chosen env class supplies the key.
+//  3. Options.BaseURL still resolves from Metadata.BaseURLEnv, independent of CredentialKind.
 //
 // Exported because "which credential would this actually use" is a
 // question callers legitimately ask before building anything — a preflight
 // check, or a wizard showing which env var it found.
-func (o Options) Resolve(m Metadata) Options {
+func (o Options) Resolve(m Metadata) (Options, error) {
 	if o.APIKey == "" {
-		keys := m.APIKeyEnv
-		if o.APIKeyEnv != "" {
-			keys = []string{o.APIKeyEnv}
-		}
-		for _, k := range keys {
-			if v := o.lookup(k); v != "" {
+		switch o.CredentialKind {
+		case core.CREDENTIAL_KIND_OAUTH:
+			if len(m.OAuthEnv) == 0 {
+				return o, fmt.Errorf("provider %q: not OAuth-capable (no OAuth env registered)", m.Label)
+			}
+			if v := o.firstEnv(m.OAuthEnv, o.APIKeyEnv); v != "" {
 				o.APIKey = v
-				break
+			} else {
+				return o, fmt.Errorf("provider %q: requires OAuth credential but %v is unset",
+					m.Label, m.OAuthEnv)
+			}
+		case core.CREDENTIAL_KIND_APIKEY:
+			if len(m.APIKeyEnv) == 0 {
+				return o, fmt.Errorf("provider %q: OAuth-only, does not accept api_key credential", m.Label)
+			}
+			if v := o.firstEnv(m.APIKeyEnv, o.APIKeyEnv); v != "" {
+				o.APIKey = v
+			} else {
+				return o, fmt.Errorf("provider %q: requires api_key credential but %v is unset",
+					m.Label, m.APIKeyEnv)
+			}
+		default: // "" / "auto" — preserve the legacy precedence
+			keys := append(append([]string{}, m.OAuthEnv...), m.APIKeyEnv...)
+			if v := o.firstEnv(keys, o.APIKeyEnv); v != "" {
+				o.APIKey = v
 			}
 		}
 	}
 	if o.BaseURL == "" {
 		o.BaseURL = o.lookup(m.BaseURLEnv)
 	}
-	return o
+	return o, nil
 }
 
-// Factory builds an adapter from resolved options. The registry.Factory
+// Factory builds an adapter from resolved options. The provider.Factory
 // signature is the public source of truth for what an adapter must
-// produce: a registry.Adapter, not just a core.Provider — adapters
+// produce: a provider.Adapter, not just a core.Provider — adapters
 // must also expose Name() and Metadata() at runtime.
 type Factory func(Options) (Adapter, error)
 
@@ -121,13 +178,13 @@ var (
 // their package's init().
 func Register(e Entry) {
 	if e.Name == "" || e.New == nil {
-		panic(fmt.Sprintf("registry: Register requires Name and New (got %+v)", e))
+		panic(fmt.Sprintf("provider: Register requires Name and New (got %+v)", e))
 	}
 	key := strings.ToLower(strings.TrimSpace(e.Name))
 	mu.Lock()
 	defer mu.Unlock()
 	if _, exists := entries[key]; exists {
-		panic(fmt.Sprintf("registry: provider %q already registered", e.Name))
+		panic(fmt.Sprintf("provider %q already registered", e.Name))
 	}
 	entries[key] = e
 }
@@ -157,11 +214,11 @@ func Entries() []Entry {
 }
 
 // Lookup resolves a name to its entry. Matching is case-insensitive and
-// trims surrounding space; an empty name resolves to DEFAULT.
+// trims surrounding space; an empty name resolves to DEFAULT_NAME.
 func Lookup(name string) (Entry, bool) {
 	key := strings.ToLower(strings.TrimSpace(name))
 	if key == "" {
-		key = DEFAULT
+		key = DEFAULT_NAME
 	}
 	mu.RLock()
 	defer mu.RUnlock()
@@ -185,12 +242,16 @@ func Catalog(name string) ([]core.ModelSpec, bool) {
 func New(name string, o Options) (Adapter, error) {
 	e, ok := Lookup(name)
 	if !ok {
-		return nil, fmt.Errorf("registry: unknown provider %q (registered: %s)",
+		return nil, fmt.Errorf("unknown provider %q (registered: %s)",
 			name, strings.Join(Names(), ", "))
 	}
-	p, err := e.New(o.Resolve(e.Metadata))
+	resolved, err := o.Resolve(e.Metadata)
 	if err != nil {
-		return nil, fmt.Errorf("registry: %s provider: %w", e.Name, err)
+		return nil, fmt.Errorf("provider %s: %w", e.Name, err)
+	}
+	p, err := e.New(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s: %w", e.Name, err)
 	}
 	return p, nil
 }

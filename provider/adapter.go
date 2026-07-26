@@ -1,4 +1,4 @@
-package registry
+package provider
 
 import "github.com/bizshuk/agentsdk/core"
 
@@ -7,7 +7,7 @@ import "github.com/bizshuk/agentsdk/core"
 // It bundles the runtime-facing core.Provider contract (which runtime
 // and proxy call directly) with the registration metadata the registry
 // and CLI listings rely on. Every provider/<name>/provider.go asserts
-// `var _ registry.Adapter = (*Provider)(nil)` so the compile-time proof
+// `var _ provider.Adapter = (*Provider)(nil)` so the compile-time proof
 // lives next to the implementation.
 //
 // Name and Metadata are provider-side data; the registry reads them
@@ -38,9 +38,16 @@ type Adapter interface {
 // Entry.Metadata and Adapter.Metadata() must return identical values;
 // register.go is responsible for wiring both from one literal (see
 // the adapterMetadata() helper in each provider/<name>/register.go).
+//
+// OAuthEnv and APIKeyEnv are split rather than packed into one
+// priority list so callers can demand a strict credential class —
+// `Options.CredentialKind = "oauth"` consults only OAuthEnv; "api_key"
+// consults only APIKeyEnv. The empty / "auto" mode preserves the old
+// precedence: OAuthEnv first, then APIKeyEnv.
 type Metadata struct {
 	Label      string
 	Note       string
-	APIKeyEnv  []string
+	OAuthEnv   []string // OAuth token env list (highest precedence in auto mode)
+	APIKeyEnv  []string // API key env list (lowest precedence in auto mode)
 	BaseURLEnv string
 }

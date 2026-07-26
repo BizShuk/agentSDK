@@ -15,9 +15,9 @@ import (
 	appconfig "github.com/bizshuk/agentsdk/config"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware/hook"
-	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/prompt"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -473,6 +473,44 @@ func TestPreflightSurfacesABadProviderName(t *testing.T) {
 func TestPreflightPassesWithAnInjectedProvider(t *testing.T) {
 	a, err := agent.New(agent.Config{Name: "x"}, agent.WithProvider(testutil.NewScriptedProvider()))
 	require.NoError(t, err)
+	require.NoError(t, a.Preflight(context.Background(), appCfg(t)))
+}
+
+// TestPreflightPropagatesCredentialKindError ensures the strict-mode
+// error from provider.Options.Resolve reaches the operator at startup
+// rather than failing later inside the model call. minimax has no OAuth
+// env path; --credential-kind=oauth therefore fails fast.
+func TestPreflightPropagatesCredentialKindError(t *testing.T) {
+	a, err := agent.New(agent.Config{
+		Name: "x",
+		Model: spec.Model{
+			Provider:       "minimax",
+			CredentialKind: core.CREDENTIAL_KIND_OAUTH,
+		},
+	})
+	require.NoError(t, err)
+
+	err = a.Preflight(context.Background(), appCfg(t))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not OAuth-capable",
+		"the registry message must surface through Preflight so the operator sees what env was expected")
+}
+
+// TestPreflightSucceedsWithCredentialKindAuto confirms the legacy
+// auto precedence (OAuth > API key) still works when both env are set.
+// anthropic is the only adapter that registers both classes.
+func TestPreflightSucceedsWithCredentialKindAuto(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "sk-from-env")
+
+	a, err := agent.New(agent.Config{
+		Name: "x",
+		Model: spec.Model{
+			Provider:       "anthropic",
+			CredentialKind: core.CREDENTIAL_KIND_AUTO,
+		},
+	})
+	require.NoError(t, err)
+
 	require.NoError(t, a.Preflight(context.Background(), appCfg(t)))
 }
 

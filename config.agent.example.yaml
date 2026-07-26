@@ -1,0 +1,216 @@
+# agentsdk `agent.Config` — full agent skeleton
+#
+# This file covers the agent/ layer: reasoning loop, tier expansion,
+# persona, sessions, skills, subagents, prompt composition. Most users
+# want this when running real workloads — it sits on top of the SDK
+# building blocks documented in `config.sdk.example.yaml`.
+#
+# The `wizard` subcommand produces this format; it can also be written
+# by hand and validated via `agentsdk run -c config.agent.example.yaml`.
+#
+# NOT here: provider cmd flags (cobra, not YAML) — see `agentsdk provider --help`
+# for the flag surface and `--credential-kind` semantics.
+# For the SDK surface without the agent skeleton, see
+# `config.sdk.example.yaml`.
+# For the full reference covering every block, see `config.example.yaml`.
+
+# ---------------------------------------------------------------------------
+# Identity & tier
+# ---------------------------------------------------------------------------
+
+name: my-agent                     # ~/.config/<name>/; keys persisted state
+                                   # required from tier=basic upward; tier=oneshot skips persistence
+
+tier: basic                        # oneshot | basic | standard | full
+                                   # monotonic: each tier ⊇ tier below
+                                   # oneshot  → single model call, no tools, no state
+                                   # basic    → + reasoning loop, middleware, state/WAL
+                                   # standard → + tools, permission, sessions, context files
+                                   # full     → + skills, subagents, stream output
+
+persona: "You are a careful code reviewer. Be concise, point at lines, prefer evidence over opinion."
+                                   # fixed identity text; equivalent of `provider --system`
+                                   # dynamic content (skills, env, files) belongs under prompt:
+
+# ---------------------------------------------------------------------------
+# Model
+# ---------------------------------------------------------------------------
+
+model:
+  provider: anthropic              # registry key; empty = "minimax"
+  name: claude-sonnet-5            # empty = adapter's flagship default
+  base_url: ""                     # empty = adapter default
+  credential_kind: oauth           # "" | api_key | oauth; see config.example.yaml for resolution rules
+
+# ---------------------------------------------------------------------------
+# Reasoning
+# ---------------------------------------------------------------------------
+
+reasoning:
+  style: think_then_act            # think_then_act | plan_then_run | do_then_review
+                                   # one_shot | learn_from_failure | choose_agent
+  enable:                          # rules REGISTERED in decide map; style must be in this list
+    - think_then_act
+
+# ---------------------------------------------------------------------------
+# Limits
+# ---------------------------------------------------------------------------
+
+limits:
+  max_turns: 20                    # Decide iterations (loopguard counts these)
+  max_rounds: 10                   # model requests with their tool calls (operator counts these)
+  max_tool_calls: 4                # bound on a single round's tool-call batch
+  max_wall_time: 10m               # process-level wall-clock cap
+  autonomy: L2                     # L0..L4; affects DefaultApprovalPolicy fallback
+
+# ---------------------------------------------------------------------------
+# Middleware preset
+# ---------------------------------------------------------------------------
+
+middleware:
+  preset: default                  # none | default | secure
+
+# ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
+
+memory:
+  store: file                      # none | file (file enables resume / fork)
+  compaction: none                 # none | headline
+
+# ---------------------------------------------------------------------------
+# Tools (tier=standard and up)
+# ---------------------------------------------------------------------------
+
+tools:
+  builtin:                         # empty = all six
+    - read
+    - write
+    - edit
+    - bash
+    - glob
+    - grep
+  working_dir: ""
+
+# ---------------------------------------------------------------------------
+# Safety (tier=standard and up)
+# ---------------------------------------------------------------------------
+
+safety:
+  mode: default                    # default | acceptEdits | plan | bypassPermissions
+  deny:
+    - "Bash(rm -rf:*)"
+  ask:
+    - "Bash(git push:*)"
+    - "Edit(src/**)"
+  allow:
+    - "Read(**)"
+  sandbox: false
+  fallback: autonomy               # none | autonomy
+
+# ---------------------------------------------------------------------------
+# Prompt sources (vs Persona above)
+# ---------------------------------------------------------------------------
+
+prompt:
+  sources:                         # files | skills | env | reminder
+    - files
+    - skills
+    - env
+  user_dir: ""
+  project_dir: ""
+  max_bytes: 8192
+
+# ---------------------------------------------------------------------------
+# Skills (tier=full)
+# ---------------------------------------------------------------------------
+
+skills:
+  dirs: []                         # empty = <user_dir>/skills + <cwd>/<project_dir>/skills
+
+# ---------------------------------------------------------------------------
+# Subagents (tier=full)
+# ---------------------------------------------------------------------------
+
+subagents:
+  dirs: []
+  max_depth: 1
+  max_turns: 10
+
+# ---------------------------------------------------------------------------
+# Sessions
+# ---------------------------------------------------------------------------
+
+sessions:
+  dir: ""                          # empty = <data_dir>/sessions
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+
+output:
+  format: text                     # text | json | tui
+
+# ---------------------------------------------------------------------------
+# Telemetry
+# ---------------------------------------------------------------------------
+
+telemetry:
+  enabled: false
+  service: ""                      # empty = Config.Name
+
+# ---------------------------------------------------------------------------
+# Worked examples
+# ---------------------------------------------------------------------------
+
+# Minimal smoke-test — tier=oneshot, no persistence, default model
+#
+# name omitted                          # tier=oneshot doesn't require name
+# tier: oneshot
+# model:
+#   provider: anthropic
+#   credential_kind: oauth
+
+# Interactive TUI — tier=basic, file-backed state, default middleware
+#
+# tier: basic
+# model:
+#   provider: anthropic
+#   credential_kind: api_key             # skip OAuth env from other tools
+# reasoning:
+#   style: think_then_act
+# limits:
+#   max_turns: 30
+#   autonomy: L2
+# middleware:
+#   preset: default
+# memory:
+#   store: file
+# output:
+#   format: tui
+
+# Production — tier=full, secure middleware, skills & subagents
+#
+# tier: full
+# model:
+#   provider: anthropic
+#   credential_kind: oauth               # fail loud if OAuth env missing
+# reasoning:
+#   style: think_then_act
+#   enable: [think_then_act]
+# limits:
+#   max_turns: 50
+#   max_rounds: 30
+#   autonomy: L3
+# middleware:
+#   preset: secure
+# memory:
+#   store: file
+#   compaction: headline
+# safety:
+#   mode: acceptEdits
+#   sandbox: true
+# output:
+#   format: json
+# telemetry:
+#   enabled: true

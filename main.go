@@ -10,7 +10,7 @@
 //	             (no Agent / Engine / harness); see cmd/provider.go.
 //
 // Sample agents under sample/* (code-agent, file-agent, greet-agent,
-// logdoctor, memory-demo, middleware-demo, strategy-demo) are the canonical
+// logdoctor, demo-memory, demo-middleware, demo-strategy) are the canonical
 // end-to-end demos.
 package main
 

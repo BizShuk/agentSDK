@@ -8,8 +8,8 @@ import (
 // registration descriptor. Both Entry.Metadata and *Provider.Metadata()
 // return this same value; the function form keeps APIKeyEnv immutable
 // across calls.
-func adapterMetadata() registry.Metadata {
-	return registry.Metadata{
+func adapterMetadata() provider.Metadata {
+	return provider.Metadata{
 		Label:      "Ollama",
 		Note:       "local; keyless by default",
 		APIKeyEnv:  []string{"OPENAI_API_KEY"},
@@ -17,15 +17,15 @@ func adapterMetadata() registry.Metadata {
 	}
 }
 
-// Compile-time: ensure *Provider satisfies registry.Adapter.
-var _ registry.Adapter = (*Provider)(nil)
+// Compile-time: ensure *Provider satisfies provider.Adapter.
+var _ provider.Adapter = (*Provider)(nil)
 
 func init() {
 	meta := adapterMetadata()
-	registry.Register(registry.Entry{
+	provider.Register(provider.Entry{
 		Name:     "ollama",
 		Metadata: meta,
-		New: func(o registry.Options) (registry.Adapter, error) {
+		New: func(o provider.Options) (provider.Adapter, error) {
 			var opts []Option
 			if o.Model != "" {
 				opts = append(opts, WithModel(o.Model))
