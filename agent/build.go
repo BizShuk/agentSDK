@@ -281,25 +281,25 @@ func registerBuiltins(reg *action.Registry, allow []string, workDir string) erro
 	}
 	for _, name := range allow {
 		switch name {
-		case spec.TOOL_READ:
+		case builtin.NAME_READ:
 			reg.Register(builtin.NewRead(builtin.ReadOptions{}, policy, workDir))
-		case spec.TOOL_GLOB:
+		case builtin.NAME_GLOB:
 			reg.Register(builtin.NewGlob(builtin.GlobOptions{}, policy, workDir))
-		case spec.TOOL_GREP:
+		case builtin.NAME_GREP:
 			reg.Register(builtin.NewGrep(builtin.GrepOptions{}, policy, workDir))
-		case spec.TOOL_WRITE:
+		case builtin.NAME_WRITE:
 			t, err := builtin.NewWrite(builtin.WriteOptions{}, policy, workDir)
 			if err != nil {
 				return fmt.Errorf("agent: write tool: %w", err)
 			}
 			reg.Register(t)
-		case spec.TOOL_EDIT:
+		case builtin.NAME_EDIT:
 			t, err := builtin.NewEdit(builtin.EditOptions{}, policy, workDir)
 			if err != nil {
 				return fmt.Errorf("agent: edit tool: %w", err)
 			}
 			reg.Register(t)
-		case spec.TOOL_BASH:
+		case builtin.NAME_BASH:
 			t, err := builtin.NewBash(builtin.BashOptions{}, policy, workDir)
 			if err != nil {
 				return fmt.Errorf("agent: bash tool: %w", err)

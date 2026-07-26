@@ -3,6 +3,8 @@ package spec
 import (
 	"fmt"
 	"slices"
+
+	"github.com/bizshuk/agentsdk/core"
 )
 
 // Tier names. The ladder is monotonic: each tier turns on everything the
@@ -16,12 +18,14 @@ const (
 
 // Defaults referenced by tier expansion. They are constants rather than
 // magic numbers inside Expand so a reader can see the whole default
-// posture in one place.
+// posture in one place. DEFAULT_STYLE / DEFAULT_AUTONOMY track core's
+// runtime contract so the config default cannot silently drift away
+// from what the engine actually accepts.
 const (
 	DEFAULT_TIER           = TIER_BASIC
-	DEFAULT_STYLE          = "think_then_act"
+	DEFAULT_STYLE          = string(core.REASON_REACT)
 	DEFAULT_PROJECT_DIR    = ".agentsdk"
-	DEFAULT_AUTONOMY       = "L2"
+	DEFAULT_AUTONOMY       = core.AUTONOMY_DEFAULT_STRING
 	DEFAULT_MAX_TURNS      = 20
 	DEFAULT_SUBAGENT_DEPTH = 1
 	DEFAULT_SUBAGENT_TURNS = 10

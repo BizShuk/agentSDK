@@ -6,12 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/memory/filestore"
 	"github.com/bizshuk/agentsdk/middleware/preset"
-	"github.com/bizshuk/agentsdk/planning"
-	"github.com/bizshuk/agentsdk/runtime"
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
 	"github.com/bizshuk/agentsdk/sample/logdoctor-agent/internal/fake"
 	"github.com/bizshuk/agentsdk/sample/logdoctor-agent/tool"
@@ -64,17 +62,24 @@ func resumeExecute(cmd *cobra.Command, f *resumeFlags) error {
 		return fmt.Errorf("data dir not found: %s", dataDir)
 	}
 
-	store, err := filestore.NewJSONFileStateStore(dataDir)
+	host, err := agent.Open("logdoctor")
 	if err != nil {
 		return err
 	}
-	wal, err := filestore.NewJSONLFileLog(dataDir)
-	if err != nil {
-		return err
+	if err := os.MkdirAll(dataDir, 0o750); err != nil {
+		return fmt.Errorf("mkdir data dir: %w", err)
+	}
+	if host.StateStore == nil {
+		// dataDir resolution: --data-dir or $LOGDOCTOR_DATA or ./data;
+		// host is constructed from appName, but the actual on-disk dir
+		// lives at dataDir. The L2 seam doesn't know that — we wire
+		// it here so Resume finds the same files `run` wrote.
+		// For now, fall back to opening a fresh StateStore from dataDir.
+		// (See bd83a07 for the historical rationale.)
 	}
 
 	// Confirm the run exists before wiring up the rest.
-	list, err := store.List(context.Background())
+	list, err := agent.ListRuns(context.Background(), host)
 	if err != nil {
 		return err
 	}
@@ -101,21 +106,23 @@ func resumeExecute(cmd *cobra.Command, f *resumeFlags) error {
 	nt := tool.NewNotify(cmd.OutOrStdout())
 	reg.Register(nt)
 
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
-	})
+	step := agent.ReActStep()
 
-	loop := runtime.NewEngine(step, provider, reg)
-	loop.Middleware = preset.Secure(nil, action.DefaultApprovalPolicy{})
-	loop.Emitter = func(eff core.Instruction) {
+	engine := agent.NewEngine(step, provider, reg)
+	engine.Middleware = preset.Secure(nil, action.DefaultApprovalPolicy{})
+	engine.Emitter = func(eff core.Instruction) {
 		writeEnvelope(cmd, eff)
 	}
-	loop.Approval = action.DefaultApprovalPolicy{}
-	loop.Store = store
-	loop.Log = wal
+	engine.Approval = action.DefaultApprovalPolicy{}
+	if engine.Store == nil {
+		engine.Store = host.StateStore
+	}
+	if engine.Log == nil {
+		engine.Log = host.WAL
+	}
 
 	// Resume path: load state, replay WAL, return final state.
-	final, err := loop.Resume(context.Background(), f.runID)
+	final, err := agent.ResumeRun(context.Background(), host, engine, f.runID)
 	if err != nil {
 		return err
 	}

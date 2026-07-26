@@ -120,12 +120,22 @@ func (a *preflightAgent) Preflight(context.Context, *agent.AppConfig) error {
 	return a.preflightErr
 }
 
+// testHost builds a Host for a single-agent.Run call. StateStore and
+// WAL are the in-memory fakes from utils/testutil so the test does
+// not touch the filesystem.
+func testHost(name string) *agent.Host {
+	return &agent.Host{
+		RunID:      name,
+		StateStore: testutil.NewMemStore(),
+		WAL:        testutil.NewMemWAL(),
+	}
+}
+
 func TestRunHappyPath(t *testing.T) {
 	const name = "agentsdk-app-test-happy"
-	cleanupAppDir(t, name)
 
 	a := &testAgent{name: name, tool: echoTool{}}
-	code := agent.Run(context.Background(), a)
+	code := agent.Run(context.Background(), a, testHost(name))
 
 	assert.Equal(t, agent.EXIT_OK, code)
 	assert.True(t, a.bootstrapRan)
@@ -140,7 +150,7 @@ func TestRunBackfillsPersistenceFromConfig(t *testing.T) {
 	// store left nil in Bootstrap → Run must wire cfg.StateStore, so the
 	// run ID must be non-empty and the final state must have persisted.
 	a := &testAgent{name: name, tool: echoTool{}}
-	code := agent.Run(context.Background(), a)
+	code := agent.Run(context.Background(), a, testHost(a.name))
 
 	require.Equal(t, agent.EXIT_OK, code)
 	assert.NotEmpty(t, a.completeState.RunID, "Run should seed RunID from AppConfig")
@@ -153,7 +163,7 @@ func TestRunPreflightFailureAbortsBeforeBootstrap(t *testing.T) {
 	base := &testAgent{name: name, tool: echoTool{}, preflightErr: errors.New("no api key")}
 	a := &preflightAgent{testAgent: base}
 
-	code := agent.Run(context.Background(), a)
+	code := agent.Run(context.Background(), a, testHost(a.name))
 
 	assert.Equal(t, agent.EXIT_ERROR, code)
 	assert.True(t, base.preflightRan)
@@ -165,7 +175,7 @@ func TestRunBootstrapFailure(t *testing.T) {
 	cleanupAppDir(t, name)
 
 	a := &testAgent{name: name, tool: echoTool{}, bootstrapErr: errors.New("bad wiring")}
-	code := agent.Run(context.Background(), a)
+	code := agent.Run(context.Background(), a, testHost(a.name))
 
 	assert.Equal(t, agent.EXIT_ERROR, code)
 	assert.False(t, a.completeRan)
@@ -176,7 +186,7 @@ func TestRunOnCompleteFailureFailsProcess(t *testing.T) {
 	cleanupAppDir(t, name)
 
 	a := &testAgent{name: name, tool: echoTool{}, completeErr: errors.New("publish failed")}
-	code := agent.Run(context.Background(), a)
+	code := agent.Run(context.Background(), a, testHost(a.name))
 
 	assert.Equal(t, agent.EXIT_ERROR, code, "undelivered results are not a successful run")
 	assert.True(t, a.completeRan)
@@ -192,7 +202,7 @@ func TestRunRecoversToolPanic(t *testing.T) {
 	store := testutil.NewMemStore()
 	a := &testAgent{name: name, tool: panicTool{}, store: store}
 
-	code := agent.Run(context.Background(), a)
+	code := agent.Run(context.Background(), a, testHost(a.name))
 
 	assert.Equal(t, agent.EXIT_ERROR, code)
 
@@ -209,7 +219,7 @@ func TestRunRecoversToolPanic(t *testing.T) {
 
 func TestRunRejectsEmptyName(t *testing.T) {
 	a := &testAgent{name: "", tool: echoTool{}}
-	assert.Equal(t, agent.EXIT_ERROR, agent.Run(context.Background(), a))
+	assert.Equal(t, agent.EXIT_ERROR, agent.Run(context.Background(), a, testHost(a.name)))
 	assert.False(t, a.bootstrapRan)
 }
 
@@ -227,7 +237,7 @@ func TestRunHonorsTimeout(t *testing.T) {
 		},
 	}
 
-	code := agent.Run(context.Background(), a, agent.WithTimeout(2*time.Second))
+	code := agent.Run(context.Background(), a, testHost(a.name), agent.WithTimeout(2*time.Second))
 
 	assert.Equal(t, agent.EXIT_OK, code)
 	assert.True(t, gotDeadline, "Bootstrap should receive a ctx carrying the run deadline")
@@ -349,7 +359,7 @@ func TestRunConsultsInteractiveOnApprovalPause(t *testing.T) {
 			return agent.Resume{Stop: true}, nil
 		},
 	}
-	code := agent.Run(context.Background(), a, agent.WithRoundTimeout(5*time.Second))
+	code := agent.Run(context.Background(), a, testHost(a.name), agent.WithRoundTimeout(5*time.Second))
 	require.Equal(t, agent.EXIT_OK, code)
 	assert.Contains(t, seen, agent.PAUSE_APPROVAL)
 	assert.True(t, a.completeRan)
@@ -372,7 +382,7 @@ func TestRunInteractiveRejectCompletesRun(t *testing.T) {
 			return agent.Resume{Stop: true}, nil
 		},
 	}
-	code := agent.Run(context.Background(), a)
+	code := agent.Run(context.Background(), a, testHost(a.name))
 	require.Equal(t, agent.EXIT_OK, code)
 	assert.True(t, a.completeRan)
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, a.final.Status)
@@ -397,7 +407,7 @@ func TestRunFollowUpReopensCompletedRun(t *testing.T) {
 			return agent.Resume{}, nil // empty input at round_end → stop
 		},
 	}
-	code := agent.Run(context.Background(), a)
+	code := agent.Run(context.Background(), a, testHost(a.name))
 	require.Equal(t, agent.EXIT_OK, code)
 	assert.Equal(t, 2, rounds, "asked after the first completion and after the follow-up")
 	assert.True(t, a.completeRan)
@@ -410,7 +420,7 @@ func TestRunExitsOnPauseWithoutInteractive(t *testing.T) {
 	cleanupAppDir(t, name)
 
 	a := &pausingAgent{name: name}
-	code := agent.Run(context.Background(), a)
+	code := agent.Run(context.Background(), a, testHost(a.name))
 	require.Equal(t, agent.EXIT_OK, code, "no Interactive → clean exit")
 	assert.True(t, a.completeRan)
 	assert.Equal(t, core.RUN_STATUS_PAUSED_APPROVAL, a.final.Status,

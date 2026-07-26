@@ -4,15 +4,17 @@
 //
 // The split from spec is deliberate: spec is data that anything can read
 // without dependencies, agent is the code that knows how to turn that
-// data into objects — which providers are compiled in, what order the
-// middleware chain goes in, which port each harness package plugs into.
+// data into objects — which reasoning styles to register, how the
+// engine gets wired, how a Host is built.
+//
+// Wizard UI vocabulary (Choice, Label/Note composition) lives in
+// cmd/agent/wizard; raw registry access (provider.Entries /
+// provider.Catalog) lives in the provider package itself — agent does
+// not pass those through.
 package agent
 
 import (
-	"strings"
-
 	"github.com/bizshuk/agentsdk/agent/spec"
-	"github.com/bizshuk/agentsdk/provider"
 )
 
 // The spec types are aliased so an application importing only agent can
@@ -20,9 +22,7 @@ import (
 // definitions live in spec, which stays importable on its own by anything
 // that reads or produces a config without building one.
 type (
-	Config = spec.Config
-	Choice = spec.Choice
-
+	Config     = spec.Config
 	Model      = spec.Model
 	Reasoning  = spec.Reasoning
 	Limits     = spec.Limits
@@ -37,37 +37,3 @@ type (
 	Output     = spec.Output
 	Telemetry  = spec.Telemetry
 )
-
-// ProviderChoices lists the provider adapters compiled into this binary.
-//
-// It lives here rather than in spec because it is the one choice list
-// that needs compile-time knowledge: spec can enumerate reasoning styles
-// from core's constants and tiers from its own vocabulary, but "which
-// adapters are linked in" is only answerable by the package that links
-// them.
-func ProviderChoices() []Choice {
-	entries := provider.Entries()
-	out := make([]Choice, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, Choice{
-			Value:   e.Name,
-			Label:   e.Metadata.Label,
-			Note:    providerNote(e),
-			Default: e.Name == provider.DEFAULT_NAME,
-		})
-	}
-	return out
-}
-
-// providerNote combines the entry's own note with the credential it reads,
-// so a wizard can tell the user what to export before they pick.
-func providerNote(e provider.Entry) string {
-	var parts []string
-	if e.Metadata.Note != "" {
-		parts = append(parts, e.Metadata.Note)
-	}
-	if len(e.Metadata.APIKeyEnv) > 0 {
-		parts = append(parts, "reads "+strings.Join(e.Metadata.APIKeyEnv, " or "))
-	}
-	return strings.Join(parts, "; ")
-}

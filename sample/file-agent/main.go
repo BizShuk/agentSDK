@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/agent"
+	"github.com/bizshuk/agentsdk/agent/cli"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/utils/agentconfig"
 )
 
@@ -73,7 +73,7 @@ type fileAgent struct {
 // Bootstrap reads the opening task from stdin and seeds the user
 // message. Empty stdin runs with the persona only — same shape as
 // `provider "ask me anything"` with no follow-up.
-func (f fileAgent) Bootstrap(ctx context.Context, ac *agent.AppConfig) (*runtime.Engine, core.State, error) {
+func (f fileAgent) Bootstrap(ctx context.Context, ac *agent.AppConfig) (*agent.Engine, core.State, error) {
 	engine, state, err := f.Agent.Bootstrap(ctx, ac)
 	if err != nil {
 		return engine, state, err
@@ -123,7 +123,7 @@ func main() {
 		fmt.Fprintln(os.Stdout, string(out))
 	})
 
-	agent.Main(
+	cli.Main(
 		fileAgent{Agent: agent.MustNew(cfg, agent.WithSink(sink)), target: target},
 		agent.WithLogToStdout(),
 	)

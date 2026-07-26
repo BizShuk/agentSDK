@@ -1,13 +1,15 @@
 # agentsdk — `agent.Config` reference example
 #
-# This file documents every field in agent/spec.Config and shows the new
-# credential-resolution surface (Model.credential_kind) introduced by the
-# OAuth routing fix. It is intentionally exhaustive — a working agent can
-# drop the commented sections and keep only the top portion.
+# This file documents every field in agent/spec.Config and shows the
+# credential-resolution surface (Model.credential_kind) introduced by
+# the OAuth routing fix. It is intentionally exhaustive — a working
+# agent can drop the commented sections and keep only the top portion.
 #
 # Usage:
 #   cp config.example.yaml agent.yaml
-#   # edit, then run your sample or `agentsdk run -c agent.yaml`
+#   # edit, then run a sample that loads it via
+#   # `utils/agentconfig.LoadFile("agent.yaml")` — see
+#   # `sample/skeleton-agent/main.go` for the shortest consumer.
 #
 # Credential precedence is governed by registry.Options.Resolve (see
 # provider/registry.go). All env reads go through viper by default

@@ -4,90 +4,81 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"os/signal"
 	"runtime/debug"
-	"syscall"
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/runtime"
 )
 
 // Exit codes. pm2 and any other supervisor read these to decide whether a
 // tick errored, so they are part of the contract.
+//
+// Deprecated: exit-code constants moved to agent/cli. The values are
+// unchanged (0 / 1); new code should import cli.EXIT_OK / cli.EXIT_ERROR.
 const (
 	EXIT_OK    = 0
 	EXIT_ERROR = 1
 )
 
-// Main is the entry point for an agent binary:
+// Run is the testable core of cli.Main: the full lifecycle, returning
+// an exit code rather than calling os.Exit. The host is provided
+// pre-built (by cli.OpenForCLI, by a test fixture, or by any caller that
+// wants to embed the agent).
 //
-//	func main() { agent.Main(agent.MustNew(cfg)) }
+// The sequence is fixed, and the order is the point — each step
+// establishes what the next one may assume:
 //
-// It binds SIGINT / SIGTERM to the run context so a supervisor's stop
-// signal cancels the in-flight model call or tool instead of killing the
-// process mid-write, then exits with Run's code.
-func Main(a Runner, opts ...RunOption) {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	os.Exit(Run(ctx, a, opts...))
-}
-
-// Run is the testable core of Main: the full lifecycle, returning an exit
-// code rather than calling os.Exit.
-//
-// The sequence is fixed, and the order is the point — each step establishes
-// what the next one may assume:
-//
-//  1. config   — open ~/.config/<name>, install the run logger
+//  1. ctx check — already-dead contexts return immediately
 //  2. preflight— validate credentials and dependencies (optional)
 //  3. deadline — bound total wall-clock time
 //  4. bootstrap— the agent assembles its Engine and opening State
 //  5. run      — drive the loop under panic recovery
 //  6. complete — hand the final State back to the agent (optional)
-func Run(ctx context.Context, a Runner, opts ...RunOption) int {
+func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
 	o := defaultRunOpts()
 	for _, opt := range opts {
 		opt(&o)
 	}
 
-	name := a.Name()
-	if name == "" {
-		slog.Error("agent: Runner.Name must not be empty")
+	log := host.Logger
+	if log == nil {
+		log = slog.Default().With(slog.String("app", a.Name()))
+	}
+
+	// Empty name was historically a setup error: state and WAL would
+	// resolve under an empty path. cli.Open already rejects this with a
+	// clearer message, so we surface the error pre-Bootstrap to keep
+	// the contract tested.
+	if a.Name() == "" {
+		log.Error("run: Runner.Name must not be empty")
 		return EXIT_ERROR
 	}
 
-	// 1. Config. Opens the app dirs, generates the run ID, wires the
-	//    file-backed StateStore + WAL, and swaps slog's default handler.
-	cfg, err := OpenForCLI(name, o.logLevel)
-	if err != nil {
-		slog.Error("config load failed", "app", name, "err", err)
+	// 1. Ctx check. A deadline that already expired gives the caller a
+	//    failing exit without invoking Bootstrap.
+	if err := ctx.Err(); err != nil {
+		log.Error("run context cancelled before bootstrap", "err", err)
 		return EXIT_ERROR
 	}
-	if o.logToStdout {
-		useStdoutLog(cfg.RunID, o.logLevel)
-	}
-	log := slog.Default().With(slog.String("app", name))
 
 	// 2. Preflight. Fail before the run leaves any trace.
 	if p, ok := a.(Preflighter); ok {
-		if err := p.Preflight(ctx, cfg); err != nil {
+		if err := p.Preflight(ctx, host); err != nil {
 			log.Error("preflight failed", "err", err)
 			return EXIT_ERROR
 		}
 	}
 
 	// 3. Deadline. A non-positive timeout opts out.
-	if o.timeout > 0 {
+	if o.Timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, o.timeout)
+		ctx, cancel = context.WithTimeout(ctx, o.Timeout)
 		defer cancel()
 	}
 
 	// 4. Bootstrap. The agent owns composition; we only backfill the
 	//    persistence and run ID it did not set for itself.
-	engine, state, err := a.Bootstrap(ctx, cfg)
+	engine, state, err := a.Bootstrap(ctx, host)
 	if err != nil {
 		log.Error("bootstrap failed", "err", err)
 		return EXIT_ERROR
@@ -97,13 +88,13 @@ func Run(ctx context.Context, a Runner, opts ...RunOption) int {
 		return EXIT_ERROR
 	}
 	if engine.Store == nil {
-		engine.Store = cfg.StateStore
+		engine.Store = host.StateStore
 	}
 	if engine.Log == nil {
-		engine.Log = cfg.WAL
+		engine.Log = host.WAL
 	}
 	if state.RunID == "" {
-		state.RunID = cfg.RunID
+		state.RunID = host.RunID
 	}
 
 	// 5. Run under panic recovery.
@@ -130,7 +121,7 @@ func Run(ctx context.Context, a Runner, opts ...RunOption) int {
 			if !asks {
 				break
 			}
-			res, err := resolveRound(ctx, in, o.roundTimeout, Pause{State: final, Reason: reason})
+			res, err := resolveRound(ctx, in, o.RoundTimeout, Pause{State: final, Reason: reason})
 			if err != nil {
 				log.Error("next_round failed",
 					"run_id", final.RunID, "reason", string(reason), "err", err)
@@ -214,7 +205,7 @@ func resolveRound(ctx context.Context, in Interactive, d time.Duration, p Pause)
 // sees a status the engine has already returned, so the queue would never
 // be read. Steer is drained at the top of the next Decide, which is exactly
 // where a new user message belongs.
-func advance(ctx context.Context, e *runtime.Engine, s core.State, reason PauseReason, res Resume) (core.State, error) {
+func advance(ctx context.Context, e *Engine, s core.State, reason PauseReason, res Resume) (core.State, error) {
 	if res.Input != "" {
 		e.Steer(res.Input)
 	}
@@ -245,13 +236,13 @@ func advance(ctx context.Context, e *runtime.Engine, s core.State, reason PauseR
 // A panic inside a tool would otherwise unwind straight through
 // Engine.runStep, skipping the Store.Save that closes out the step — the
 // run would be left persisted as `running` forever, and a later Resume
-// would replay from that stale snapshot. So on recovery we reload whatever
-// the engine last committed and mark it FAILED, making the crash visible
-// and the run terminal.
+// would replay from that stale snapshot. So on recovery we reload
+// whatever the engine last committed and mark it FAILED, making the crash
+// visible and the run terminal.
 //
-// Recovery covers the calling goroutine only. A Runner that spawns its own
-// goroutines must guard them itself.
-func safeRun(ctx context.Context, e *runtime.Engine, state core.State) (final core.State, err error) {
+// Recovery covers the calling goroutine only. A Runner that spawns its
+// own goroutines must guard them itself.
+func safeRun(ctx context.Context, e *Engine, state core.State) (final core.State, err error) {
 	defer func() {
 		rec := recover()
 		if rec == nil {
@@ -264,15 +255,15 @@ func safeRun(ctx context.Context, e *runtime.Engine, state core.State) (final co
 	return e.Run(ctx, state)
 }
 
-// markFailed persists a terminal FAILED status for a crashed run. It reads
-// back the engine's own last checkpoint rather than the seed state, so the
-// recorded turn count and message history reflect how far the run actually
-// got.
+// markFailed persists a terminal FAILED status for a crashed run. It
+// reads back the engine's own last checkpoint rather than the seed state,
+// so the recorded turn count and message history reflect how far the run
+// actually got.
 //
-// It runs on a cancellation-detached context: the panic may well have been
-// preceded by ctx expiring, and a store write that fails because of the
-// very condition it is recording would defeat the purpose.
-func markFailed(ctx context.Context, e *runtime.Engine, seed core.State) core.State {
+// It runs on a cancellation-detached context: the panic may well have
+// been preceded by ctx expiring, and a store write that fails because of
+// the very condition it is recording would defeat the purpose.
+func markFailed(ctx context.Context, e *Engine, seed core.State) core.State {
 	out := seed
 	out.Status = core.RUN_STATUS_FAILED
 	out.UpdatedAt = time.Now().UTC()
@@ -289,11 +280,4 @@ func markFailed(ctx context.Context, e *runtime.Engine, seed core.State) core.St
 		slog.Error("run_panic: failed to persist FAILED status", "run_id", seed.RunID, "err", err)
 	}
 	return out
-}
-
-// useStdoutLog replaces the file handler OpenForCLI installed with a
-// JSON handler on stdout, keeping the run_id attribute.
-func useStdoutLog(runID string, level slog.Level) {
-	h := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})
-	slog.SetDefault(slog.New(h).With(slog.String("run_id", runID)))
 }

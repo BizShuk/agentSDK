@@ -8,7 +8,6 @@ import (
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -141,34 +140,8 @@ func TestWithProviderRejectsNil(t *testing.T) {
 	assert.Contains(t, err.Error(), "must not be nil")
 }
 
-// --- provider choices ---
+// --- provider registry ---
 
-func TestProviderChoicesTrackRegistry(t *testing.T) {
-	got := agent.ProviderChoices()
-	require.Len(t, got, len(provider.Names()))
-
-	var values []string
-	var defaults int
-	for _, c := range got {
-		values = append(values, c.Value)
-		assert.NotEmpty(t, c.Label, "a wizard menu renders Label")
-		assert.NotEmpty(t, c.Note, "every provider should say which credential it reads")
-		if c.Default {
-			defaults++
-		}
-	}
-	assert.Equal(t, provider.Names(), values, "choices must follow the registry's order")
-	assert.Equal(t, 1, defaults)
-}
-
-func TestProviderChoiceDefaultMatchesSpec(t *testing.T) {
-	// The wizard's default and the config's default must be the same
-	// provider, or pressing Enter would silently pick something else.
-	var got string
-	for _, c := range agent.ProviderChoices() {
-		if c.Default {
-			got = c.Value
-		}
-	}
-	assert.Equal(t, provider.DEFAULT_NAME, got)
-}
+// Provider-entry tests moved to cmd/agent/wizard/notes_test.go.
+// agent. no longer passes through provider.Entries / provider.Catalog;
+// the wizard is the only consumer and its tests pin the contract.

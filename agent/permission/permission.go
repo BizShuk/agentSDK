@@ -20,14 +20,21 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 )
 
-// Mode is the claude-code style permission mode.
-type Mode string
+// Mode is the claude-code style permission mode. The set of valid
+// values lives in core so spec (config vocabulary) and permission
+// (runtime engine) cannot drift apart — a PermissionMode that is not
+// one of core's PERMISSION_MODE_* constants is a configuration
+// vocabulary error.
+type Mode = core.PermissionMode
 
+// MODE_* are preserved on this package for callers that already import
+// agent/permission rather than core. The values are the untyped string
+// literals declared in core, identical to core.PERMISSION_MODE_*.
 const (
-	MODE_DEFAULT      Mode = "default"           // rules first, then fallback policy / risk grid
-	MODE_ACCEPT_EDITS Mode = "acceptEdits"       // low-risk auto-allowed, high-risk still asks
-	MODE_PLAN         Mode = "plan"              // read-only: low-risk allowed, high-risk denied
-	MODE_BYPASS       Mode = "bypassPermissions" // everything allowed — containers / CI only
+	MODE_DEFAULT      = core.PERMISSION_MODE_DEFAULT
+	MODE_ACCEPT_EDITS = core.PERMISSION_MODE_ACCEPT_EDITS
+	MODE_PLAN         = core.PERMISSION_MODE_PLAN
+	MODE_BYPASS       = core.PERMISSION_MODE_BYPASS
 )
 
 // Behavior is what a matched rule yields.

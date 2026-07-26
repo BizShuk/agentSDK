@@ -7,12 +7,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/action"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/memory/filestore"
 	"github.com/bizshuk/agentsdk/middleware/preset"
-	"github.com/bizshuk/agentsdk/planning"
-	"github.com/bizshuk/agentsdk/runtime"
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
 	"github.com/bizshuk/agentsdk/sample/logdoctor-agent/internal/fake"
 	"github.com/bizshuk/agentsdk/sample/logdoctor-agent/tool"
@@ -89,21 +87,19 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 	reg.Register(nt)
 
 	// Step: ReAct is the simplest pattern; matches the sample's flow.
-	step := core.NewDecide(map[core.ReasoningStyle]core.DecisionRule{
-		core.REASON_REACT: planning.NewThinkThenAct(),
-	})
+	step := agent.ReActStep()
 
-	loop := runtime.NewEngine(step, provider, reg)
+	engine := agent.NewEngine(step, provider, reg)
 	// M4: wire the full security chain (sandbox + approval + spotlight +
 	// sanitizer). approval uses the L0-L4 enterprise grid so propose_fix
 	// (HIGH risk) triggers a REQUEST_APPROVAL at L2. sandbox policy must
 	// be non-nil so the built-in Write/Edit/Bash tools can path-check
 	// their args — matches the Policy passed to RegisterDefaults above.
-	loop.Middleware = preset.Secure(action.DefaultPolicy(), action.DefaultApprovalPolicy{})
-	loop.Emitter = func(eff core.Instruction) {
+	engine.Middleware = preset.Secure(action.DefaultPolicy(), action.DefaultApprovalPolicy{})
+	engine.Emitter = func(eff core.Instruction) {
 		writeEnvelope(cmd, eff)
 	}
-	loop.Approval = action.DefaultApprovalPolicy{}
+	engine.Approval = action.DefaultApprovalPolicy{}
 
 	// Optional persistence — if --data-dir or env, wire up store+WAL.
 	dataDir := f.dataDir
@@ -113,13 +109,18 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 	if dataDir == "" {
 		dataDir = "./data"
 	}
-	if err := os.MkdirAll(dataDir, 0o750); err == nil {
-		if store, err := filestore.NewJSONFileStateStore(dataDir); err == nil {
-			loop.Store = store
-		}
-		if wal, err := filestore.NewJSONLFileLog(dataDir); err == nil {
-			loop.Log = wal
-		}
+	if err := os.MkdirAll(dataDir, 0o750); err != nil {
+		return fmt.Errorf("mkdir data dir: %w", err)
+	}
+	host, err := agent.Open("logdoctor")
+	if err != nil {
+		return fmt.Errorf("open host: %w", err)
+	}
+	if engine.Store == nil {
+		engine.Store = host.StateStore
+	}
+	if engine.Log == nil {
+		engine.Log = host.WAL
 	}
 
 	// Initial state.
@@ -130,7 +131,7 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 		Budget:         core.Budget{MaxTurns: maxTurns},
 	}
 
-	// Seed the percept via RunWithInput so ReAct sees the user instruction.
+	// Seed the percept via RunWithEvent so ReAct sees the user instruction.
 	perceptCh := listener.Observations(context.Background())
 	var first core.Observation
 	select {
@@ -138,7 +139,7 @@ func runExecute(cmd *cobra.Command, f *runFlags) error {
 	case <-time.After(2 * time.Second):
 		return fmt.Errorf("listener produced no percept within 2s")
 	}
-	final, err := loop.RunWithEvent(context.Background(), state, core.Event{
+	final, err := engine.RunWithEvent(context.Background(), state, core.Event{
 		Kind:        core.EVENT_OBSERVATION,
 		Observation: &first,
 	})

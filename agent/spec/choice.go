@@ -1,27 +1,21 @@
 package spec
 
-import "github.com/bizshuk/agentsdk/core"
-
-// Permission modes. Duplicated as literals rather than imported from the
-// permission package: spec must stay dependency-free so a wizard or schema
-// tool can read it without pulling the harness in. The strings are the
-// config vocabulary; permission.Mode is the runtime type, and agent maps
-// between them.
-const (
-	MODE_DEFAULT      = "default"
-	MODE_ACCEPT_EDITS = "acceptEdits"
-	MODE_PLAN         = "plan"
-	MODE_BYPASS       = "bypassPermissions"
+import (
+	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/tool"
 )
 
-// Built-in tool names, matching tool.RegisterDefaults.
+// Permission modes. The strings are the config-file vocabulary; the
+// runtime type lives in agent/permission as an alias of
+// core.PermissionMode. Reducing all three layers to one declaration
+// (in core) means a typo here fails to compile, and a TOML/JSON
+// config that survives spec.Decode but doesn't match any string
+// constant is type-checkable at runtime against the same set.
 const (
-	TOOL_READ  = "read"
-	TOOL_WRITE = "write"
-	TOOL_EDIT  = "edit"
-	TOOL_BASH  = "bash"
-	TOOL_GLOB  = "glob"
-	TOOL_GREP  = "grep"
+	MODE_DEFAULT      = core.PERMISSION_MODE_DEFAULT
+	MODE_ACCEPT_EDITS = core.PERMISSION_MODE_ACCEPT_EDITS
+	MODE_PLAN         = core.PERMISSION_MODE_PLAN
+	MODE_BYPASS       = core.PERMISSION_MODE_BYPASS
 )
 
 // (CredentialKind values now live in core — see core.CREDENTIAL_KIND_AUTO
@@ -130,12 +124,12 @@ func VariantChoices(key string) []Choice {
 		}
 	case "tools.builtin":
 		return []Choice{
-			{Value: TOOL_READ, Label: "read", Default: true},
-			{Value: TOOL_WRITE, Label: "write", Default: true},
-			{Value: TOOL_EDIT, Label: "edit", Default: true},
-			{Value: TOOL_BASH, Label: "bash", Default: true, Note: "highest risk — gate it with safety rules"},
-			{Value: TOOL_GLOB, Label: "glob", Default: true},
-			{Value: TOOL_GREP, Label: "grep", Default: true},
+			{Value: tool.NAME_READ, Label: "read", Default: true},
+			{Value: tool.NAME_WRITE, Label: "write", Default: true},
+			{Value: tool.NAME_EDIT, Label: "edit", Default: true},
+			{Value: tool.NAME_BASH, Label: "bash", Default: true, Note: "highest risk — gate it with safety rules"},
+			{Value: tool.NAME_GLOB, Label: "glob", Default: true},
+			{Value: tool.NAME_GREP, Label: "grep", Default: true},
 		}
 	case "limits.autonomy":
 		return []Choice{

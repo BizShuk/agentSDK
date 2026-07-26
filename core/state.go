@@ -29,6 +29,16 @@ const (
 	AUTONOMY_L4
 )
 
+// AUTONOMY_DEFAULT is the spec-declared default. It is pinned to L2 in
+// core so the runtime contract and the config default cannot drift
+// without a code edit here. The string form (suitable for the
+// config-file vocabulary) is exposed as AUTONOMY_DEFAULT_STRING; the
+// typed default is AUTONOMY_DEFAULT.
+const (
+	AUTONOMY_DEFAULT       = AUTONOMY_L2
+	AUTONOMY_DEFAULT_STRING = "L2"
+)
+
 // String renders the level in the canonical SCREAMING form.
 func (a AutonomyLevel) String() string {
 	switch a {

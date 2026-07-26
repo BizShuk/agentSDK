@@ -1,7 +1,7 @@
 // Command skeleton-agent is the single-file sample that demonstrates the
 // agent skeleton in its canonical, wizard-generated form:
 //
-//	func main() { agent.Main(agent.MustNew(cfg, opts...), runOpts...) }
+//	func main() { cli.Main(agent.MustNew(cfg, opts...), runOpts...) }
 //
 // Compare to sample/code-agent, which uses cobra + a 101-line compose()
 // + four dispatch modes (interactive / -p / --json / --sessions). That
@@ -63,8 +63,8 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/agent"
+	"github.com/bizshuk/agentsdk/agent/cli"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/utils/agentconfig"
 )
 
@@ -113,7 +113,7 @@ type stdinAgent struct{ *agent.Agent }
 // lines are delivered round by round through NextRound. An empty first
 // line (immediate EOF) runs with the persona only — the provider CLI's
 // `provider "ask me anything"` with no follow-up.
-func (s stdinAgent) Bootstrap(ctx context.Context, ac *agent.AppConfig) (*runtime.Engine, core.State, error) {
+func (s stdinAgent) Bootstrap(ctx context.Context, ac *agent.AppConfig) (*agent.Engine, core.State, error) {
 	engine, state, err := s.Agent.Bootstrap(ctx, ac)
 	if err != nil {
 		return engine, state, err
@@ -199,7 +199,7 @@ func main() {
 	// first Option drives the engine; WithLogToStdout drives the lifecycle
 	// logger; WithRoundTimeout bounds how long one follow-up read may block
 	// before the REPL gives up on an idle operator.
-	agent.Main(
+	cli.Main(
 		stdinAgent{agent.MustNew(cfg, agent.WithSink(sink))},
 		agent.WithLogToStdout(),
 		agent.WithRoundTimeout(2*time.Minute),

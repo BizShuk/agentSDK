@@ -2,16 +2,15 @@
 #
 # This file covers the agent/ layer: reasoning loop, tier expansion,
 # persona, sessions, skills, subagents, prompt composition. Most users
-# want this when running real workloads — it sits on top of the SDK
-# building blocks documented in `config.sdk.example.yaml`.
+# want this when running real workloads.
 #
-# The `wizard` subcommand produces this format; it can also be written
-# by hand and validated via `agentsdk run -c config.agent.example.yaml`.
+# The `wizard` subcommand produces this format; it can also be written by
+# hand. A binary consumes it through `utils/agentconfig.LoadFile`, which
+# picks YAML or JSON from the extension and runs spec validation — see
+# `sample/skeleton-agent/main.go` for the shortest complete consumer.
 #
 # NOT here: provider cmd flags (cobra, not YAML) — see `agentsdk provider --help`
 # for the flag surface and `--credential-kind` semantics.
-# For the SDK surface without the agent skeleton, see
-# `config.sdk.example.yaml`.
 # For the full reference covering every block, see `config.example.yaml`.
 
 # ---------------------------------------------------------------------------

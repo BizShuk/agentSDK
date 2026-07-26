@@ -1,11 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
-	"time"
 
+	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/memory/filestore"
 	"github.com/spf13/cobra"
 )
 
@@ -44,46 +44,28 @@ func approveExecute(cmd *cobra.Command, f *approveFlags) error {
 	if f.runID == "" {
 		return fmt.Errorf("--run-id is required")
 	}
+	var decision core.ApprovalDecision
 	switch f.decision {
 	case "approve":
-		f.decision = string(core.APPROVAL_DECISION_APPROVE)
+		decision = core.APPROVAL_DECISION_APPROVE
 	case "reject":
-		f.decision = string(core.APPROVAL_DECISION_REJECT)
+		decision = core.APPROVAL_DECISION_REJECT
 	default:
 		return fmt.Errorf("--decision must be 'approve' or 'reject' (got %q)", f.decision)
 	}
 
-	dataDir := f.dataDir
-	if dataDir == "" {
-		dataDir = dataDirOrDefault(cmd)
-	}
-	store, err := filestore.NewJSONFileStateStore(dataDir)
+	host, err := agent.Open("logdoctor")
 	if err != nil {
 		return err
 	}
-	s, err := store.Load(cmd.Context(), f.runID)
-	if err != nil {
-		return fmt.Errorf("load run %q: %w", f.runID, err)
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
 	}
-
-	updated := false
-	for i := range s.PendingApprovals {
-		if s.PendingApprovals[i].Decision == "" {
-			s.PendingApprovals[i].Decision = core.ApprovalDecision(f.decision)
-			now := time.Now().UTC()
-			s.PendingApprovals[i].DecidedAt = &now
-			s.PendingApprovals[i].DecidedBy = f.by
-			updated = true
-			break
-		}
-	}
-	if !updated {
-		return fmt.Errorf("no open PendingApproval on run %q", f.runID)
-	}
-	if err := store.Save(cmd.Context(), s); err != nil {
-		return err
+	if err := agent.Approve(ctx, host, f.runID, decision, f.by); err != nil {
+		return fmt.Errorf("approve run %q: %w", f.runID, err)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "approval %s recorded on run %q by %s\n",
-		f.decision, f.runID, f.by)
+		string(decision), f.runID, f.by)
 	return nil
 }

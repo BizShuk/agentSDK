@@ -16,6 +16,7 @@ import (
 	"github.com/bizshuk/agentsdk/middleware/hook"
 	"github.com/bizshuk/agentsdk/prompt"
 	"github.com/bizshuk/agentsdk/runtime"
+	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -153,7 +154,7 @@ func TestBootstrapWiresBlocksToEngineFields(t *testing.T) {
 		{
 			name: "tools allowlist narrows the registry",
 			cfg: agent.Config{Name: "x", Tier: spec.TIER_STANDARD,
-				Tools: &spec.Tools{Builtin: []string{spec.TOOL_READ, spec.TOOL_GLOB, spec.TOOL_GREP}}},
+				Tools: &spec.Tools{Builtin: []string{tool.NAME_READ, tool.NAME_GLOB, tool.NAME_GREP}}},
 			verify: func(t *testing.T, e *runtime.Engine) {
 				require.NotNil(t, e.Tools)
 				var names []string

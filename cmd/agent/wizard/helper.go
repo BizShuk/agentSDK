@@ -8,6 +8,7 @@ import (
 
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
+	"github.com/bizshuk/agentsdk/provider"
 )
 
 func detectDefaultPersona() string {
@@ -34,14 +35,14 @@ func orDefault(got, fallback string) string {
 
 // listChoices prints one field's candidates.
 func listChoices(out io.Writer, key string) error {
-	var choices []agent.Choice
+	var choices []spec.Choice
 	switch key {
 	case "tier":
 		choices = spec.TierChoices()
 	case "reasoning.style", "reasoning.enable":
 		choices = spec.StyleChoices()
 	case "model.provider":
-		choices = agent.ProviderChoices()
+		choices = providerChoices(provider.Entries())
 	default:
 		choices = spec.VariantChoices(key)
 	}

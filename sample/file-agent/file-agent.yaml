@@ -1,9 +1,9 @@
 # file-agent — sample config
 #
-# This file is what the sample loads at startup via agent.LoadFile →
-# spec.Decode. The schema is the same as the wizard's output and
-# `agentsdk run -c path` consumes. spec.Decode rejects unknown fields,
-# so typos surface immediately.
+# This file is what the sample loads at startup via
+# `utils/agentconfig.LoadFile` → `spec.Decode`. The schema is the same
+# as the wizard's output. spec.Decode rejects unknown fields, so typos
+# surface immediately.
 #
 # Credential resolution follows the post-OAuth-fix rules:
 #   - model.credential_kind = "" (default) → registry auto-loads from

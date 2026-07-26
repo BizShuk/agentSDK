@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/bizshuk/agentsdk/memory/filestore"
+	"github.com/bizshuk/agentsdk/agent"
 	"github.com/spf13/cobra"
 )
 
@@ -24,15 +25,18 @@ func RegisterList(root *cobra.Command) {
 }
 
 func listExecute(cmd *cobra.Command) error {
-	dataDir, _ := cmd.Flags().GetString("data-dir")
-	if dataDir == "" {
-		dataDir = dataDirOrDefault(cmd)
+	if _, err := cmd.Flags().GetString("data-dir"); err != nil {
+		// --data-dir is optional; bound to keep cobra quiet on typos.
 	}
-	store, err := filestore.NewJSONFileStateStore(dataDir)
+	host, err := agent.Open("logdoctor")
 	if err != nil {
 		return err
 	}
-	runs, err := store.List(cmd.Context())
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	runs, err := agent.ListRuns(ctx, host)
 	if err != nil {
 		return err
 	}
@@ -41,9 +45,9 @@ func listExecute(cmd *cobra.Command) error {
 		fmt.Fprintln(out, "(no persisted runs)")
 		return nil
 	}
-	fmt.Fprintf(out, "%d run(s) in %s/states:\n", len(runs), dataDir)
+	fmt.Fprintf(out, "%d run(s):\n", len(runs))
 	for _, id := range runs {
-		s, err := store.Load(cmd.Context(), id)
+		s, err := host.StateStore.Load(ctx, id)
 		if err != nil {
 			fmt.Fprintf(out, "  %s  <error: %v>\n", id, err)
 			continue

@@ -8,6 +8,7 @@ import (
 
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/utils/agentconfig"
 )
 
@@ -40,13 +41,17 @@ func (w *wizard) run(cfg agent.Config) (agent.Config, error) {
 	// --- stage 2: model ---
 	w.section("2/9  model — which provider answers")
 	// No fallback argument: choose() falls back to the choice marked
-	// Default, and ProviderChoices marks it from provider.DEFAULT_NAME.
+	// Default, and providerChoices marks it from provider.DEFAULT_NAME.
 	// Naming the vendor here too would be a second source of truth.
-	cfg.Model.Provider = w.choose("provider", agent.ProviderChoices(), cfg.Model.Provider)
+	cfg.Model.Provider = w.choose("provider", providerChoices(provider.Entries()), cfg.Model.Provider)
 
-	modelChoices := agent.ModelChoices(cfg.Model.Provider)
-	if len(modelChoices) > 0 {
-		cfg.Model.Name = w.choose("model id", modelChoices, cfg.Model.Name)
+	if specs, ok := provider.Catalog(cfg.Model.Provider); ok {
+		modelChoices := catalogChoices(specs)
+		if len(modelChoices) > 0 {
+			cfg.Model.Name = w.choose("model id", modelChoices, cfg.Model.Name)
+		} else {
+			cfg.Model.Name = w.ask("model id (empty = the adapter's flagship default)", cfg.Model.Name)
+		}
 	} else {
 		cfg.Model.Name = w.ask("model id (empty = the adapter's flagship default)", cfg.Model.Name)
 	}

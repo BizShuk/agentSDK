@@ -7,6 +7,14 @@ import (
 	"github.com/bizshuk/agentsdk/runtime"
 )
 
+// Engine is the runtime container agent composes. It is a type alias
+// for *runtime.Engine — a sample that writes `*agent.Engine` in its
+// Runner.Bootstrap signature is handing back the same type without
+// importing the runtime package directly. The point is to keep the
+// assembly layer as the only thing callers see; nothing past agent
+// should make a binary reach back into runtime for typing.
+type Engine = runtime.Engine
+
 // Runner is the contract a binary implements. Two methods, both required.
 //
 // Name is the application identifier. It feeds gosdk/config (which resolves
@@ -31,7 +39,7 @@ import (
 // Completer, Interactive); both *Agent and the wrapper remain a Runner.
 type Runner interface {
 	Name() string
-	Bootstrap(ctx context.Context, cfg *AppConfig) (*runtime.Engine, core.State, error)
+	Bootstrap(ctx context.Context, cfg *AppConfig) (*Engine, core.State, error)
 }
 
 // Preflighter is an optional Agent extension. When implemented, Preflight
