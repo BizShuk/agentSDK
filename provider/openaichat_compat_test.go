@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -116,6 +117,12 @@ func readOpenAIChatGolden(t *testing.T, name string) []byte {
 	t.Helper()
 	raw, err := os.ReadFile("testdata/openaichat/" + name)
 	require.NoError(t, err)
+	if strings.HasSuffix(name, ".sse") {
+		if !bytes.HasSuffix(raw, []byte("\n\n")) {
+			raw = append(raw, '\n')
+		}
+		return raw
+	}
 	return bytes.TrimSuffix(raw, []byte("\n"))
 }
 

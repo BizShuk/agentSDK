@@ -1,31 +1,38 @@
 package openaichat
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider/protocol/sse"
 )
 
 // ParseStream reads an OpenAI-compatible SSE stream and projects it into
-// canonical model chunks. Malformed events are skipped. A clean EOF emits a
-// terminal chunk; scanner failures and context cancellation close without one.
+// canonical model chunks. Malformed JSON events are skipped. A clean EOF emits
+// a terminal chunk; framing failures and context cancellation close without one.
 func ParseStream(ctx context.Context, reader io.Reader) (<-chan core.ModelChunk, error) {
 	out := make(chan core.ModelChunk, 16)
 	go func() {
 		defer close(out)
-		scanner := bufio.NewScanner(reader)
-		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+		decoder := sse.NewDecoder(reader)
 
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data:") {
-				continue
+		for {
+			if ctx.Err() != nil {
+				return
 			}
-			payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			frame, err := decoder.Next()
+			if errors.Is(err, io.EOF) {
+				emit(ctx, out, core.ModelChunk{Done: true})
+				return
+			}
+			if err != nil {
+				return
+			}
+			payload := strings.TrimSpace(string(frame.Data))
 			if payload == "" {
 				continue
 			}
@@ -62,11 +69,6 @@ func ParseStream(ctx context.Context, reader io.Reader) (<-chan core.ModelChunk,
 				}
 			}
 		}
-
-		if scanner.Err() != nil {
-			return
-		}
-		emit(ctx, out, core.ModelChunk{Done: true})
 	}()
 	return out, nil
 }

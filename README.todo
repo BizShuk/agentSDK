@@ -44,7 +44,8 @@
       `Entry.New`；七份 private config / functional options / env resolver / register converter 已移除
 - [x] `Phase 6` contract-tested wire sharing：Google / Ollama 的 request、response 與 SSE
       經跨 adapter golden/httptest 證明相容後，收斂到 `provider/protocol/openaichat` codec；其他
-      provider DTO 保持 vendor-local
+      provider DTO 保持 vendor-local。通用完整 frame codec 已下沉至 stdlib-only
+      `provider/protocol/sse`，provider terminal semantics 不進 generic package
 
 落地後仍未關閉的兩件事：
 

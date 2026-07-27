@@ -27,7 +27,9 @@ provider-specific headers，endpoint 固定是 construction config。
 
 Google 與 Ollama 經跨 adapter golden tests 證明使用相同的 OpenAI Chat Completions
 request、response 與 SSE wire contract，因此共用 provider protocol codec
-`provider/protocol/openaichat`。其他 provider 保留各自 DTO，不以欄位相似作為合併依據。
+`provider/protocol/openaichat`。通用 SSE frame boundary、multiline data、BOM、大小限制與
+讀寫由 stdlib-only `provider/protocol/sse` 擁有；`[DONE]` 等 provider terminal semantics
+仍留在具體 protocol package。其他 provider 保留各自 DTO，不以欄位相似作為合併依據。
 
 ## 怎麼用 (Getting Started)
 
@@ -141,7 +143,9 @@ agentsdk/
 ├── provider/                  # 7 個 adapter（Generate + Stream capability；已併回 root module）
 │   ├── registry.go            # Entry 是 name / metadata / static catalog / factory 的唯一真相
 │   ├── registry_options.go    # Options → ResolvedConfig 的唯一 env / credential resolution pipeline
-│   └── protocol/openaichat/   # Google/Ollama 共用的 OpenAI Chat wire protocol codec
+│   └── protocol/
+│       ├── sse/               # stdlib-only 完整 SSE frame decoder / writer
+│       └── openaichat/        # Google/Ollama 共用的 OpenAI Chat wire protocol codec
 ├── auth / proxy               # 外部獨立 repo，本 repo 無此目錄（auth 為 go.mod require，proxy 已完全脫離）
 ├── utils/                     # 根層共用 utilities umbrella：utils/frontmatter/ + utils/testutil/（FakeProvider / MemStore / CapturingNotifier）
 ├── sample/code-agent/         # 全 harness 組合 CLI（tui 互動 / -p / --json、session flags、.agentsdk 探索）

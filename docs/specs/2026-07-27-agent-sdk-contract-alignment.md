@@ -468,8 +468,9 @@ Rollback：
 - 只有 golden bytes 與 error semantics 都一致時，抽到
   `provider/protocol/openaichat`。
 - Grok、Anthropic、MiniMax、Codex、Antigravity 維持各自 DTO，除非另外通過同等測試。
-- shared SSE decoder 必須保留 context cancellation、terminal chunk、usage、
-  malformed event 與 `scanner.Err()` semantics。
+- shared OpenAI Chat parser 必須保留 context cancellation、terminal chunk、usage、
+  malformed JSON event 與 transport read failure semantics；通用 SSE framing 另由
+  stdlib-only `provider/protocol/sse` 擁有。
 
 驗收：
 
@@ -483,11 +484,15 @@ Rollback：
   implementation 上通過，再用來驗收抽取後結果。generate / stream request bytes、
   folded result/chunks、validation/status/decode failure 均未改變。
 - Google / Ollama 原本逐行同形的 `dto.go`、`validate.go`、`stream.go` 與 core↔wire
-conversion 已移入 `provider/protocol/openaichat`；adapter-local code 只保留
+  conversion 已移入 `provider/protocol/openaichat`；adapter-local code 只保留
   construction、HTTP lifecycle、headers 與 vendor error prefix。
-- SSE characterization 明確鎖定既有 observable semantics：malformed event 略過、
-  usage-only event 不產生 `ModelChunk`、`[DONE]` 與 clean EOF 各送一個 terminal chunk；
-  context cancellation 與 `scanner.Err()` 則關閉 channel 而不補 terminal chunk。
+- 通用完整 frame codec 後續下沉至 `provider/protocol/sse`：以空行切 frame，支援
+  multiline `data`、UTF-8 BOM、`event`/`id`/`retry`/comments、line/frame 上限與
+  round-trip writer，不含任何 provider terminal semantics。
+- OpenAI Chat characterization 明確鎖定 observable semantics：malformed JSON event 略過、
+  usage-only event 不產生 `ModelChunk`、合法 `[DONE]` frame 與 clean EOF 各送一個
+  terminal chunk；context cancellation、transport read error、過大或未完整終止的 frame
+  則關閉 channel 而不補 terminal chunk。
 - Grok、Anthropic、MiniMax、Codex、Antigravity 未改動。shared codec 的 public
   parameter/branch 數沒有高於原本 converter；共用 wire codec 位於 provider protocol package。
 
