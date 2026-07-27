@@ -1,0 +1,1 @@
+{"id":"chatcmpl-golden","object":"chat.completion","created":42,"model":"shared-model","choices":[{"index":0,"message":{"role":"assistant","content":"weather","tool_calls":[{"id":"call-2","type":"function","function":{"name":"weather","arguments":"{\"city\":\"Taipei\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":8,"completion_tokens":3,"total_tokens":11}}

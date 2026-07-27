@@ -1,6 +1,6 @@
-# Agent framework / AgentSDK 契約對齊簡化計畫
+# Agent framework / AgentSDK 契約對齊簡化規格
 
-狀態：`Phase 4 ready for review`
+狀態：`Completed`
 
 日期：`2026-07-27`
 
@@ -10,8 +10,9 @@
 - `Phase 1`：`Completed`
 - `Phase 2`：`Completed`
 - `Phase 3`：`Completed`
-- `Phase 4`：`Ready for review`
-- `Phase 5`–`Phase 6`：`Pending`
+- `Phase 4`：`Completed`
+- `Phase 5`：`Completed`
+- `Phase 6`：`Completed`
 
 ## 結論
 
@@ -475,6 +476,20 @@ Rollback：
 - refactor 前後 golden request bytes 與 folded `core.ModelResult/ModelChunk` 完全相同。
 - live endpoint 不列為完成條件；至少需 httptest covering generate + stream + failure。
 - 若抽取後參數或 branch 數量高於原本兩份實作，放棄共用並保留重複 DTO。
+
+實作結果（2026-07-27）：
+
+- 新增單一跨 adapter contract suite 與四份 golden fixtures，同一組測試先在原本兩份
+  implementation 上通過，再用來驗收抽取後結果。generate / stream request bytes、
+  folded result/chunks、validation/status/decode failure 均未改變。
+- Google / Ollama 原本逐行同形的 `dto.go`、`validate.go`、`stream.go` 與 core↔wire
+  conversion 已移入 `provider/internal/openaichat`；adapter-local code 只保留
+  construction、HTTP lifecycle、headers 與 vendor error prefix。
+- SSE characterization 明確鎖定既有 observable semantics：malformed event 略過、
+  usage-only event 不產生 `ModelChunk`、`[DONE]` 與 clean EOF 各送一個 terminal chunk；
+  context cancellation 與 `scanner.Err()` 則關閉 channel 而不補 terminal chunk。
+- Grok、Anthropic、MiniMax、Codex、Antigravity 未改動。shared codec 的 public
+  parameter/branch 數沒有高於原本 converter，且 internal package 不形成 SDK public API。
 
 Rollback：
 

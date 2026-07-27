@@ -1,0 +1,12 @@
+event: message
+data: {"choices":[{"delta":{"content":"hel"},"finish_reason":null}]}
+
+data: {malformed
+
+data: {"choices":[{"delta":{"content":"lo"},"finish_reason":null}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"id":"call-2","type":"function","function":{"name":"weather","arguments":"{\"city\":\"Taipei\"}"}}]},"finish_reason":null}]}
+
+data: {"choices":[],"usage":{"prompt_tokens":8,"completion_tokens":3,"total_tokens":11}}
+
+data: [DONE]

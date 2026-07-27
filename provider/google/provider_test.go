@@ -113,35 +113,6 @@ func TestProviderRejectsEmptyAPIKey(t *testing.T) {
 	assert.Contains(t, err.Error(), "credential")
 }
 
-func TestRequestBodyValidate(t *testing.T) {
-	// empty model — must fail
-	err := google.RequestBody{Messages: []google.ChatMessage{{Role: "user"}}}.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "model")
-
-	// empty messages — must fail
-	err = google.RequestBody{Model: "gemini-3-flash-preview"}.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "at least one message")
-
-	// bad role — must fail
-	err = google.RequestBody{
-		Model:    "gemini-3-flash-preview",
-		Messages: []google.ChatMessage{{Role: "bogus"}},
-	}.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "role")
-
-	// happy path — all four roles pass
-	for _, role := range []string{"system", "user", "assistant", "tool"} {
-		err = google.RequestBody{
-			Model:    "gemini-3-flash-preview",
-			Messages: []google.ChatMessage{{Role: role}},
-		}.Validate()
-		assert.NoError(t, err, "role %q should validate", role)
-	}
-}
-
 func TestProviderModelsCatalog(t *testing.T) {
 	catalog := google.DefaultCatalog()
 	require.NotEmpty(t, catalog)

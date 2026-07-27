@@ -116,35 +116,6 @@ func TestProviderSkipsBearerForLocalHost(t *testing.T) {
 	assert.Empty(t, sawAuth)
 }
 
-func TestRequestBodyValidate(t *testing.T) {
-	// empty model — must fail
-	err := ollama.RequestBody{Messages: []ollama.ChatMessage{{Role: "user"}}}.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "model")
-
-	// empty messages — must fail
-	err = ollama.RequestBody{Model: "llama3.2"}.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "at least one message")
-
-	// bad role — must fail
-	err = ollama.RequestBody{
-		Model:    "llama3.2",
-		Messages: []ollama.ChatMessage{{Role: "bogus"}},
-	}.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "role")
-
-	// happy path — all four roles pass
-	for _, role := range []string{"system", "user", "assistant", "tool"} {
-		err = ollama.RequestBody{
-			Model:    "llama3.2",
-			Messages: []ollama.ChatMessage{{Role: role}},
-		}.Validate()
-		assert.NoError(t, err, "role %q should validate", role)
-	}
-}
-
 func TestProviderModelsCatalog(t *testing.T) {
 	catalog := ollama.DefaultCatalog()
 	require.NotEmpty(t, catalog)

@@ -25,6 +25,10 @@ provider 建構只有一條 pipeline：`provider.Options`（尚未解析的 live
 再交給 adapter `New`。env / viper lookup 不進 adapter；`core.Auth` 只承載 credential 與
 provider-specific headers，endpoint 固定是 construction config。
 
+Google 與 Ollama 經跨 adapter golden tests 證明使用相同的 OpenAI Chat Completions
+request、response 與 SSE wire contract，因此共用 internal codec
+`provider/internal/openaichat`。其他 provider 保留各自 DTO，不以欄位相似作為合併依據。
+
 ## 怎麼用 (Getting Started)
 
 engagement 是四階`階梯`，不是一堆獨立開關。每一階都是下一階的子集，往上爬只改設定不改 API。
@@ -136,7 +140,8 @@ agentsdk/
 ├── skill/                     # SKILL.md skills + slash commands + prompt templates (progressive disclosure) + SubAgent/Spawner ("task" tool)
 ├── provider/                  # 7 個 adapter（Generate + Stream capability；已併回 root module）
 │   ├── registry.go            # Entry 是 name / metadata / static catalog / factory 的唯一真相
-│   └── registry_options.go    # Options → ResolvedConfig 的唯一 env / credential resolution pipeline
+│   ├── registry_options.go    # Options → ResolvedConfig 的唯一 env / credential resolution pipeline
+│   └── internal/openaichat/   # Google/Ollama 共用且不暴露為 public API 的 wire codec
 ├── auth / proxy               # 外部獨立 repo，本 repo 無此目錄（auth 為 go.mod require，proxy 已完全脫離）
 ├── utils/                     # 根層共用 utilities umbrella：utils/frontmatter/ + utils/testutil/（FakeProvider / MemStore / CapturingNotifier）
 ├── sample/code-agent/         # 全 harness 組合 CLI（tui 互動 / -p / --json、session flags、.agentsdk 探索）
@@ -172,6 +177,7 @@ client response ← reverse directed pair transform ← provider response
 - **Notifier 結構性相容**: `core.Notifier` 介面方法集與 `gosdk/notify.Notifier` 完全相同,gosdk 的 Multi / Stdout / Slack 直接傳入,無需 adapter
 - **Harness 能力可插拔**: hooks / permission / session / skill（內含 `SubAgent`/`Spawner`）/ wire / prompt 各自為只依賴 `core` 的 package,`runtime.Engine` 持有 nil 即 no-op 的 port,全部由 `agent` (composition root) 注入 — 借鏡 pi 的單向依賴與 claude-code 的 harness 事件面
 - **宣告與組裝分離**: `agent/spec` 是純資料 (只 import `core`),任何只想`讀`或`產生`設定的工具 (wizard / schema generator / web 表單) 不必背上 provider SDK 與 harness 的重量;`agent` 才是知道那些實作存在的組裝層
+- `wire codec` 只在 golden bytes、folded result 與 failure semantics 都相容時局部共用；vendor-specific protocol 保留自己的 DTO
 - **presets, not walls**: 設定挑 preset 而非組合細節 (middleware 鏈的順序是正確性,不是偏好);`WithCustomize` 在全部 stage 之後拿到組好的 `*runtime.Engine`,任何設定詞彙沒覆蓋的都還做得到
 
 ## 執行範例

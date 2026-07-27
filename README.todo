@@ -42,6 +42,9 @@
       `NewWithOAuth` 與 rebuild wrapper，只留 canonical `core.Auth` + vendor header
 - [x] `Phase 5` 單一 provider config pipeline：`Options.Resolve` → `ResolvedConfig` →
       `Entry.New`；七份 private config / functional options / env resolver / register converter 已移除
+- [x] `Phase 6` contract-tested wire sharing：Google / Ollama 的 request、response 與 SSE
+      經跨 adapter golden/httptest 證明相容後，收斂到 internal `openaichat` codec；其他
+      provider DTO 保持 vendor-local
 
 落地後仍未關閉的兩件事：
 
