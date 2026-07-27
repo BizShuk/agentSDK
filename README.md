@@ -26,8 +26,8 @@ provider 建構只有一條 pipeline：`provider.Options`（尚未解析的 live
 provider-specific headers，endpoint 固定是 construction config。
 
 Google 與 Ollama 經跨 adapter golden tests 證明使用相同的 OpenAI Chat Completions
-request、response 與 SSE wire contract，因此共用 internal codec
-`provider/internal/openaichat`。其他 provider 保留各自 DTO，不以欄位相似作為合併依據。
+request、response 與 SSE wire contract，因此共用 provider protocol codec
+`provider/protocol/openaichat`。其他 provider 保留各自 DTO，不以欄位相似作為合併依據。
 
 ## 怎麼用 (Getting Started)
 
@@ -141,7 +141,7 @@ agentsdk/
 ├── provider/                  # 7 個 adapter（Generate + Stream capability；已併回 root module）
 │   ├── registry.go            # Entry 是 name / metadata / static catalog / factory 的唯一真相
 │   ├── registry_options.go    # Options → ResolvedConfig 的唯一 env / credential resolution pipeline
-│   └── internal/openaichat/   # Google/Ollama 共用且不暴露為 public API 的 wire codec
+│   └── protocol/openaichat/   # Google/Ollama 共用的 OpenAI Chat wire protocol codec
 ├── auth / proxy               # 外部獨立 repo，本 repo 無此目錄（auth 為 go.mod require，proxy 已完全脫離）
 ├── utils/                     # 根層共用 utilities umbrella：utils/frontmatter/ + utils/testutil/（FakeProvider / MemStore / CapturingNotifier）
 ├── sample/code-agent/         # 全 harness 組合 CLI（tui 互動 / -p / --json、session flags、.agentsdk 探索）
@@ -193,7 +193,19 @@ go run . --fake --sessions         # session 列表
 go run . --fake                     # 互動 TUI
 ```
 
-`sample/logdoctor-agent` — 每分鐘分析 `~/.config/*/logs/*` 的新增內容：
+`sample/log-agent-v2` — scheduler 先建立 batch，再透過 `agent.WithListener`
+進入完整 agent lifecycle：
+
+```bash
+export MINIMAX_API_KEY=...
+go run ./sample/log-agent-v2 --interval 1m
+```
+
+第一次掃描會先等待一分鐘；每個非空 batch 都使用新的 `agent.Run`，成功後才
+提交 cursor。完整行為見
+[`sample/log-agent-v2/README.md`](sample/log-agent-v2/README.md)。
+
+`sample/logdoctor-agent` — 比較用的精簡 `agent.OnceStream` 路徑：
 
 ```bash
 cd sample/logdoctor-agent

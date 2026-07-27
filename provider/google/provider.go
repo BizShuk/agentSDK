@@ -13,7 +13,7 @@ import (
 
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/provider"
-	"github.com/bizshuk/agentsdk/provider/internal/openaichat"
+	"github.com/bizshuk/agentsdk/provider/protocol/openaichat"
 )
 
 const defaultModel = "gemini-3-flash-preview"

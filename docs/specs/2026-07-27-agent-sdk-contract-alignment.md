@@ -466,7 +466,7 @@ Rollback：
 
 - 先為 Google / Ollama 建 request JSON、non-stream response、SSE chunk golden tests。
 - 只有 golden bytes 與 error semantics 都一致時，抽到
-  `provider/internal/openaichat`。
+  `provider/protocol/openaichat`。
 - Grok、Anthropic、MiniMax、Codex、Antigravity 維持各自 DTO，除非另外通過同等測試。
 - shared SSE decoder 必須保留 context cancellation、terminal chunk、usage、
   malformed event 與 `scanner.Err()` semantics。
@@ -483,17 +483,17 @@ Rollback：
   implementation 上通過，再用來驗收抽取後結果。generate / stream request bytes、
   folded result/chunks、validation/status/decode failure 均未改變。
 - Google / Ollama 原本逐行同形的 `dto.go`、`validate.go`、`stream.go` 與 core↔wire
-  conversion 已移入 `provider/internal/openaichat`；adapter-local code 只保留
+conversion 已移入 `provider/protocol/openaichat`；adapter-local code 只保留
   construction、HTTP lifecycle、headers 與 vendor error prefix。
 - SSE characterization 明確鎖定既有 observable semantics：malformed event 略過、
   usage-only event 不產生 `ModelChunk`、`[DONE]` 與 clean EOF 各送一個 terminal chunk；
   context cancellation 與 `scanner.Err()` 則關閉 channel 而不補 terminal chunk。
 - Grok、Anthropic、MiniMax、Codex、Antigravity 未改動。shared codec 的 public
-  parameter/branch 數沒有高於原本 converter，且 internal package 不形成 SDK public API。
+  parameter/branch 數沒有高於原本 converter；共用 wire codec 位於 provider protocol package。
 
 Rollback：
 
-- internal codec 不暴露 public API，可直接回復 provider-local implementation。
+- provider protocol codec 可直接回復為 provider-local implementation。
 
 ## 跨 phase 驗收
 
