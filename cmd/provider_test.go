@@ -21,15 +21,6 @@ type streamStub struct {
 	chunks []core.ModelChunk
 }
 
-func (streamStub) ID() string               { return "stream-stub" }
-func (streamStub) Models() []core.ModelSpec { return nil }
-func (streamStub) AuthSchemes() []string    { return nil }
-func (streamStub) CountTokens(context.Context, []core.Message) (int, error) {
-	return 0, nil
-}
-func (streamStub) Generate(context.Context, core.ModelRequest) (core.ModelResult, error) {
-	return core.ModelResult{}, nil
-}
 func (s streamStub) Stream(context.Context, core.ModelRequest) (<-chan core.ModelChunk, error) {
 	ch := make(chan core.ModelChunk, len(s.chunks))
 	for _, chunk := range s.chunks {

@@ -604,12 +604,7 @@ var registryProviderSequence atomic.Uint64
 
 type registryAdapter struct {
 	*testutil.ScriptedProvider
-	name     string
-	metadata provider.Metadata
 }
-
-func (a *registryAdapter) Name() string                { return a.name }
-func (a *registryAdapter) Metadata() provider.Metadata { return a.metadata }
 
 func TestRunBuildsRegistryProviderOnce(t *testing.T) {
 	t.Chdir(t.TempDir())
@@ -625,8 +620,6 @@ func TestRunBuildsRegistryProviderOnce(t *testing.T) {
 			scripted.EnqueueEndTurn("done")
 			return &registryAdapter{
 				ScriptedProvider: scripted,
-				name:             name,
-				metadata:         metadata,
 			}, nil
 		},
 	})

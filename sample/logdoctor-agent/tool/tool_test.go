@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
-	sdkcore "github.com/bizshuk/agentsdk/core"
 	domain "github.com/bizshuk/agentsdk/sample/logdoctor-agent/core"
 	"github.com/bizshuk/agentsdk/sample/logdoctor-agent/tool"
 	sdktool "github.com/bizshuk/agentsdk/tool"
@@ -20,15 +19,15 @@ import (
 
 // stubSource is a controllable Source for tool tests.
 type stubSource struct {
-	out []sdkcore.Observation
-	ch  chan sdkcore.Observation
+	out []core.Observation
+	ch  chan core.Observation
 }
 
-func newStubSource(out ...sdkcore.Observation) *stubSource {
-	return &stubSource{out: out, ch: make(chan sdkcore.Observation, len(out))}
+func newStubSource(out ...core.Observation) *stubSource {
+	return &stubSource{out: out, ch: make(chan core.Observation, len(out))}
 }
 
-func (s *stubSource) Observations(ctx context.Context) <-chan sdkcore.Observation {
+func (s *stubSource) Observations(ctx context.Context) <-chan core.Observation {
 	go func() {
 		defer close(s.ch)
 		for _, p := range s.out {
@@ -43,7 +42,7 @@ func (s *stubSource) Observations(ctx context.Context) <-chan sdkcore.Observatio
 }
 
 func TestReadLogTailExtractsFirstN(t *testing.T) {
-	src := newStubSource(sdkcore.Observation{
+	src := newStubSource(core.Observation{
 		ObservedAt: time.Unix(0, 0),
 		Payload:    "a\nb\nc\nd\ne",
 	})
@@ -66,7 +65,7 @@ func TestReadLogTailExtractsFirstN(t *testing.T) {
 }
 
 func TestReadLogTailDefaultsTo20(t *testing.T) {
-	src := newStubSource(sdkcore.Observation{
+	src := newStubSource(core.Observation{
 		ObservedAt: time.Unix(0, 0),
 		Payload:    "a\nb",
 	})
@@ -82,7 +81,7 @@ func TestReadLogTailDefaultsTo20(t *testing.T) {
 }
 
 func TestReadLogTailBadArgs(t *testing.T) {
-	src := newStubSource(sdkcore.Observation{Payload: "x"})
+	src := newStubSource(core.Observation{Payload: "x"})
 	reg := sdktool.NewRegistry()
 	tool.NewReadLogTail(src).Register(reg)
 

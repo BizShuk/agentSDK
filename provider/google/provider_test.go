@@ -2,6 +2,7 @@ package google_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,13 +18,22 @@ import (
 // Google Generative AI's OpenAI-compatible endpoint. The handler
 // inspects the /chat/completions request body and returns a small
 // canned response.
-func newFakeGoogle(t *testing.T) *httptest.Server {
+func newFakeGoogle(t *testing.T) (*httptest.Server, *string) {
 	t.Helper()
+	gotModel := ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/chat/completions" {
 			http.NotFound(w, r)
 			return
 		}
+		var req struct {
+			Model string `json:"model"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		gotModel = req.Model
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 		  "id": "test-id",
@@ -34,15 +44,13 @@ func newFakeGoogle(t *testing.T) *httptest.Server {
 		}`))
 	}))
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, &gotModel
 }
 
 func TestProviderRoundTripAgainstFakeGoogle(t *testing.T) {
-	srv := newFakeGoogle(t)
+	srv, gotModel := newFakeGoogle(t)
 	p, err := google.New(google.WithBaseURL(srv.URL), google.WithAPIKey("test-key"))
 	require.NoError(t, err)
-	assert.Equal(t, "google:gemini-3-flash-preview", p.Name())
-	assert.Equal(t, "google", p.ID())
 
 	req := core.ModelRequest{Messages: []core.Message{
 		{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"}}},
@@ -52,6 +60,7 @@ func TestProviderRoundTripAgainstFakeGoogle(t *testing.T) {
 	assert.Equal(t, "hello from google", mr.Text)
 	assert.Equal(t, "stop", mr.StopReason)
 	assert.Equal(t, 9, mr.Usage.TotalTokens)
+	assert.Equal(t, "gemini-3-flash-preview", *gotModel)
 }
 
 func TestProviderIncludesBearerHeader(t *testing.T) {
@@ -155,16 +164,8 @@ func TestAuthResolvers(t *testing.T) {
 	})
 }
 
-func TestProviderAuthSchemes(t *testing.T) {
-	p, err := google.New(google.WithBaseURL("http://example/v1beta/openai"), google.WithAPIKey("test-key"))
-	require.NoError(t, err)
-	assert.Equal(t, []string{"api_key"}, p.AuthSchemes())
-}
-
 func TestProviderModelsCatalog(t *testing.T) {
-	p, err := google.New(google.WithBaseURL("http://example/v1beta/openai"), google.WithAPIKey("test-key"))
-	require.NoError(t, err)
-	catalog := p.Models()
+	catalog := google.DefaultCatalog()
 	require.NotEmpty(t, catalog)
 	ids := make([]string, 0, len(catalog))
 	for _, m := range catalog {

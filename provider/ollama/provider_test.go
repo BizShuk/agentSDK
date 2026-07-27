@@ -2,6 +2,7 @@ package ollama_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,13 +17,22 @@ import (
 // newFakeOllama stands up a minimal HTTP server that pretends to be
 // Ollama / an OpenAI-compatible endpoint. The handler inspects the
 // /chat/completions request body and returns a small canned response.
-func newFakeOllama(t *testing.T) *httptest.Server {
+func newFakeOllama(t *testing.T) (*httptest.Server, *string) {
 	t.Helper()
+	gotModel := ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/chat/completions" {
 			http.NotFound(w, r)
 			return
 		}
+		var req struct {
+			Model string `json:"model"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		gotModel = req.Model
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 		  "id": "test-id",
@@ -33,15 +43,13 @@ func newFakeOllama(t *testing.T) *httptest.Server {
 		}`))
 	}))
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, &gotModel
 }
 
 func TestProviderRoundTripAgainstFakeOllama(t *testing.T) {
-	srv := newFakeOllama(t)
+	srv, gotModel := newFakeOllama(t)
 	p, err := ollama.New(ollama.WithBaseURL(srv.URL))
 	require.NoError(t, err)
-	assert.Equal(t, "ollama:llama3.2", p.Name())
-	assert.Equal(t, "ollama", p.ID())
 
 	req := core.ModelRequest{Messages: []core.Message{
 		{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"}}},
@@ -51,6 +59,7 @@ func TestProviderRoundTripAgainstFakeOllama(t *testing.T) {
 	assert.Equal(t, "hello from ollama", mr.Text)
 	assert.Equal(t, "stop", mr.StopReason)
 	assert.Equal(t, 9, mr.Usage.TotalTokens)
+	assert.Equal(t, "llama3.2", *gotModel)
 }
 
 func TestProviderIncludesBearerHeader(t *testing.T) {
@@ -165,17 +174,8 @@ func TestAuthResolvers(t *testing.T) {
 	})
 }
 
-func TestProviderAuthSchemes(t *testing.T) {
-	p, err := ollama.New(ollama.WithBaseURL("http://example/v1"))
-	require.NoError(t, err)
-	// Order: keyless first (matches anthropic.New convention), api_key second.
-	assert.Equal(t, []string{"keyless", "api_key"}, p.AuthSchemes())
-}
-
 func TestProviderModelsCatalog(t *testing.T) {
-	p, err := ollama.New(ollama.WithBaseURL("http://example/v1"))
-	require.NoError(t, err)
-	catalog := p.Models()
+	catalog := ollama.DefaultCatalog()
 	require.NotEmpty(t, catalog)
 	// We always ship llama3.2 — it's our default model id.
 	ids := make([]string, 0, len(catalog))

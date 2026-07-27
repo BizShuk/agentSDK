@@ -24,8 +24,7 @@ func TestNewRequiresAPIKey(t *testing.T) {
 func TestNewAcceptsExplicitAPIKey(t *testing.T) {
 	p, err := codex.New(codex.WithAPIKey("sk-test"))
 	require.NoError(t, err)
-	assert.Equal(t, "codex:gpt-5.5", p.Name())
-	assert.Equal(t, "codex", p.ID())
+	assert.NotNil(t, p)
 }
 
 func TestNewWithOAuthRequiresAccessToken(t *testing.T) {
@@ -41,7 +40,7 @@ func TestNewWithOAuthSetsBearerOverAPIKey(t *testing.T) {
 	}
 	p, err := codex.NewWithOAuth(creds, codex.WithAPIKey("sk-fallback"))
 	require.NoError(t, err)
-	assert.Equal(t, "codex:gpt-5.5", p.Name())
+	assert.NotNil(t, p)
 	// Bearer wins. We exercise this further in TestBearerHeaderFromOAuth.
 }
 
@@ -262,16 +261,6 @@ func TestOAuthCredentialsIsExpired(t *testing.T) {
 	assert.False(t, c.IsExpired())
 }
 
-func TestCountTokensHeuristic(t *testing.T) {
-	p, err := codex.New(codex.WithAPIKey("k"))
-	require.NoError(t, err)
-	n, err := p.CountTokens(context.Background(), []core.Message{
-		{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hello world"}}},
-	})
-	require.NoError(t, err)
-	assert.Greater(t, n, 0)
-}
-
 func TestCodexUserAgentFormat(t *testing.T) {
 	ua := codex.CodexUserAgent()
 	assert.True(t, strings.HasPrefix(ua, "codex_cli_rs/0.125.0"))
@@ -296,9 +285,7 @@ func TestGeneratePropagatesHTTPError(t *testing.T) {
 }
 
 func TestDefaultCatalogReturnsExpectedFamily(t *testing.T) {
-	p, err := codex.New(codex.WithAPIKey("k"))
-	require.NoError(t, err)
-	models := p.Models()
+	models := codex.DefaultCatalog()
 	require.NotEmpty(t, models)
 	// Sanity: the catalog MUST ship the gpt-5.6 family variants
 	// (gpt-5.6-sol is the lite one — the wire contract pins

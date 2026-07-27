@@ -202,8 +202,16 @@ func TestNewBuildsAProvider(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, p)
-	assert.NotEmpty(t, p.ID())
-	assert.NotEmpty(t, p.Metadata().Label, "a constructed adapter must carry its descriptor")
+
+	var runtimeProvider core.Provider = p
+	var streamProvider core.StreamProvider = p
+	assert.NotNil(t, runtimeProvider)
+	assert.NotNil(t, streamProvider)
+
+	entry, ok := provider.Lookup("ollama")
+	require.True(t, ok)
+	assert.NotEmpty(t, entry.Metadata.Label, "the registry entry owns discovery metadata")
+	assert.NotEmpty(t, entry.Catalog(), "the registry entry owns the static catalog")
 }
 
 func TestRegisterPanicsOnDuplicate(t *testing.T) {

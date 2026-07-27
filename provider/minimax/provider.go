@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/provider"
 )
 
 // Provider implements core.Provider against the minimax Anthropic-compat
@@ -60,19 +59,6 @@ func New(opts ...Option) (*Provider, error) {
 		client:  &http.Client{Timeout: 120 * time.Second},
 	}, nil
 }
-
-// ID implements core.Provider. Returns the family alone — "minimax".
-func (p *Provider) ID() string { return "minimax" }
-
-// Name is a convenience accessor returning "minimax:<model>".
-func (p *Provider) Name() string { return "minimax:" + p.model }
-
-// Models implements core.Provider. Returns the static catalog.
-func (p *Provider) Models() []core.ModelSpec { return DefaultCatalog() }
-
-// AuthSchemes implements core.Provider. minimax accepts API keys only —
-// no OAuth flow is exposed.
-func (p *Provider) AuthSchemes() []string { return []string{"api_key"} }
 
 // Generate implements core.Provider.
 func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
@@ -111,7 +97,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 	return fromResponse(r), nil
 }
 
-// Stream implements core.Provider. Returns a channel of model chunks;
+// Stream implements core.StreamProvider. Returns a channel of model chunks;
 // the terminal chunk carries Done=true.
 func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
 	body, err := toRequestBody(req, p.model)
@@ -137,21 +123,6 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 	// Caller is responsible for closing resp.Body via channel completion;
 	// ParseStream drains to EOF.
 	return ParseStream(ctx, resp.Body), nil
-}
-
-// CountTokens implements core.Provider via a chars/4 + 1 per-message
-// heuristic. minimax does not expose a direct count endpoint, so callers
-// needing exact counts should batch a count_tokens API when available.
-func (p *Provider) CountTokens(_ context.Context, msgs []core.Message) (int, error) {
-	n := 0
-	for _, m := range msgs {
-		for _, c := range m.Parts {
-			if c.Kind == core.PART_KIND_PLAIN_TEXT {
-				n += len(c.Text)/4 + 1
-			}
-		}
-	}
-	return n, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -292,8 +263,3 @@ func maxTokensOrDefault(req core.ModelRequest) int {
 	}
 	return 4096
 }
-
-// Metadata implements provider.Adapter. Returns the package-level
-// minimax descriptor so direct constructors (New) produce adapters
-// that agree with the registered Entry.Metadata.
-func (p *Provider) Metadata() provider.Metadata { return adapterMetadata() }

@@ -18,14 +18,6 @@ type recordingAdapter struct {
 	calls int
 }
 
-func (r *recordingAdapter) ID() string               { return "recording" }
-func (r *recordingAdapter) Name() string             { return "recording:test" }
-func (r *recordingAdapter) Models() []core.ModelSpec { return nil }
-func (r *recordingAdapter) AuthSchemes() []string    { return []string{"api_key"} }
-func (r *recordingAdapter) Metadata() provider.Metadata {
-	return provider.Metadata{Label: "recording"}
-}
-
 func (r *recordingAdapter) Generate(_ context.Context, req core.ModelRequest) (core.ModelResult, error) {
 	r.calls++
 	r.seen = append(r.seen, req.Auth)
@@ -40,14 +32,14 @@ func (r *recordingAdapter) Stream(_ context.Context, req core.ModelRequest) (<-c
 	return ch, nil
 }
 
-func (r *recordingAdapter) CountTokens(context.Context, []core.Message) (int, error) { return 0, nil }
+var _ provider.Adapter = (*recordingAdapter)(nil)
 
 func TestDecoratorResolvesOnEveryCall(t *testing.T) {
 	// The whole point of a Decorator over a construction-time credential:
 	// an OAuth token that rotates mid-run must reach the next request.
 	rec := &recordingAdapter{}
 	n := 0
-	dec := provider.WithDecorator(rec, func(context.Context) (core.Auth, error) {
+	dec := provider.WithDecorator("recording", rec, func(context.Context) (core.Auth, error) {
 		n++
 		return core.Auth{Bearer: []string{"tok-1", "tok-2", "tok-3"}[n-1]}, nil
 	})
@@ -66,7 +58,7 @@ func TestDecoratorResolvesOnEveryCall(t *testing.T) {
 func TestDecoratorAlsoCoversStream(t *testing.T) {
 	// A long stream is exactly where a construction-time token expires.
 	rec := &recordingAdapter{}
-	dec := provider.WithDecorator(rec, func(context.Context) (core.Auth, error) {
+	dec := provider.WithDecorator("recording", rec, func(context.Context) (core.Auth, error) {
 		return core.Auth{Bearer: "streamed"}, nil
 	})
 	_, err := dec.Stream(context.Background(), core.ModelRequest{})
@@ -79,7 +71,7 @@ func TestExplicitPerCallAuthOutranksTheDecorator(t *testing.T) {
 	// A caller naming a credential for one request is speaking about
 	// that request; the ambient decorator only fills the gaps.
 	rec := &recordingAdapter{}
-	dec := provider.WithDecorator(rec, func(context.Context) (core.Auth, error) {
+	dec := provider.WithDecorator("recording", rec, func(context.Context) (core.Auth, error) {
 		return core.Auth{Bearer: "ambient", Headers: map[string]string{"x-from": "decorator"}}, nil
 	})
 
@@ -98,20 +90,21 @@ func TestDecoratorErrorAbortsBeforeTheAdapterIsCalled(t *testing.T) {
 	// an unauthenticated request.
 	rec := &recordingAdapter{}
 	want := errors.New("store unavailable")
-	dec := provider.WithDecorator(rec, func(context.Context) (core.Auth, error) {
+	dec := provider.WithDecorator("recording", rec, func(context.Context) (core.Auth, error) {
 		return core.Auth{}, want
 	})
 
 	_, err := dec.Generate(context.Background(), core.ModelRequest{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, want)
+	assert.ErrorContains(t, err, "provider recording")
 	assert.Zero(t, rec.calls, "the adapter must not be called with no credential")
 }
 
 func TestNilDecoratorReturnsTheAdapterUnchanged(t *testing.T) {
 	// So a caller can pass Options.Decorator through unconditionally.
 	rec := &recordingAdapter{}
-	assert.Same(t, provider.Adapter(rec), provider.WithDecorator(rec, nil))
+	assert.Same(t, provider.Adapter(rec), provider.WithDecorator("recording", rec, nil))
 }
 
 func TestAuthMergeDoesNotMutateEitherSide(t *testing.T) {

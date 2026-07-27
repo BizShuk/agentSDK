@@ -27,27 +27,6 @@ type ScriptedProvider struct {
 // NewScriptedProvider returns the canned provider.
 func NewScriptedProvider() *ScriptedProvider { return &ScriptedProvider{} }
 
-// ID implements core.Provider.
-func (p *ScriptedProvider) ID() string { return "fake-scripted" }
-
-// Name implements core.Provider.
-func (p *ScriptedProvider) Name() string { return "fake-scripted" }
-
-// Models implements core.Provider — the scripted provider advertises a
-// single deterministic entry so picker UIs can render it.
-func (p *ScriptedProvider) Models() []core.ModelSpec {
-	return []core.ModelSpec{{
-		ID: "fake-scripted", Family: "fake", Reasoning: false,
-		Input:         []core.Modality{core.MODALITY_TEXT},
-		ContextWindow: 128000, MaxTokens: 4096,
-	}}
-}
-
-// AuthSchemes implements core.Provider.
-func (p *ScriptedProvider) AuthSchemes() []string {
-	return []string{"keyless"}
-}
-
 // Generate returns the next scripted ModelResult. After the last one
 // (end_turn), it keeps returning end_turn so a buggy caller never crashes.
 func (p *ScriptedProvider) Generate(_ context.Context, _ core.ModelRequest) (core.ModelResult, error) {
@@ -82,15 +61,10 @@ func (p *ScriptedProvider) Generate(_ context.Context, _ core.ModelRequest) (cor
 	}
 }
 
-// Stream implements core.Provider.
+// Stream implements core.StreamProvider.
 func (p *ScriptedProvider) Stream(_ context.Context, _ core.ModelRequest) (<-chan core.ModelChunk, error) {
 	ch := make(chan core.ModelChunk, 1)
 	defer close(ch)
 	ch <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: "diagnostic complete", Done: true}
 	return ch, nil
-}
-
-// CountTokens implements core.Provider.
-func (p *ScriptedProvider) CountTokens(_ context.Context, msgs []core.Message) (int, error) {
-	return len(msgs), nil
 }

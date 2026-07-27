@@ -36,12 +36,20 @@ func (stubApproval) Decide(_ struct{}, _ core.AutonomyLevel, _ core.CallToolInst
 	return core.APPROVAL_ACTION_ALLOW
 }
 
+type generateOnlyProvider struct {
+	calls int
+}
+
+func (p *generateOnlyProvider) Generate(context.Context, core.ModelRequest) (core.ModelResult, error) {
+	p.calls++
+	return core.ModelResult{Text: "done", StopReason: "end_turn"}, nil
+}
+
 // TestReActOneToolCall drives a single read-then-end loop:
 //
-//	FakeProvider queues (1) end_turn → expect loop to exit on DONE.
+//	A Generate-only provider returns end_turn → expect loop to exit on DONE.
 func TestReActEndTurnExitsLoop(t *testing.T) {
-	prov := testutil.NewScriptedProvider()
-	prov.EnqueueEndTurn("done")
+	prov := &generateOnlyProvider{}
 
 	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
 		core.REASON_REACT: reasoning.NewThinkThenAct(),
@@ -58,7 +66,7 @@ func TestReActEndTurnExitsLoop(t *testing.T) {
 	final, err := loop.Run(context.Background(), state)
 	require.NoError(t, err)
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, final.Status)
-	assert.Equal(t, 1, prov.RequestCount())
+	assert.Equal(t, 1, prov.calls)
 }
 
 // TestReActOneToolCall exercises CALL_TOOL → CALL_MODEL → DONE:

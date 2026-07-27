@@ -223,16 +223,8 @@ func TestMaxTokensExplicit(t *testing.T) {
 	assert.Equal(t, float64(1024), sent["max_tokens"])
 }
 
-func TestProviderIDAndModels(t *testing.T) {
-	p, err := minimax.New(
-		minimax.WithAPIKey("sk-test"),
-		minimax.WithBaseURL("https://api.minimax.io/anthropic"),
-	)
-	require.NoError(t, err)
-	assert.Equal(t, "minimax", p.ID())
-	assert.Equal(t, "minimax:MiniMax-M3", p.Name())
-	assert.Equal(t, []string{"api_key"}, p.AuthSchemes())
-	assert.NotEmpty(t, p.Models())
+func TestDefaultCatalog(t *testing.T) {
+	assert.NotEmpty(t, minimax.DefaultCatalog())
 }
 
 func TestStreamAgainstFakeServer(t *testing.T) {
@@ -266,14 +258,4 @@ func TestStreamAgainstFakeServer(t *testing.T) {
 	}
 	assert.True(t, done)
 	assert.True(t, strings.Contains(saw, "hi"))
-}
-
-func TestCountTokensHeuristic(t *testing.T) {
-	p, err := minimax.New(minimax.WithAPIKey("sk-test"))
-	require.NoError(t, err)
-	n, err := p.CountTokens(context.Background(), []core.Message{
-		{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hello world"}}},
-	})
-	require.NoError(t, err)
-	assert.Greater(t, n, 0)
 }

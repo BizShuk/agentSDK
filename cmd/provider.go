@@ -1,7 +1,7 @@
 // Package cmd hosts the cobra subcommands mounted by the root agentsdk
 // binary. provider.go wires the "provider" subcommand — a thin smoke-test
-// CLI that calls core.Provider.Generate / Stream directly, with no Agent,
-// Engine, or harness in the path.
+// CLI that calls core.Provider.Generate or core.StreamProvider.Stream
+// directly, with no Agent, Engine, or harness in the path.
 package cmd
 
 import (
@@ -49,7 +49,7 @@ var ProviderCmd = &cobra.Command{
 	Short: "Run a single prompt against a provider, bypassing the agent loop",
 	Long: strings.TrimSpace(`
 provider is the minimal smoke-test CLI for the provider adapter family.
-It calls core.Provider.Generate (or Stream with --stream) directly —
+It calls core.Provider.Generate (or core.StreamProvider.Stream with --stream) directly —
 no Agent, Engine, tools, or harness — so any provider regression is
 exposed immediately.
 
@@ -104,7 +104,11 @@ Examples:
 		}
 
 		if ProviderListModels {
-			return dumpCatalog(cmd.Context(), errOut, out, prov, label)
+			var static []core.ModelSpec
+			if entry.Catalog != nil {
+				static = entry.Catalog()
+			}
+			return dumpCatalog(cmd.Context(), errOut, out, prov, label, static)
 		}
 
 		prompt := strings.TrimSpace(strings.Join(args, " "))
@@ -114,8 +118,12 @@ Examples:
 
 		req := buildRequest(prompt, ProviderSystem, ProviderMaxTokens)
 
+		model := ProviderModel
+		if model == "" {
+			model = "default"
+		}
 		fmt.Fprintf(errOut, "[provider] %s | model=%s | stream=%v\n",
-			label, effectiveModel(prov), ProviderStream)
+			label, model, ProviderStream)
 
 		if ProviderStream {
 			return runStream(cmd.Context(), prov, req, out, ProviderAsJSON)
@@ -224,16 +232,6 @@ func envLookup(key string) string {
 	return os.Getenv(key)
 }
 
-// effectiveModel returns the model the provider was built with. Falls back
-// to its ID when the adapter doesn't expose a separate accessor.
-func effectiveModel(p core.Provider) string {
-	type named interface{ Name() string }
-	if n, ok := p.(named); ok {
-		return n.Name()
-	}
-	return p.ID()
-}
-
 // ---------------------------------------------------------------------------
 // request building
 // ---------------------------------------------------------------------------
@@ -284,7 +282,7 @@ func runGenerate(ctx context.Context, prov core.Provider, req core.ModelRequest,
 	return nil
 }
 
-func runStream(ctx context.Context, prov core.Provider, req core.ModelRequest,
+func runStream(ctx context.Context, prov core.StreamProvider, req core.ModelRequest,
 	out io.Writer, asJSON bool,
 ) error {
 	ch, err := prov.Stream(ctx, req)
@@ -328,8 +326,14 @@ func runStream(ctx context.Context, prov core.Provider, req core.ModelRequest,
 // catalog when the provider does not implement the live port or the live
 // call fails (offline, bad key). The source is reported on stderr so the
 // stdout list stays clean for piping.
-func dumpCatalog(ctx context.Context, errOut, out io.Writer, prov core.Provider, label string) error {
-	specs := prov.Models()
+func dumpCatalog(
+	ctx context.Context,
+	errOut, out io.Writer,
+	prov core.Provider,
+	label string,
+	static []core.ModelSpec,
+) error {
+	specs := static
 	source := "static"
 	if lister, ok := prov.(core.ModelLister); ok {
 		if live, err := lister.ListModels(ctx); err != nil {

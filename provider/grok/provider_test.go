@@ -2,6 +2,7 @@ package grok_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,15 +16,24 @@ import (
 )
 
 // newFakeGrok stands up a minimal HTTP server that pretends to be the
-// xAI Grok chat-completions endpoint. The handler returns a canned
-// OpenAI-compat response regardless of body shape.
-func newFakeGrok(t *testing.T) *httptest.Server {
+// xAI Grok chat-completions endpoint. The handler records the requested
+// model and returns a canned OpenAI-compatible response.
+func newFakeGrok(t *testing.T) (*httptest.Server, *string) {
 	t.Helper()
+	gotModel := ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/chat/completions" {
 			http.NotFound(w, r)
 			return
 		}
+		var req struct {
+			Model string `json:"model"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		gotModel = req.Model
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 		  "id": "test-id",
@@ -34,7 +44,7 @@ func newFakeGrok(t *testing.T) *httptest.Server {
 		}`))
 	}))
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, &gotModel
 }
 
 func TestNewRequiresAPIKey(t *testing.T) {
@@ -48,19 +58,17 @@ func TestNewFromEnv(t *testing.T) {
 	t.Setenv("XAI_API_KEY", "xai-from-env")
 	p, err := grok.New()
 	require.NoError(t, err)
-	assert.Equal(t, "grok:grok-3", p.Name())
-	assert.Equal(t, "grok", p.ID())
+	assert.NotNil(t, p)
 }
 
 func TestGenerateAgainstFakeServer(t *testing.T) {
-	srv := newFakeGrok(t)
+	srv, gotModel := newFakeGrok(t)
 	p, err := grok.New(
 		grok.WithBaseURL(srv.URL),
 		grok.WithAPIKey("xai-test"),
 		grok.WithModel("grok-4"),
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "grok:grok-4", p.Name())
 
 	req := core.ModelRequest{Messages: []core.Message{
 		{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"}}},
@@ -70,6 +78,7 @@ func TestGenerateAgainstFakeServer(t *testing.T) {
 	assert.Equal(t, "hello from grok", mr.Text)
 	assert.Equal(t, "stop", mr.StopReason)
 	assert.Equal(t, 12, mr.Usage.TotalTokens)
+	assert.Equal(t, "grok-4", *gotModel)
 }
 
 func TestBearerHeaderFromAPIKey(t *testing.T) {
@@ -196,16 +205,8 @@ func TestOAuthCredentialsIsExpired(t *testing.T) {
 	assert.True(t, withinGrace.IsExpired(), "within 60s grace window should be expired")
 }
 
-func TestProviderAuthSchemes(t *testing.T) {
-	p, err := grok.New(grok.WithAPIKey("xai-test"))
-	require.NoError(t, err)
-	assert.Equal(t, []string{"api_key", "oauth"}, p.AuthSchemes())
-}
-
 func TestProviderModelsContainsExpectedIDs(t *testing.T) {
-	p, err := grok.New(grok.WithAPIKey("xai-test"))
-	require.NoError(t, err)
-	models := p.Models()
+	models := grok.DefaultCatalog()
 	ids := make([]string, 0, len(models))
 	for _, m := range models {
 		ids = append(ids, m.ID)

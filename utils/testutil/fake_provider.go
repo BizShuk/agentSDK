@@ -65,22 +65,6 @@ func (s *ScriptedProvider) EnqueueEndTurn(text string) {
 	})
 }
 
-// ID implements core.Provider.
-func (s *ScriptedProvider) ID() string { return "scripted" }
-
-// Name is a backward-compat alias for ID.
-// Deprecated: use ID.
-func (s *ScriptedProvider) Name() string { return s.ID() }
-
-// Models implements core.Provider — the scripted provider advertises a
-// single dummy model so catalog-driven tests can run.
-func (s *ScriptedProvider) Models() []core.ModelSpec {
-	return []core.ModelSpec{{ID: "scripted-1", Family: "scripted"}}
-}
-
-// AuthSchemes implements core.Provider.
-func (s *ScriptedProvider) AuthSchemes() []string { return []string{"api_key"} }
-
 // Generate pops the next scripted result. Errors if the queue is empty.
 func (s *ScriptedProvider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
 	s.mu.Lock()
@@ -116,12 +100,6 @@ func (s *ScriptedProvider) Stream(ctx context.Context, req core.ModelRequest) (<
 	defer close(ch)
 	ch <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: r.Text, Done: true}
 	return ch, nil
-}
-
-// CountTokens returns 1 per message — good enough for tests that don't
-// assert on token usage.
-func (s *ScriptedProvider) CountTokens(ctx context.Context, msgs []core.Message) (int, error) {
-	return len(msgs), nil
 }
 
 // LastRequest returns the most recent request the provider received —

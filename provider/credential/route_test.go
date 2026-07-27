@@ -63,36 +63,3 @@ func TestEveryRoutedNameIsARegisteredProvider(t *testing.T) {
 			"credential route names %q but no such adapter is registered", name)
 	}
 }
-
-// TestRoutedKindsAreAdvertisedByTheAdapter keeps the table honest: a
-// route promising a credential class the adapter refuses would resolve a
-// credential and then fail at the first request, which is the worst place
-// to learn about it.
-//
-// The check is against AuthSchemes, NOT against Metadata.OAuthEnv /
-// APIKeyEnv. Those describe how the registry resolves a credential from
-// the ENVIRONMENT; a route describes how credential resolves one from a
-// STORE. They are orthogonal, and conflating them reads antigravity —
-// which accepts an API key from the environment but only OAuth from auth
-// — as a contradiction when it is simply both.
-func TestRoutedKindsAreAdvertisedByTheAdapter(t *testing.T) {
-	for _, name := range credential.Names() {
-		entry, ok := provider.Lookup(name)
-		require.Truef(t, ok, "provider %q must be registered", name)
-
-		// A dummy key: we are asking what the adapter ACCEPTS, which is
-		// static, not whether this credential works.
-		p, err := entry.New(provider.Options{APIKey: "dummy"})
-		require.NoErrorf(t, err, "provider %q must construct for capability inspection", name)
-
-		advertised := map[string]bool{}
-		for _, s := range p.AuthSchemes() {
-			advertised[s] = true
-		}
-		for _, kind := range credential.Kinds(name) {
-			assert.Truef(t, advertised[kind],
-				"credential routes %s/%s but the adapter advertises only %v",
-				name, kind, p.AuthSchemes())
-		}
-	}
-}

@@ -4,26 +4,17 @@ import (
 	"github.com/bizshuk/agentsdk/provider"
 )
 
-// adapterMetadata is the single source of truth for google's
-// registration descriptor. Both Entry.Metadata and *Provider.Metadata()
-// return this same value; the function form keeps APIKeyEnv immutable
-// across calls.
-func adapterMetadata() provider.Metadata {
-	return provider.Metadata{
-		Label:      "Google Gemini",
-		APIKeyEnv:  []string{"GOOGLE_API_KEY"},
-		BaseURLEnv: "GOOGLE_BASE_URL",
-	}
-}
-
 // Compile-time: ensure *Provider satisfies provider.Adapter.
 var _ provider.Adapter = (*Provider)(nil)
 
 func init() {
-	meta := adapterMetadata()
 	provider.Register(provider.Entry{
-		Name:     "google",
-		Metadata: meta,
+		Name: "google",
+		Metadata: provider.Metadata{
+			Label:      "Google Gemini",
+			APIKeyEnv:  []string{"GOOGLE_API_KEY"},
+			BaseURLEnv: "GOOGLE_BASE_URL",
+		},
 		New: func(o provider.Options) (provider.Adapter, error) {
 			var opts []Option
 			if o.Model != "" {

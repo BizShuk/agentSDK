@@ -20,26 +20,9 @@ type recordingProvider struct {
 	calls int
 }
 
-func (p *recordingProvider) ID() string   { return "recording" }
-func (p *recordingProvider) Name() string { return "recording" }
-func (p *recordingProvider) Models() []core.ModelSpec {
-	return []core.ModelSpec{{ID: "recording-1", Family: "recording"}}
-}
-func (p *recordingProvider) AuthSchemes() []string { return []string{"api_key"} }
-
 func (p *recordingProvider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
 	p.calls++
 	return core.ModelResult{Text: p.token, StopReason: "end_turn"}, nil
-}
-
-func (p *recordingProvider) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
-	ch := make(chan core.ModelChunk)
-	close(ch)
-	return ch, nil
-}
-
-func (p *recordingProvider) CountTokens(ctx context.Context, msgs []core.Message) (int, error) {
-	return 0, nil
 }
 
 type rotatingAuthenticator struct {
@@ -148,6 +131,19 @@ func TestRefreshingProviderSurfacesResolveFailure(t *testing.T) {
 	_, err = provider.Generate(context.Background(), core.ModelRequest{})
 	var unavailableErr *svc.UnavailableError
 	require.ErrorAs(t, err, &unavailableErr)
+}
+
+func TestRefreshingProviderRejectsUnsupportedStream(t *testing.T) {
+	store := newOAuthStore(t, time.Now().Add(time.Hour))
+	resolver := svc.NewResolver(store, nil, nil)
+
+	provider, err := credential.NewRefreshingProvider(resolver, "openai", func(cred *model.Credential) (core.Provider, error) {
+		return &recordingProvider{token: cred.AccessToken}, nil
+	})
+	require.NoError(t, err)
+
+	_, err = provider.Stream(context.Background(), core.ModelRequest{})
+	assert.ErrorContains(t, err, "streaming is not supported")
 }
 
 func TestNewRefreshingProviderValidatesArguments(t *testing.T) {

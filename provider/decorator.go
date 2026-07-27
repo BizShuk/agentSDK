@@ -14,7 +14,7 @@ import (
 // header that stops working an hour in, and the failure looks like the
 // provider rejecting a perfectly good agent. Resolving per request also
 // covers the paths a construction-time credential silently misses: retry
-// after a 401, an SSE stream reconnecting, ListModels, CountTokens.
+// after a 401 and an SSE stream reconnecting.
 //
 // The type is defined HERE and not in the auth module on purpose. If the
 // seam belonged to auth, every adapter that accepts one would import auth,
@@ -33,6 +33,7 @@ type Decorator func(ctx context.Context) (core.Auth, error)
 // a new HTTP client, and an in-flight stream is unaffected.
 type decorated struct {
 	Adapter
+	name     string
 	decorate Decorator
 }
 
@@ -45,7 +46,7 @@ func (d *decorated) Generate(ctx context.Context, req core.ModelRequest) (core.M
 	return d.Adapter.Generate(ctx, req)
 }
 
-// Stream implements core.Provider.
+// Stream implements core.StreamProvider.
 func (d *decorated) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
 	req, err := d.apply(ctx, req)
 	if err != nil {
@@ -61,23 +62,25 @@ func (d *decorated) Stream(ctx context.Context, req core.ModelRequest) (<-chan c
 func (d *decorated) apply(ctx context.Context, req core.ModelRequest) (core.ModelRequest, error) {
 	resolved, err := d.decorate(ctx)
 	if err != nil {
-		return req, fmt.Errorf("provider %s: resolve credential: %w", d.Adapter.ID(), err)
+		return req, fmt.Errorf("provider %s: resolve credential: %w", d.name, err)
 	}
 	req.Auth = resolved.Merge(req.Auth)
 	return req, nil
 }
 
-// WithDecorator returns a wrapped Adapter that resolves its credential
-// before every call. A nil Decorator returns the adapter unchanged, so a
-// caller can pass one through unconditionally.
+// WithDecorator returns a wrapped Adapter that resolves its credential before
+// every call. Name is the registry entry name used in errors; keeping it
+// outside Adapter prevents discovery data from leaking into the runtime port.
+// A nil Decorator returns the adapter unchanged, so a caller can pass one
+// through unconditionally.
 //
 // ListModels is deliberately NOT forwarded here. Promoting it would make
 // every decorated adapter advertise core.ModelLister even when the one it
 // wraps cannot list, and callers type-assert on that interface to decide
 // whether to query live or fall back to the bundled catalog.
-func WithDecorator(a Adapter, d Decorator) Adapter {
+func WithDecorator(name string, a Adapter, d Decorator) Adapter {
 	if d == nil || a == nil {
 		return a
 	}
-	return &decorated{Adapter: a, decorate: d}
+	return &decorated{Adapter: a, name: name, decorate: d}
 }

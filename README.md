@@ -16,6 +16,10 @@ Go Agentic Loop SDK：以`宣告式設定`組裝目標導向控制迴圈 (Goal-d
 
 `core/` 是純狀態機 (state + event + instruction + reasoning),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
 
+模型執行介面刻意保持最小：`core.Provider` 只要求 blocking `Generate`；串流是 optional
+`core.StreamProvider`，live model catalog 是 optional `core.ModelLister`。provider 名稱、認證 metadata
+與 static catalog 由 `provider.Entry` 統一持有，不塞回 runtime client。
+
 ## 怎麼用 (Getting Started)
 
 engagement 是四階`階梯`，不是一堆獨立開關。每一階都是下一階的子集，往上爬只改設定不改 API。
@@ -125,8 +129,8 @@ agentsdk/
 │   └── hook/                  # lifecycle hooks (PreToolUse/PostToolUse/...; command hook exit 2 = block)
 ├── runtime/                   # Loop: dispatch + checkpoint + WAL
 ├── skill/                     # SKILL.md skills + slash commands + prompt templates (progressive disclosure) + SubAgent/Spawner ("task" tool)
-├── provider/                  # 7 個 adapter（已併回 root module）
-│   └── registry.go            # name → adapter 的唯一真相；env 查詢用注入，CLI 與 agent 共用
+├── provider/                  # 7 個 adapter（Generate + Stream capability；已併回 root module）
+│   └── registry.go            # Entry 是 name / metadata / static catalog / factory 的唯一真相
 ├── auth / proxy               # 外部獨立 repo，本 repo 無此目錄（auth 為 go.mod require，proxy 已完全脫離）
 ├── utils/                     # 根層共用 utilities umbrella：utils/frontmatter/ + utils/testutil/（FakeProvider / MemStore / CapturingNotifier）
 ├── sample/code-agent/         # 全 harness 組合 CLI（tui 互動 / -p / --json、session flags、.agentsdk 探索）
@@ -134,7 +138,7 @@ agentsdk/
 ├── sample/logdoctor-agent/          # 驗證 sample (cobra CLI + 兩個 tool)
 ```
 
-`auth` 與 `proxy` 都已脫離本 repo，是外部獨立 repo（無 `auth/`、`proxy/` 目錄，也無 `.gitmodules`）。`auth` 只由 `provider/credential` 使用；`proxy` 已無任何殘留（無目錄、無 require、無 import）。Root `main.go` 只掛載 root module 自己的兩個子指令：`provider`（wire-format smoke test，直接打 `core.Provider`）與 `wizard`（設定產生器）。
+`auth` 與 `proxy` 都已脫離本 repo，是外部獨立 repo（無 `auth/`、`proxy/` 目錄，也無 `.gitmodules`）。`auth` 只由 `provider/credential` 使用；`proxy` 已無任何殘留（無目錄、無 require、無 import）。Root `main.go` 只掛載 root module 自己的兩個子指令：`provider`（wire-format smoke test，直接打 `core.Provider.Generate` / `core.StreamProvider.Stream`）與 `wizard`（設定產生器）。
 
 ## Proxy protocol bridge
 

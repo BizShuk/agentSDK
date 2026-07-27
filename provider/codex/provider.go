@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/provider"
 )
 
 // Provider implements core.Provider against the OpenAI Codex
@@ -79,22 +78,6 @@ func authFor(apiKey, bearer, accountID string) core.Auth {
 	return a
 }
 
-// ID implements core.Provider. Returns the family alone — "codex".
-func (p *Provider) ID() string { return "codex" }
-
-// Name is a convenience accessor returning "codex:<model>".
-func (p *Provider) Name() string { return "codex:" + p.model }
-
-// Models implements core.Provider. Returns the static catalog.
-func (p *Provider) Models() []core.ModelSpec { return DefaultCatalog() }
-
-// AuthSchemes implements core.Provider. Codex supports both the
-// placeholder API-key path (mostly tests) and the production OAuth
-// flow (NewWithOAuth).
-func (p *Provider) AuthSchemes() []string {
-	return []string{"api_key", "oauth"}
-}
-
 // Generate implements core.Provider. It POSTs the Codex-shaped
 // request body and returns the folded ModelResult.
 //
@@ -160,7 +143,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 	return out, nil
 }
 
-// Stream implements core.Provider. It returns a channel of
+// Stream implements core.StreamProvider. It returns a channel of
 // core.ModelChunk that the runtime consumes incrementally.
 //
 // The HTTP body stays open for the entire stream; callers should
@@ -186,21 +169,6 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 		return nil, fmt.Errorf("codex: status %d: %s", resp.StatusCode, errBody)
 	}
 	return ParseStream(ctx, resp.Body)
-}
-
-// CountTokens implements core.Provider via a chars/4 + 1 per-message
-// heuristic. Codex does not expose a direct count endpoint; callers
-// needing exact counts should batch a count_tokens API when available.
-func (p *Provider) CountTokens(_ context.Context, msgs []core.Message) (int, error) {
-	n := 0
-	for _, m := range msgs {
-		for _, c := range m.Parts {
-			if c.Kind == core.PART_KIND_PLAIN_TEXT {
-				n += len(c.Text)/4 + 1
-			}
-		}
-	}
-	return n, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -374,8 +342,3 @@ func (p *Provider) applyHeaders(req *http.Request, override core.Auth) {
 		}
 	}
 }
-
-// Metadata implements provider.Adapter. Returns the package-level
-// codex descriptor so direct constructors (New, NewWithOAuth) produce
-// adapters that agree with the registered Entry.Metadata.
-func (p *Provider) Metadata() provider.Metadata { return adapterMetadata() }

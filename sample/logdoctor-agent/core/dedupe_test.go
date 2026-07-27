@@ -2,7 +2,6 @@ package core_test
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -13,9 +12,7 @@ import (
 
 // stubObservationSource emits the given percepts in order then closes.
 type stubObservationSource struct {
-	mu    sync.Mutex
-	out   []sdkcore.Observation
-	emitN int
+	out []sdkcore.Observation
 }
 
 func (s *stubObservationSource) Name() string { return "stub" }

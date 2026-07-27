@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/provider"
 )
 
 // Provider implements core.Provider against the xAI Grok API.
@@ -86,21 +85,6 @@ func NewWithOAuth(creds OAuthCredentials, opts ...Option) (*Provider, error) {
 	}, nil
 }
 
-// ID implements core.Provider. Returns the family alone — "grok".
-func (p *Provider) ID() string { return "grok" }
-
-// Name is a convenience accessor returning "grok:<model>".
-func (p *Provider) Name() string { return "grok:" + p.model }
-
-// Models implements core.Provider. Returns the static catalog.
-func (p *Provider) Models() []core.ModelSpec { return DefaultCatalog() }
-
-// AuthSchemes implements core.Provider. Grok accepts long-lived API
-// keys AND OAuth access tokens (SuperGrok / X Premium).
-func (p *Provider) AuthSchemes() []string {
-	return []string{"api_key", "oauth"}
-}
-
 // Generate implements core.Provider.
 func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
 	body := RequestBody{
@@ -144,7 +128,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 	return fromResponse(cr), nil
 }
 
-// Stream implements core.Provider. Streams SSE chunks and forwards them
+// Stream implements core.StreamProvider. Streams SSE chunks and forwards them
 // as core.ModelChunk.
 func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
 	body := RequestBody{
@@ -174,21 +158,6 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 		return nil, fmt.Errorf("grok: http: %w", err)
 	}
 	return ParseStream(ctx, resp.Body), nil
-}
-
-// CountTokens implements core.Provider via a chars/4 + 1 per-message
-// heuristic. xAI does not expose a direct count endpoint, so callers
-// needing exact counts should fall back to the upstream response.
-func (p *Provider) CountTokens(_ context.Context, msgs []core.Message) (int, error) {
-	n := 0
-	for _, m := range msgs {
-		for _, c := range m.Parts {
-			if c.Kind == core.PART_KIND_PLAIN_TEXT {
-				n += len(c.Text)/4 + 1
-			}
-		}
-	}
-	return n, nil
 }
 
 // authHeader returns the Authorization header value. OAuth bearer wins
@@ -315,8 +284,3 @@ func maxTokensOrDefault(req core.ModelRequest) int {
 	}
 	return 4096
 }
-
-// Metadata implements provider.Adapter. Returns the package-level
-// grok descriptor so direct constructors (New, NewWithOAuth) produce
-// adapters that agree with the registered Entry.Metadata.
-func (p *Provider) Metadata() provider.Metadata { return adapterMetadata() }

@@ -86,11 +86,33 @@ func TestGeneratePropagatesHTTPError(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestNameIncludesModel confirms the provider name carries the model.
-func TestNameIncludesModel(t *testing.T) {
-	p, err := anthropic.New(anthropic.WithAPIKey("sk-x"), anthropic.WithModel("claude-opus-4-8"))
+func TestGenerateUsesConfiguredModel(t *testing.T) {
+	var gotModel string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Model string `json:"model"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		gotModel = req.Model
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"m","type":"message","role":"assistant","model":"claude-opus-4-8","stop_reason":"end_turn","content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer srv.Close()
+
+	p, err := anthropic.New(
+		anthropic.WithAPIKey("sk-x"),
+		anthropic.WithBaseURL(srv.URL),
+		anthropic.WithModel("claude-opus-4-8"),
+	)
 	require.NoError(t, err)
-	assert.Equal(t, "anthropic:claude-opus-4-8", p.Name())
+	_, err = p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{
+			Role:  core.ROLE_USER,
+			Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"}},
+		}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "claude-opus-4-8", gotModel)
 }
 
 // TestToolSpecForwardedAsInputSchema verifies the tool's JSON schema

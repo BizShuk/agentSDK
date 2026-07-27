@@ -70,23 +70,6 @@ func NewRefreshingProvider(resolver *svc.Resolver, family string, build BuildPro
 	return &RefreshingProvider{resolver: resolver, family: family, build: build}, nil
 }
 
-// ID reports the provider family; it must not trigger credential I/O.
-func (p *RefreshingProvider) ID() string { return p.family }
-
-// Name is a backward-compat alias for ID. Returns the provider family.
-// Deprecated: use ID.
-func (p *RefreshingProvider) Name() string { return p.family }
-
-// Models returns no models (the RefreshingProvider delegates to the inner
-// provider, but this method exists to satisfy core.Provider without a
-// credential lookup). Callers that need the catalog should reach the inner
-// provider via build() during a separate, non-blocking path.
-func (p *RefreshingProvider) Models() []core.ModelSpec { return nil }
-
-// AuthSchemes is unknown without an inner provider; return both possible
-// flavors so the runtime can pass auth through and let the inner decide.
-func (p *RefreshingProvider) AuthSchemes() []string { return []string{"api_key", "oauth"} }
-
 // Generate resolves (and if needed refreshes) the credential, then delegates.
 func (p *RefreshingProvider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
 	inner, err := p.current(ctx)
@@ -96,22 +79,18 @@ func (p *RefreshingProvider) Generate(ctx context.Context, req core.ModelRequest
 	return inner.Generate(ctx, req)
 }
 
-// Stream resolves (and if needed refreshes) the credential, then delegates.
+// Stream resolves (and if needed refreshes) the credential, then delegates
+// when the constructed provider supports streaming.
 func (p *RefreshingProvider) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
 	inner, err := p.current(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return inner.Stream(ctx, req)
-}
-
-// CountTokens resolves (and if needed refreshes) the credential, then delegates.
-func (p *RefreshingProvider) CountTokens(ctx context.Context, msgs []core.Message) (int, error) {
-	inner, err := p.current(ctx)
-	if err != nil {
-		return 0, err
+	streamer, ok := inner.(core.StreamProvider)
+	if !ok {
+		return nil, fmt.Errorf("credential: refreshing provider %q: streaming is not supported", p.family)
 	}
-	return inner.CountTokens(ctx, msgs)
+	return streamer.Stream(ctx, req)
 }
 
 // current returns an inner provider built from the freshest credential,

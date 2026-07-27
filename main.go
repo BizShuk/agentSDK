@@ -6,7 +6,7 @@
 //
 // This binary currently mounts one subcommand:
 //
-//	provider   — minimal smoke-test CLI that calls core.Provider directly
+//	provider   — minimal smoke-test CLI that calls core provider capabilities directly
 //	             (no Agent / Engine / harness); see cmd/provider.go.
 //
 // Sample agents under sample/* (code-agent, file-agent, greet-agent,
@@ -37,7 +37,7 @@ workspace.
 
 Subcommands:
 
-  provider   smoke-test CLI that calls core.Provider directly
+  provider   smoke-test CLI that calls core provider capabilities directly
 
 The auth CLI and the LLM protocol proxy live in their own modules and are
 built separately:

@@ -34,7 +34,7 @@ type Options struct {
 
 	// CredentialKind selects which credential class is consulted. The
 	// values are core.CREDENTIAL_KIND_* — they are core vocabulary
-	// because they are what core.Provider.AuthSchemes reports.
+	// shared with the declarative agent/spec model.
 	//
 	// AUTO ("") tries OAuthEnv first, then APIKeyEnv (the legacy
 	// precedence). OAUTH restricts to OAuthEnv and returns an error when

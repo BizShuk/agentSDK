@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/provider"
 )
 
 // Provider implements core.Provider against Google Generative AI's
@@ -64,21 +63,6 @@ func New(opts ...Option) (*Provider, error) {
 		client:  &http.Client{Timeout: 120 * time.Second},
 	}, nil
 }
-
-// ID implements core.Provider. Returns the family alone — "google".
-func (p *Provider) ID() string { return "google" }
-
-// Name is a convenience accessor returning "google:<model>".
-func (p *Provider) Name() string { return "google:" + p.model }
-
-// Models implements core.Provider. Returns the static catalog —
-// callers that want to query the upstream's actual list should hit
-// /v1/models themselves and pass via WithModel.
-func (p *Provider) Models() []core.ModelSpec { return DefaultCatalog() }
-
-// AuthSchemes implements core.Provider. Google AI Studio accepts API
-// keys only; no OAuth flow is exposed.
-func (p *Provider) AuthSchemes() []string { return []string{"api_key"} }
 
 // Generate implements core.Provider. Sends a blocking request and
 // returns the full ModelResult.
@@ -115,7 +99,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 	return fromResponse(cr), nil
 }
 
-// Stream implements core.Provider. Returns a channel of core.ModelChunk;
+// Stream implements core.StreamProvider. Returns a channel of core.ModelChunk;
 // the final chunk carries Done=true.
 func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
 	body, err := toRequestBody(req, p.model, true)
@@ -138,22 +122,6 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 	// Body is closed inside ParseStream's goroutine when ctx cancels or
 	// the channel drains; the runtime owns the lifecycle here.
 	return ParseStream(ctx, resp.Body)
-}
-
-// CountTokens implements core.Provider via a chars/4 + 1 per-part
-// heuristic. The Google OpenAI-compatible surface does not expose a
-// token-count endpoint, so accuracy is not guaranteed — good enough
-// for budget sanity checks, not for context-window math.
-func (p *Provider) CountTokens(_ context.Context, msgs []core.Message) (int, error) {
-	n := 0
-	for _, m := range msgs {
-		for _, c := range m.Parts {
-			if c.Kind == core.PART_KIND_PLAIN_TEXT {
-				n += len(c.Text)/4 + 1
-			}
-		}
-	}
-	return n, nil
 }
 
 // applyHeaders sets Content-Type, optional Accept for SSE, and the
@@ -326,8 +294,3 @@ func fromResponse(cr Response) core.ModelResult {
 	}
 	return out
 }
-
-// Metadata implements provider.Adapter. Returns the package-level
-// google descriptor so direct constructors (New) produce adapters
-// that agree with the registered Entry.Metadata.
-func (p *Provider) Metadata() provider.Metadata { return adapterMetadata() }

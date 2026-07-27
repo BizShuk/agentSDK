@@ -41,23 +41,14 @@ import (
 // set.
 const DEFAULT_NAME = "minimax"
 
-// Options are the per-construction overrides. Every field is optional:
-// an empty field means "let the adapter apply its own environment
-// fallback", which is why a zero Options still builds a working provider
-// on a machine with the credentials exported.
-
-
 // Factory builds an adapter from resolved options. The provider.Factory
-// signature is the public source of truth for what an adapter must
-// produce: a provider.Adapter, not just a core.Provider — adapters
-// must also expose Name() and Metadata() at runtime.
+// signature is the source of truth for the generate + stream capability
+// required of registered adapters.
 type Factory func(Options) (Adapter, error)
 
 // Entry is everything callers need to know about one adapter: how to
-// build it, and the static registration metadata a CLI listing or
-// wizard menu renders from. The post-construction view of the same
-// metadata lives on Adapter.Metadata(); the two must agree —
-// register.go is responsible for sourcing both from one literal.
+// build it, the static metadata a CLI listing or wizard menu renders,
+// and the bundled model catalog used when live discovery is unavailable.
 type Entry struct {
 	Name     string
 	Metadata Metadata
@@ -153,5 +144,5 @@ func New(name string, o Options) (Adapter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: %w", e.Name, err)
 	}
-	return WithDecorator(p, resolved.Decorator), nil
+	return WithDecorator(e.Name, p, resolved.Decorator), nil
 }

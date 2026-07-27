@@ -26,7 +26,6 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/provider"
 )
 
 // Provider implements core.Provider against the Anthropic API.
@@ -89,21 +88,6 @@ func NewWithOAuth(token OAuthCredentials, opts ...Option) (*Provider, error) {
 	}, nil
 }
 
-// ID implements core.Provider. Returns the family alone — "anthropic".
-func (p *Provider) ID() string { return "anthropic" }
-
-// Name is a convenience accessor returning "anthropic:<model>".
-func (p *Provider) Name() string { return "anthropic:" + string(p.model) }
-
-// Models implements core.Provider. Returns the static catalog.
-func (p *Provider) Models() []core.ModelSpec { return DefaultCatalog() }
-
-// AuthSchemes implements core.Provider. Anthropic accepts long-lived API
-// keys AND OAuth access tokens (Claude Pro/Max).
-func (p *Provider) AuthSchemes() []string {
-	return []string{"api_key", "oauth"}
-}
-
 // Generate implements core.Provider.
 func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
 	body := p.buildRequestBody(req)
@@ -122,7 +106,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 	return fromSDKResponse(resp), nil
 }
 
-// Stream implements core.Provider. We go through a direct HTTP request
+// Stream implements core.StreamProvider. We go through a direct HTTP request
 // (rather than the SDK's NewStreaming) so the SSE parser in stream.go
 // owns the wire format and stays independently testable.
 func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
@@ -146,21 +130,6 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 	}
 	ch, _ := ParseStream(ctx, resp.Body)
 	return ch, nil
-}
-
-// CountTokens implements core.Provider via a chars/4 + 1 per-message
-// heuristic. The SDK does not expose a direct count endpoint, so callers
-// needing exact counts should batch a count_tokens API when available.
-func (p *Provider) CountTokens(_ context.Context, msgs []core.Message) (int, error) {
-	n := 0
-	for _, m := range msgs {
-		for _, c := range m.Parts {
-			if c.Kind == core.PART_KIND_PLAIN_TEXT {
-				n += len(c.Text)/4 + 1
-			}
-		}
-	}
-	return n, nil
 }
 
 // buildRequestBody assembles a wire-format body from a core request and
@@ -248,8 +217,3 @@ func resolveEndpoint(base string) string {
 	}
 	return base + "/v1/messages"
 }
-
-// Metadata implements provider.Adapter. Returns the package-level
-// anthropic descriptor so direct constructors (New, NewWithOAuth)
-// produce adapters that agree with the registered Entry.Metadata.
-func (p *Provider) Metadata() provider.Metadata { return adapterMetadata() }

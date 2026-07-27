@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/provider"
 )
 
 // Provider implements core.Provider against the Antigravity gateway.
@@ -81,19 +80,6 @@ func NewWithOAuth(creds OAuthCredentials, opts ...Option) (*Provider, error) {
 	}, nil
 }
 
-// ID implements core.Provider. Returns the family alone — "antigravity".
-func (p *Provider) ID() string { return "antigravity" }
-
-// Name is a convenience accessor returning "antigravity:<model>".
-func (p *Provider) Name() string { return "antigravity:" + p.model }
-
-// Models implements core.Provider. Returns the static catalog.
-func (p *Provider) Models() []core.ModelSpec { return DefaultCatalog() }
-
-// AuthSchemes implements core.Provider. Antigravity accepts long-lived API
-// keys (some deployments) AND Google OAuth access tokens.
-func (p *Provider) AuthSchemes() []string { return []string{"api_key", "oauth"} }
-
 // Generate implements core.Provider — blocking POST to /v1/messages.
 func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
 	body, err := buildRequestBody(req, p.model)
@@ -128,7 +114,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 	return fromResponse(r), nil
 }
 
-// Stream implements core.Provider — SSE POST to /v1/messages.
+// Stream implements core.StreamProvider — SSE POST to /v1/messages.
 func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
 	body, err := buildRequestBody(req, p.model)
 	if err != nil {
@@ -156,21 +142,6 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 	// once ParseStream has the reader.
 	ch, _ := ParseStream(ctx, resp.Body)
 	return ch, nil
-}
-
-// CountTokens implements core.Provider via chars/4 + 1 per-message
-// heuristic. Accurate counts should batch a real count_tokens API when
-// the gateway exposes one; until then this gives a stable upper bound.
-func (p *Provider) CountTokens(_ context.Context, msgs []core.Message) (int, error) {
-	n := 0
-	for _, m := range msgs {
-		for _, c := range m.Parts {
-			if c.Kind == core.PART_KIND_PLAIN_TEXT {
-				n += len(c.Text)/4 + 1
-			}
-		}
-	}
-	return n, nil
 }
 
 // override is the per-call core.ModelRequest.Auth, merged on top of the
@@ -334,8 +305,3 @@ func fromResponse(r Response) core.ModelResult {
 	}
 	return out
 }
-
-// Metadata implements provider.Adapter. Returns the package-level
-// antigravity descriptor so direct constructors (New, NewWithOAuth)
-// produce adapters that agree with the registered Entry.Metadata.
-func (p *Provider) Metadata() provider.Metadata { return adapterMetadata() }

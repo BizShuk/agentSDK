@@ -2,8 +2,8 @@ package core
 
 // CredentialKind selects which credential class a strict lookup
 // consults. It is core vocabulary rather than provider vocabulary
-// because these are exactly the values Provider.AuthSchemes reports —
-// the port is defined here, so the words it speaks are defined here too.
+// because agent/spec must describe credential intent without importing
+// provider discovery or authentication mechanisms.
 //
 // CREDENTIAL_KIND_AUTO (the empty string) preserves the legacy
 // precedence: OAuth outranks API key, first non-empty wins. The two
@@ -22,8 +22,8 @@ const (
 )
 
 // Auth carries the resolved credentials for a single request. Callers
-// populate this before calling Provider.Generate or Provider.Stream; the
-// provider itself does not reach out to fetch credentials.
+// populate this before calling Provider.Generate or StreamProvider.Stream;
+// the provider itself does not reach out to fetch credentials.
 //
 // At most one of APIKey or Bearer should be set. Headers and BaseURL are
 // optional overrides.
