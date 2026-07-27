@@ -10,7 +10,6 @@ import (
 	"github.com/bizshuk/agentsdk/agent/permission"
 	"github.com/bizshuk/agentsdk/agent/session"
 	"github.com/bizshuk/agentsdk/agent/spec"
-	"github.com/bizshuk/agentsdk/agent/wire"
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware"
 	"github.com/bizshuk/agentsdk/middleware/preset"
@@ -88,15 +87,12 @@ func (a *Agent) Bootstrap(ctx context.Context, ac *Host) (*Engine, core.State, e
 		return nil, core.State{}, err
 	}
 
-	// --- stage 7: output ---
-	sink := a.buildSink()
-
-	// --- stage 8: assemble ---
+	// --- stage 7: assemble ---
 	eng := NewEngine(step, prov, tools)
 	eng.Middleware = a.buildMiddleware(sandbox, perm)
 	eng.Store = store
 	eng.Log = wal
-	eng.Sink = sink
+	eng.Sink = a.deps.sink
 	eng.Notifier = a.deps.notifier
 	if perm != nil {
 		eng.Approval = perm
@@ -122,8 +118,7 @@ func (a *Agent) Bootstrap(ctx context.Context, ac *Host) (*Engine, core.State, e
 	}
 
 	a.parts = &Parts{
-		Engine: eng, Sessions: sessions, Skills: skills, Prompt: builderP,
-		Config: a.cfg, AppConfig: ac, Cwd: cwd,
+		Engine: eng, Sessions: sessions, Skills: skills, Host: ac, Cwd: cwd,
 	}
 	return eng, state, nil
 }
@@ -395,27 +390,6 @@ func (a *Agent) buildSessions(ac *Host, store core.StateStore, wal core.WriteAhe
 }
 
 // --- stage 7 ---
-
-// buildSink resolves the presentation stream. An injected sink wins over
-// the configured format.
-func (a *Agent) buildSink() core.EventSink {
-	if a.deps.sink != nil {
-		return a.deps.sink
-	}
-	if a.cfg.Output == nil {
-		return nil
-	}
-	switch a.cfg.Output.Format {
-	case spec.OUTPUT_JSON:
-		return wire.NewSink(os.Stdout)
-	default:
-		// text and tui are rendered by the front end, which owns the
-		// terminal; the engine emits nothing on its own.
-		return nil
-	}
-}
-
-// --- stage 8 ---
 
 // seedState builds the opening State: budget and autonomy from Limits,
 // messages from the prompt builder.

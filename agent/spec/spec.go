@@ -54,7 +54,6 @@ type Config struct {
 	Skills     *Skills     `json:"skills,omitempty"`
 	Subagents  *Subagents  `json:"subagents,omitempty"`
 	Sessions   *Sessions   `json:"sessions,omitempty"`
-	Output     *Output     `json:"output,omitempty"`
 }
 
 // Model selects the provider adapter. Provider is the registry key; the
@@ -171,11 +170,6 @@ type Sessions struct {
 	Dir string `json:"dir,omitempty"` // empty = <data_dir>/sessions
 }
 
-// Output selects the presentation sink bound to core.EventSink.
-type Output struct {
-	Format string `json:"format,omitempty"` // text | json | tui
-}
-
 // Clone returns a deep copy. Tier expansion and validation both mutate,
 // and a caller's literal must never be modified underneath it.
 func (c Config) Clone() Config {
@@ -184,7 +178,6 @@ func (c Config) Clone() Config {
 	out.Middleware = clonePtr(c.Middleware)
 	out.Memory = clonePtr(c.Memory)
 	out.Sessions = clonePtr(c.Sessions)
-	out.Output = clonePtr(c.Output)
 	if c.Tools != nil {
 		t := *c.Tools
 		t.Builtin = cloneStrings(c.Tools.Builtin)

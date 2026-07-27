@@ -113,7 +113,7 @@ type stdinAgent struct{ *agent.Agent }
 // lines are delivered round by round through NextRound. An empty first
 // line (immediate EOF) runs with the persona only — the provider CLI's
 // `provider "ask me anything"` with no follow-up.
-func (s stdinAgent) Bootstrap(ctx context.Context, ac *agent.AppConfig) (*agent.Engine, core.State, error) {
+func (s stdinAgent) Bootstrap(ctx context.Context, ac *agent.Host) (*agent.Engine, core.State, error) {
 	engine, state, err := s.Agent.Bootstrap(ctx, ac)
 	if err != nil {
 		return engine, state, err

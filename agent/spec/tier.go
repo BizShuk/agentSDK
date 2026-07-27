@@ -13,7 +13,7 @@ const (
 	TIER_ONESHOT  = "oneshot"  // provider only — one model call, no persistence
 	TIER_BASIC    = "basic"    // + reasoning loop, middleware, state/WAL
 	TIER_STANDARD = "standard" // + built-in tools, permission, sessions, context files
-	TIER_FULL     = "full"     // + skills, subagents, hooks, stream output
+	TIER_FULL     = "full"     // + skills, subagents, hooks, richer prompt sources
 )
 
 // Defaults referenced by tier expansion. They are constants rather than
@@ -52,9 +52,6 @@ const (
 	MEMORY_STORE_FILE           = "file"
 	SAFETY_FALLBACK_NONE        = "none"
 	SAFETY_FALLBACK_AUTONOM     = "autonomy"
-	OUTPUT_TEXT                 = "text"
-	OUTPUT_JSON                 = "json"
-	OUTPUT_TUI                  = "tui"
 	SOURCE_FILES                = "files"
 	SOURCE_SKILLS               = "skills"
 	SOURCE_ENV                  = "env"
@@ -196,9 +193,6 @@ func (c Config) Expand() (Config, error) {
 		if out.Subagents == nil {
 			out.Subagents = &Subagents{}
 		}
-		if out.Output == nil {
-			out.Output = &Output{}
-		}
 	}
 
 	// --- implied blocks ---
@@ -264,8 +258,5 @@ func applyBlockDefaults(c *Config, rank int) {
 		if c.Subagents.MaxTurns == 0 {
 			c.Subagents.MaxTurns = min(c.Limits.MaxTurns, DEFAULT_SUBAGENT_TURNS)
 		}
-	}
-	if c.Output != nil && c.Output.Format == "" {
-		c.Output.Format = OUTPUT_TEXT
 	}
 }

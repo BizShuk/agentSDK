@@ -16,7 +16,7 @@ type sessionRequest struct {
 // openState returns the State to run: a fresh session, the latest one, a
 // specific resume, or a fork copy.
 func (p *agentParts) openState(ctx context.Context, req sessionRequest) (core.State, error) {
-	store := p.AppConfig.StateStore
+	store := p.Host.StateStore
 	switch {
 	case req.forkID != "":
 		meta, err := p.Sessions.Fork(ctx, req.forkID, "fork of "+req.forkID)
@@ -33,7 +33,7 @@ func (p *agentParts) openState(ctx context.Context, req sessionRequest) (core.St
 		}
 		return store.Load(ctx, meta.ID)
 	default:
-		if _, err := p.Sessions.Begin(p.AppConfig.RunID, "", p.Cwd); err != nil {
+		if _, err := p.Sessions.Begin(p.Host.RunID, "", p.Cwd); err != nil {
 			return core.State{}, err
 		}
 		return p.seed, nil

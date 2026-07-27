@@ -40,7 +40,7 @@ func TierChoices() []Choice {
 		{Value: TIER_ONESHOT, Label: "one-shot", Note: "single model call; no tools, no persistence"},
 		{Value: TIER_BASIC, Label: "basic", Default: true, Note: "reasoning loop + middleware + state/WAL"},
 		{Value: TIER_STANDARD, Label: "standard", Note: "+ built-in tools, permission, sessions, context files"},
-		{Value: TIER_FULL, Label: "full", Note: "+ skills, subagents, stream output"},
+		{Value: TIER_FULL, Label: "full", Note: "+ skills, subagents, richer prompt sources"},
 	}
 }
 
@@ -98,12 +98,6 @@ func VariantChoices(key string) []Choice {
 				Note: "fall back to the L0-L4 risk grid when no rule matches"},
 			{Value: SAFETY_FALLBACK_NONE, Label: "none", Note: "unmatched calls are allowed"},
 		}
-	case "output.format":
-		return []Choice{
-			{Value: OUTPUT_TEXT, Label: "text", Default: true, Note: "plain stdout"},
-			{Value: OUTPUT_JSON, Label: "json", Note: "stream-json envelopes (wire)"},
-			{Value: OUTPUT_TUI, Label: "tui", Note: "interactive terminal UI"},
-		}
 	case "prompt.sources":
 		return []Choice{
 			{Value: SOURCE_FILES, Label: "context files", Default: true,
@@ -156,7 +150,6 @@ func VariantKeys() []string {
 		"safety.fallback",
 		"prompt.sources",
 		"limits.autonomy",
-		"output.format",
 	}
 }
 

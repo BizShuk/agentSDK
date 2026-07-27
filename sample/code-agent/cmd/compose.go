@@ -31,7 +31,7 @@ type agentParts struct {
 }
 
 type composeOptions struct {
-	cfg            *agent.AppConfig
+	cfg            *agent.Host
 	fake           bool
 	provider       string
 	model          string

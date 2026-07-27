@@ -27,7 +27,7 @@ tier: basic                          # oneshot | basic | standard | full
                                      # oneshot: single model call, no tools, no state
                                      # basic:   + reasoning loop + middleware + state/WAL
                                      # standard:+ built-in tools, permission, sessions, context files
-                                     # full:    + skills, subagents, stream output
+                                     # full:    + skills, subagents, richer prompt sources
 
 persona: "You are a careful code reviewer. Be concise, point at lines, prefer evidence over opinion."
                                      # fixed identity text; the equivalent of `provider --system`
@@ -218,15 +218,8 @@ subagents:
 sessions:
   dir: ""                            # empty = <data_dir>/sessions
 
-# ---------------------------------------------------------------------------
-# Output — EventSink binding
-# ---------------------------------------------------------------------------
-
-output:
-  format: text                       # text | json | tui
-                                     # tui = interactive Renderer (in-process)
-                                     # json = wire-format envelope (one JSON per line)
-                                     # text = human-readable fold of events
+# Presentation is process wiring, not serialized agent config.
+# Use agent.WithSink(...) or agent/wire in the composition root.
 
 # ---------------------------------------------------------------------------
 # Worked examples — three common shapes
@@ -256,8 +249,6 @@ output:
 #   preset: default
 # memory:
 #   store: file
-# output:
-#   format: tui
 
 # Example C — production (tier=full, secure middleware, skills & subagents)
 #
@@ -294,5 +285,3 @@ output:
 #   max_depth: 2
 # sessions:
 #   dir: /srv/app/.agentsdk/sessions
-# output:
-#   format: json

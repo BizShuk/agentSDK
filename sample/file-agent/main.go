@@ -73,7 +73,7 @@ type fileAgent struct {
 // Bootstrap reads the opening task from stdin and seeds the user
 // message. Empty stdin runs with the persona only — same shape as
 // `provider "ask me anything"` with no follow-up.
-func (f fileAgent) Bootstrap(ctx context.Context, ac *agent.AppConfig) (*agent.Engine, core.State, error) {
+func (f fileAgent) Bootstrap(ctx context.Context, ac *agent.Host) (*agent.Engine, core.State, error) {
 	engine, state, err := f.Agent.Bootstrap(ctx, ac)
 	if err != nil {
 		return engine, state, err

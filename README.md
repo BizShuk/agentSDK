@@ -12,7 +12,7 @@ Go Agentic Loop SDK：以`宣告式設定`組裝目標導向控制迴圈 (Goal-d
 | 2. 系統韌性 | `memory/`                  | Window / Compactor / Checkpoint (M2)                                                         |
 | 3. 工具生態 | `tool/`                    | `core.Tool` / RawMessage converter / Registry / 內建工具 / Sandbox                           |
 | 4. 推理     | `reasoning/`               | 6 種 DecisionRule (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router)    |
-| 5. 組裝     | `agent/` + `agent/spec/`   | 宣告式 `Config` → 8 stage pipeline → `*agent.Engine`；`prompt/` 管進 context window 的內容   |
+| 5. 組裝     | `agent/` + `agent/spec/`   | 宣告式 `Config` → 7 stage pipeline → `*agent.Engine`；`prompt/` 管進 context window 的內容   |
 
 `core/` 是純狀態機 (state + event + instruction + reasoning),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
 
@@ -25,7 +25,7 @@ engagement 是四階`階梯`，不是一堆獨立開關。每一階都是下一�
 | `oneshot` | 只有 provider，一次 model call | 嵌在服務裡跑一次分類 / 摘要 |
 | `basic` | `+` 推理迴圈、middleware、state/WAL | 有記憶的對話 agent |
 | `standard` | `+` 內建工具、permission、session、context files | 會動檔案的工作 agent |
-| `full` | `+` skills、subagents、stream 輸出 | 完整 coding agent |
+| `full` | `+` skills、subagents、env/reminder prompt | 完整 coding agent |
 
 最小接觸面——一行，沒有 Engine 概念、不需要應用名稱：
 
@@ -63,8 +63,10 @@ reasoning: {style: plan_then_run}
 safety:
   mode: acceptEdits
   deny: ["bash(sudo:*)"]
-output: {format: json}
 ```
+
+JSON、text 與 TUI 是 frontend 選擇，不進 `agent.Config`；composition root 以
+`agent.WithSink(...)` 注入，或直接使用 `agent/wire`。
 
 設定檔用 `wizard` 產生（逐階段挑選，Enter 收預設）：
 
@@ -107,7 +109,7 @@ agentsdk/
 ├── go.mod                     # module github.com/bizshuk/agentsdk
 ├── main.go                    # cobra root binary;掛載 `provider` 與 `wizard` 兩個子指令
 ├── cmd/                       # root subcommands (provider: smoke-test CLI；wizard/w: 設定產生器)
-├── agent/                     # 組裝層：Config → 8 stage pipeline → Engine；公開契約集中於 agent.go
+├── agent/                     # 組裝層：Config → 7 stage pipeline → Engine；公開契約集中於 agent.go
 │   ├── cli/                   # process host：signal、slog、os.Exit
 │   ├── spec/                  # 宣告層：Config / Choice / tier 展開 / 驗證（只 import core）
 │   ├── permission/            # permission rules × mode (allow/ask/deny specifier, deny > ask > allow)
@@ -205,7 +207,7 @@ effect done            ← end_turn
 | Proxy     | 3×3 pairwise protocol transform、provider profile routing、SSE hardening                             | ✅ 完成     |
 | Format    | 四來源 `37` 個 client/provider wire-format entity catalog                                            | ✅ 完成     |
 | Harness   | hooks / agent/permission / agent/session / skill（內含 subagent）/ agent/wire + steering queue（`contextfile` 已併入 `prompt.LoadContextFiles`；tui 已下沉 code-agent） | 🚧 skeleton |
-| Agent     | 宣告式組裝：`agent/spec` + `agent` 8 stage pipeline + `prompt` + `provider`（registry）+ `wizard` 子指令 | ✅ 完成     |
+| Agent     | 宣告式組裝：`agent/spec` + `agent` 7 stage pipeline + `prompt` + `provider`（registry）+ `wizard` 子指令 | ✅ 完成     |
 
 詳細規格見 `docs/specs/` 與 `plans/`（proxy 規格已隨 repo 移出）,root milestone 實作完成後會轉為 `docs/specs/YYYY-MM-DD-<feature>.md`:
 

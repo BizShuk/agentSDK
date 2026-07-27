@@ -57,7 +57,7 @@ newState(MaxTurns=20, Autonomy=L2, Budget, system prompt)
 
 | 職責 | 原本在 | 現在在 |
 | --- | --- | --- |
-| 順序約束 | `compose.go` 的 8 個 `build*` 函式 | `agent/build.go::Bootstrap` 的 8 stage pipeline，doc comment 列每一條約束 |
+| 順序約束 | `compose.go` 的多個 `build*` 函式 | `agent/build.go::Bootstrap` 的 7 stage pipeline，doc comment 列每一條約束 |
 | 重複 scaffold | 每個 sample 自己寫 | 應用層寫 `agent.Config{}`，skeleton 展開 + 組裝 |
 | 擴充點 | 在哪個 `build*` 加哪幾行 | block pointer / 具名字串 variant，wizard `--list` 看得到 |
 
@@ -245,14 +245,14 @@ func main() {
 `agent.MustNew` 做兩件事：
 
 1. `Prepare()`：tier 展開 + 驗證，**不**碰 `core` 與 `runtime`
-2. 把注入 (`agent.Option`) 收集起來，等 `agent.Run` 給 `AppConfig` 後再走 `Bootstrap` 真正組裝
+2. 把注入 (`agent.Option`) 收集起來，等 `agent.Run` 給 `Host` 後再走 `Bootstrap` 真正組裝
 
 所以應用層呼叫 `MustNew` 不會建目錄、不打 provider、不驗憑證。失敗只有 schema 錯誤（不會動到磁碟的幾種）。
 
 `Bootstrap` 會做：
 
 - 建 `reasoning.NewDecide`，註冊 `Reasoning.Enable` 列出的策略
-- 走 8 stage pipeline：provider → tools → reasoning → prompt → safety → memory → output → assemble
+- 走 7 stage pipeline：provider → tools → reasoning → prompt → safety → memory → assemble
 - 回傳 `*runtime.Engine` + opening `core.State`
 
 ### 為什麼拆 New 跟 Bootstrap
@@ -262,25 +262,23 @@ func main() {
 ```text
 main()                          agent.Run()
 ─────────                       ─────────
-agent.MustNew(cfg)              config.OpenForCLI(name)
+agent.MustNew(cfg)              cli.OpenForCLI(name)
   ├ cfg.Prepare()                  ├ 開 ~/.config/<name>
   ├ option.apply()                 ├ FileStore + WAL
-  └ return *Agent                  └ return *AppConfig
+  └ return *Agent                  └ return *Host
                                   ┌──────────────────────────────┐
-                                  │ a.Bootstrap(ctx, AppConfig)  │
+                                  │ a.Bootstrap(ctx, Host)       │
                                   ├ stage 1: provider           │
                                   ├ stage 2: tools              │
                                   ├ ...                          │
-                                  ├ stage 8: assemble *Engine   │
+                                  ├ stage 7: assemble *Engine   │
                                   ├ run Engine.Run(ctx, state)  │
                                   └ return state                │
 ```
 
 New 早於任何 I/O——這讓它在測試裡建構 `Agent` 不會留 side effect；壞設定讓 `main` 立刻 panic，沒有建出半套目錄。Bootstrap 晚於 `OpenForCLI`，因為它需要 data dir 與 state store。預期的副作用（建目錄、打 provider、開 log）都在 `Bootstrap` 與 `Engine.Run` 之間發生。
 
-`Agent` 還有 `Preflight(ctx, ac)`：在 `Bootstrap` 之前先 build provider，credential 錯誤會在打 store 之前爆。實作見 `agent/build.go`，就是一個 `resolveProvider` 呼叫。
-
-### 8 stage pipeline 的順序約束
+### 7 stage pipeline 的順序約束
 
 `agent/build.go::Bootstrap` 的 doc comment 把每一條約束寫出來。摘錄：
 
@@ -461,11 +459,10 @@ for {
 | `Engine` | 給 driver loop 直接跑 |
 | `Sessions` | session lineage（`-c` / `-r` / `--fork` 續跑） |
 | `Skills` | 互動命令介面（`/help` 之類） |
-| `Prompt` | `prompt.Builder`，可呼叫 `Turn()` 拿 reminder slot |
-| `Config` | 展開後的 `Config`，debug 用 |
-| `AppConfig` | `config.AppConfig`，給自訂工具需要 `~/.config/<name>` 時 |
+| `Host` | process/runtime 資源，包括 data dir、state store、WAL 與 notifier |
+| `Cwd` | 組裝時解析完成的工作目錄 |
 
-`sample/code-agent/cmd/compose.go` 的 101 行就是這套：`MustNew` → `Bootstrap` → 用 `Parts.Sessions`、`Parts.Engine`、`Parts.AppConfig` 拼 headless / 互動 / `--json` 三種模式。
+`sample/code-agent/cmd/compose.go` 就是這套：`MustNew` → `Bootstrap` → 用 `Parts.Sessions`、`Parts.Engine`、`Parts.Host` 拼 headless / 互動 / `--json` 三種模式。JSON、text 或 TUI 是 frontend 選擇，以 `WithSink` 或直接設定 `Engine.Sink` 注入，不是 `agent.Config` 的 runtime feature。
 
 ## 設計原則速記
 

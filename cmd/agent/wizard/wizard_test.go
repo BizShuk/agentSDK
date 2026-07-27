@@ -138,10 +138,28 @@ func TestWizardListsChoicesFromTheSharedMetadata(t *testing.T) {
 	}
 }
 
-func TestWizardListRejectsAnUnknownField(t *testing.T) {
-	_, _, err := runWizard(t, "", "--list", "nonsense")
+func TestWizardListRejectsRemovedOrUnknownFields(t *testing.T) {
+	for _, field := range []string{"output.format", "nonsense"} {
+		t.Run(field, func(t *testing.T) {
+			_, _, err := runWizard(t, "", "--list", field)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "unknown field")
+		})
+	}
+}
+
+func TestWizardEditRejectsRemovedOutputBlock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agent.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(`
+name: removed-output
+tier: basic
+output:
+  format: json
+`), 0o600))
+
+	_, _, err := runWizard(t, "", "-y", "--edit", path, "-o", "-")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown field")
+	assert.Contains(t, err.Error(), `unknown field "output"`)
 }
 
 func TestWizardInteractiveSelectionByNumberAndByName(t *testing.T) {

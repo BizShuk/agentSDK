@@ -25,7 +25,6 @@ func TestExpandTierLadderIsMonotonic(t *testing.T) {
 			"skills":     c.Skills != nil,
 			"subagents":  c.Subagents != nil,
 			"sessions":   c.Sessions != nil,
-			"output":     c.Output != nil,
 		}
 	}
 
@@ -77,7 +76,7 @@ func TestExpandTierBlocks(t *testing.T) {
 		},
 		{
 			tier:       spec.TIER_FULL,
-			wantOn:     []string{"middleware", "memory", "tools", "safety", "prompt", "sessions", "skills", "subagents", "output"},
+			wantOn:     []string{"middleware", "memory", "tools", "safety", "prompt", "sessions", "skills", "subagents"},
 			wantTurns:  spec.DEFAULT_STANDARD_TURNS,
 			wantPreset: spec.MIDDLEWARE_SECURE,
 			wantSources: []string{
@@ -96,7 +95,6 @@ func TestExpandTierBlocks(t *testing.T) {
 				"tools": got.Tools != nil, "safety": got.Safety != nil,
 				"prompt": got.Prompt != nil, "skills": got.Skills != nil,
 				"subagents": got.Subagents != nil, "sessions": got.Sessions != nil,
-				"output": got.Output != nil,
 			}
 			for _, name := range tc.wantOn {
 				assert.Truef(t, on[name], "block %q should be on at tier %q", name, tc.tier)
@@ -253,7 +251,6 @@ func TestValidateBlockVariants(t *testing.T) {
 		{"bad middleware preset", func(c *spec.Config) { c.Middleware = &spec.Middleware{Preset: "turbo"} }, "unknown middleware.preset"},
 		{"bad memory store", func(c *spec.Config) { c.Memory = &spec.Memory{Store: "redis"} }, "unknown memory.store"},
 		{"bad safety mode", func(c *spec.Config) { c.Safety = &spec.Safety{Mode: "yolo"} }, "unknown safety.mode"},
-		{"bad output format", func(c *spec.Config) { c.Output = &spec.Output{Format: "xml"} }, "unknown output.format"},
 		{"bad autonomy", func(c *spec.Config) { c.Limits.Autonomy = "L9" }, "unknown limits.autonomy"},
 		{"bad builtin tool", func(c *spec.Config) { c.Tools = &spec.Tools{Builtin: []string{"read", "curl"}} }, "unknown tools.builtin"},
 		{"bad prompt source", func(c *spec.Config) { c.Prompt = &spec.Prompt{Sources: []string{"telepathy"}} }, "unknown prompt.sources"},
@@ -298,13 +295,13 @@ func TestValidateReportsEveryProblemAtOnce(t *testing.T) {
 		Tier:      spec.TIER_STANDARD,
 		Reasoning: spec.Reasoning{Style: "vibes"},
 		Memory:    &spec.Memory{Store: "redis"},
-		Output:    &spec.Output{Format: "xml"},
+		Limits:    spec.Limits{Autonomy: "L9"},
 	}.Prepare()
 	require.Error(t, err)
 	msg := err.Error()
 	assert.Contains(t, msg, "reasoning.style")
 	assert.Contains(t, msg, "memory.store")
-	assert.Contains(t, msg, "output.format")
+	assert.Contains(t, msg, "limits.autonomy")
 	assert.GreaterOrEqual(t, strings.Count(msg, "spec:"), 3,
 		"errors must be joined so one run reports everything")
 }
@@ -418,7 +415,6 @@ func TestDefaultChoicesAreAcceptedByValidate(t *testing.T) {
 		Mode:     spec.DefaultOf(spec.VariantChoices("safety.mode")),
 		Fallback: spec.DefaultOf(spec.VariantChoices("safety.fallback")),
 	}
-	c.Output = &spec.Output{Format: spec.DefaultOf(spec.VariantChoices("output.format"))}
 
 	_, err := c.Prepare()
 	require.NoError(t, err)

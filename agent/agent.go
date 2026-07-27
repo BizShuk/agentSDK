@@ -9,7 +9,6 @@ import (
 	"github.com/bizshuk/agentsdk/agent/session"
 	"github.com/bizshuk/agentsdk/agent/spec"
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/prompt"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/skill"
 )
@@ -29,7 +28,6 @@ type (
 	Skills     = spec.Skills
 	Subagents  = spec.Subagents
 	Sessions   = spec.Sessions
-	Output     = spec.Output
 
 	// Engine hides the runtime package from application signatures.
 	Engine = runtime.Engine
@@ -45,13 +43,11 @@ type Agent struct {
 // Parts exposes the components produced by Bootstrap. It is nil before
 // Bootstrap runs.
 type Parts struct {
-	Engine    *Engine
-	Sessions  *session.Manager
-	Skills    *skill.Registry
-	Prompt    prompt.Builder
-	Config    Config
-	AppConfig *AppConfig
-	Cwd       string
+	Engine   *Engine
+	Sessions *session.Manager
+	Skills   *skill.Registry
+	Host     *Host
+	Cwd      string
 }
 
 // New validates and prepares an agent without performing I/O.

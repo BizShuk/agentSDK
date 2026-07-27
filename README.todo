@@ -34,9 +34,9 @@
 待辦（依執行順序）：
 
 - [x] `Phase A` 切斷死掉的 auth 連線：`config/provider.go`（`RefreshingProvider`，零呼叫者）搬到
-      `provider/credential`；`AppConfig` 移除 `AuthStore`/`AuthDir`（零呼叫者）。
+      `provider/credential`；`Host` 移除 `AuthStore`/`AuthDir`（零呼叫者）。
       驗收 `go list -deps ./agent | grep bizshuk/auth` 為空。獨立可交付、零風險
-- [x] `Phase B` `config/` 解體（見計畫；`agent.AppConfig` + `middleware/preset`）
+- [x] `Phase B` `config/` 解體（見計畫；`agent.Host` + `middleware/preset`）
 - [x] `Phase C1` `7` 個 adapter 統一到 `core.Auth` + 接上 per-request `provider.Decorator`。
       `不`吃 auth 依賴，純 in-repo；做完就已經是目標架構，`Phase C2` 只是換 decorator 的來源
 - [x] `Phase C2` decorator 指向 `auth`，in-tree OAuth `967` → `194` 行（只留 request-time token DTO 與 vendor header）
@@ -57,10 +57,10 @@
 
 計畫見 [`plans/2026-07-22-agent-skeleton-config-opt-in.md`](plans/2026-07-22-agent-skeleton-config-opt-in.md)。
 
-- [x] `M1` `agent/spec`：`Config` + 9 個 feature block、`Choice` 中繼資料、tier 展開、驗證、JSON 編解（`go list -deps` 只見 `core`）
+- [x] `M1` `agent/spec`：`Config` + 8 個 feature block、`Choice` 中繼資料、tier 展開、驗證、JSON 編解（`go list -deps` 只見 `core`）
 - [x] `M2` `agent.Once` / `OnceStream`：走 `one_shot` rule + 全 nil port 的同一條 Engine 路徑，不繞過；順手移除 `core/thinking.go` 三行 stale `STUB` 註解
 - [x] `M3` `prompt` package：`Slot`(system/user/reminder) / `Section` / `Source` / `Builder`，+ `agent` 內五個 adapter（persona / context files / skills / env / reminder）
-- [x] `M4` `agent/build.go` + `agent/options.go`：8 stage pipeline、`New`/`MustNew`/`Bootstrap`、八個 `With*`；原 `Preflight` 已於 2026-07-27 併回單次 `Bootstrap`
+- [x] `M4` `agent/build.go` + `agent/options.go`：7 stage pipeline、`New`/`MustNew`/`Bootstrap`、八個 `With*`；原 `Preflight` 已於 2026-07-27 併回單次 `Bootstrap`
 - [x] `M5` `provider/registry`：name → adapter 唯一真相，env 查詢注入化
 - [x] `M6` `sample/code-agent/cmd/compose.go` `333` → `101` 行；政策移到 `safety.go`、session 選取移到 `session.go`
 - [x] `M7` `cmd/wizard.go`：`wizard`/`w` 逐階段設定產生器，選項全部來自 `spec` 與 `agent.ProviderChoices()`
@@ -72,8 +72,9 @@
 - [ ] 恢復 `INSTRUCTION_EMIT` / `EmitInstruction`：先定義 envelope owner 與真實 consumer path，避免與 `core.EventSink` / `Engine.Emitter` 重疊，再補 wire-format tests
 - [ ] 恢復 `spec.Limits.MaxWallTime`：明確選定並接上 `core.Budget.MaxWallTime` 或 `agent.WithTimeout`，同步 builder、wizard、validation、examples 與 tests
 - [ ] 恢復 `spec.Memory.Compaction`：把 variant 真正接到 `memory.Window` / `Compactor` 的 agent composition path，再同步 choices、wizard、examples 與 tests
-- [ ] `Parts.Prompt.Turn()` 尚無 production caller —— `sample/code-agent` 的互動迴圈仍自己拼 user message，接上後 reminder slot 才會真的每回合注入
-- [ ] `agent/once.go` 的 `oneshot()` 仍是獨立小路徑（不需要 `AppConfig`，硬折進 `Bootstrap` 會逼它憑空造一個）；若日後 `Once` 要支援持久化再合併
+- [ ] 恢復 `spec.Output` / `output.format`：先定義不與 `WithSink` 及 frontend wiring 重疊的真實 consumer，讓 text / JSON / TUI 每個選項都有行為與 contract tests
+- [ ] 恢復 `Parts.Prompt`：先讓 production driver 呼叫 `Prompt.Turn()`，證明 reminder slot 每回合真的注入，再補 lifecycle tests
+- [ ] `agent/once.go` 的 `oneshot()` 仍是獨立小路徑（不需要 `Host`，硬折進 `Bootstrap` 會逼它憑空造一個）；若日後 `Once` 要支援持久化再合併
 - [ ] `wizard` 尚無 `--verify`（選了才在最後跑一次 `agent.Once` 做 smoke test）
 - [ ] `agent` 尚無 settings 檔階層載入（`~/.config/<app>/agent.yaml` → 專案 `agent.yaml` 的合併），與 hook/permission 的 settings 層一起做
 
@@ -152,7 +153,7 @@
 ## Archive
 
 - [x] `sample/greet-agent` 接入 6 內建工具 + `SecureMiddleware` @2026-07-11_17:34:51 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
-- [x] `config.MustOpenForCLI` / `OpenForCLI` / `AppConfig` wiring helper @2026-07-11_17:34:49 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
+- [x] `config.MustOpenForCLI` / `OpenForCLI` / `Host` wiring helper @2026-07-11_17:34:49 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
 - [x] `action.Policy` sandbox re-check inside tool(defense-in-depth) @2026-07-11_17:34:46 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
 - [x] `tool/tool.go` `RegisterDefaults(reg, opts)` 一次註冊 @2026-07-11_17:34:44 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
 - [x] `tool/{read,write,edit,bash,glob,grep}.go` — 6 個內建工具 @2026-07-11_17:34:42 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)

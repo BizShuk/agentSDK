@@ -128,11 +128,8 @@ func (w *wizard) run(cfg agent.Config) (agent.Config, error) {
 		cfg.Memory.Store = w.choose("state store", spec.VariantChoices("memory.store"), cfg.Memory.Store)
 	}
 
-	// --- stage 8: output and limits ---
-	w.section("8/9  output and limits")
-	if cfg.Output != nil {
-		cfg.Output.Format = w.choose("format", spec.VariantChoices("output.format"), cfg.Output.Format)
-	}
+	// --- stage 8: limits ---
+	w.section("8/9  limits")
 	cfg.Limits.MaxTurns = w.askInt("max turns per run", cfg.Limits.MaxTurns)
 	cfg.Limits.Autonomy = w.choose("autonomy", spec.VariantChoices("limits.autonomy"), cfg.Limits.Autonomy)
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -25,13 +26,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// appCfg builds an AppConfig backed by a temp dir and in-memory stores.
+// appCfg builds a Host backed by a temp dir and in-memory stores.
 // Bootstrap must never need agent.OpenForCLI, which would write into the
 // developer's real ~/.config.
-func appCfg(t *testing.T) *agent.AppConfig {
+func appCfg(t *testing.T) *agent.Host {
 	t.Helper()
 	dir := t.TempDir()
-	return &agent.AppConfig{
+	return &agent.Host{
 		DataDir:    filepath.Join(dir, "data"),
 		LogDir:     filepath.Join(dir, "logs"),
 		RunID:      "test-run",
@@ -136,22 +137,6 @@ func TestBootstrapWiresBlocksToEngineFields(t *testing.T) {
 				Middleware: &spec.Middleware{Preset: spec.MIDDLEWARE_NONE}},
 			verify: func(t *testing.T, e *runtime.Engine) {
 				assert.Nil(t, e.Middleware)
-			},
-		},
-		{
-			name: "json output binds a sink",
-			cfg: agent.Config{Name: "x", Tier: spec.TIER_BASIC,
-				Output: &spec.Output{Format: spec.OUTPUT_JSON}},
-			verify: func(t *testing.T, e *runtime.Engine) {
-				assert.NotNil(t, e.Sink)
-			},
-		},
-		{
-			name: "text output binds no sink",
-			cfg: agent.Config{Name: "x", Tier: spec.TIER_BASIC,
-				Output: &spec.Output{Format: spec.OUTPUT_TEXT}},
-			verify: func(t *testing.T, e *runtime.Engine) {
-				assert.Nil(t, e.Sink, "the front end owns the terminal in text mode")
 			},
 		},
 		{
@@ -324,10 +309,10 @@ func TestOptionsReachTheEngine(t *testing.T) {
 		assert.Contains(t, state.Messages[0].Parts[0].Text, "INJECTED")
 	})
 
-	t.Run("sink overrides the configured format", func(t *testing.T) {
+	t.Run("sink injection binds presentation", func(t *testing.T) {
 		var got int
 		eng, _, _ := bootstrap(t,
-			agent.Config{Name: "x", Tier: spec.TIER_BASIC, Output: &spec.Output{Format: spec.OUTPUT_JSON}},
+			agent.Config{Name: "x", Tier: spec.TIER_BASIC},
 			agent.WithSink(agent.SinkFunc(func(core.StreamEvent) { got++ })))
 		require.NotNil(t, eng.Sink)
 		eng.Sink.OnStreamEvent(core.StreamEvent{})
@@ -490,12 +475,22 @@ func TestPartsAreNilUntilBootstrap(t *testing.T) {
 	assert.Nil(t, a.Parts())
 }
 
+func TestPartsExposeOnlyRuntimeComposition(t *testing.T) {
+	typ := reflect.TypeOf(agent.Parts{})
+	got := make([]string, 0, typ.NumField())
+	for i := range typ.NumField() {
+		got = append(got, typ.Field(i).Name)
+	}
+	assert.ElementsMatch(t, []string{"Engine", "Sessions", "Skills", "Host", "Cwd"}, got)
+}
+
 func TestPartsExposeSessionsWhenEnabled(t *testing.T) {
 	_, _, a := bootstrap(t, agent.Config{Name: "x", Tier: spec.TIER_STANDARD})
 	parts := a.Parts()
 	require.NotNil(t, parts)
 	assert.NotNil(t, parts.Sessions, "standard enables lineage")
 	assert.NotNil(t, parts.Engine)
+	assert.NotNil(t, parts.Host)
 
 	_, _, b := bootstrap(t, agent.Config{Name: "x", Tier: spec.TIER_BASIC})
 	assert.Nil(t, b.Parts().Sessions, "basic has persistence but no lineage")

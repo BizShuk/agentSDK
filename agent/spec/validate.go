@@ -136,10 +136,6 @@ func (c Config) Validate() error {
 			add("spec: subagents.max_turns must be at least 1, got %d", c.Subagents.MaxTurns)
 		}
 	}
-	if c.Output != nil {
-		checkVariant(add, "output.format", c.Output.Format)
-	}
-
 	// --- cross-block coherence ---
 	// The skill index and the task tool are prompt/tool contributions; a
 	// block that can never take effect is a silent no-op, and silent

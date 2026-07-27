@@ -28,11 +28,6 @@ type Host struct {
 	WAL        core.WriteAheadLog // file-backed WriteAheadLog, ready to use
 }
 
-// Deprecated: use Host. Kept for one release so existing callers and
-// tests keep compiling; cli.OpenForCLI is the new home for the process
-// side of AppConfig.
-type AppConfig = Host
-
 // Open binds the conventional app directories and file-backed persistence.
 // Process logging and signal handling remain in agent/cli.
 func Open(appName string) (*Host, error) {

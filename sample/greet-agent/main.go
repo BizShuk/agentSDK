@@ -65,7 +65,7 @@ type greetAgent struct {
 
 // Bootstrap reads the opening prompt and seeds the user message asking
 // the agent to greet the named person via the greet tool.
-func (g greetAgent) Bootstrap(ctx context.Context, ac *agent.AppConfig) (*agent.Engine, core.State, error) {
+func (g greetAgent) Bootstrap(ctx context.Context, ac *agent.Host) (*agent.Engine, core.State, error) {
 	engine, state, err := g.Agent.Bootstrap(ctx, ac)
 	if err != nil {
 		return engine, state, err
