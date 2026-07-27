@@ -39,6 +39,9 @@ func ReActStep() core.Decide {
 // matters: tools may need the provider, prompts may need skills, and one
 // permission engine must feed both middleware and Engine.Approval.
 func (a *Agent) Bootstrap(ctx context.Context, ac *Host) (*Engine, core.State, error) {
+	if ac == nil {
+		return nil, core.State{}, errNoHost
+	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, core.State{}, fmt.Errorf("agent: getwd: %w", err)

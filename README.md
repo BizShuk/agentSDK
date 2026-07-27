@@ -45,6 +45,9 @@ func main() {
 }
 ```
 
+嵌入其他 process 時自行建立 `agent.Host`，並直接處理 `agent.Run(...)` 回傳的
+`error`；只有 `agent/cli` 將錯誤轉成 process exit code。
+
 設定檔驅動——應用層完全不出現任何 harness package：
 
 ```go

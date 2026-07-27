@@ -1,13 +1,17 @@
 package cli_test
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/cli"
+	"github.com/bizshuk/agentsdk/core"
 )
 
 // TestOpenForCLIRequiresAppName confirms empty appName returns an error.
@@ -97,5 +101,28 @@ func TestOpenForCLICreatesFiles(t *testing.T) {
 	}
 	if cfg.WAL == nil {
 		t.Error("WAL must not be nil")
+	}
+}
+
+type failingRunner struct{ name string }
+
+func (r failingRunner) Name() string { return r.name }
+
+func (r failingRunner) Bootstrap(context.Context, *agent.Host) (*agent.Engine, core.State, error) {
+	return nil, core.State{}, errors.New("broken bootstrap")
+}
+
+func TestRunMapsAgentErrorToExitCode(t *testing.T) {
+	const name = "agentsdk-config-test-exit-code"
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(filepath.Join(home, ".config", name)) })
+
+	code := cli.Run(context.Background(), failingRunner{name: name})
+
+	if code != cli.EXIT_ERROR {
+		t.Fatalf("Run code = %d, want %d", code, cli.EXIT_ERROR)
 	}
 }

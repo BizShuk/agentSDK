@@ -14,7 +14,7 @@ import (
 
 var (
 	errNilEngine = errors.New("agent: engine must not be nil")
-	errNoHost    = errors.New("agent: host must not be nil for this operation")
+	errNoHost    = errors.New("agent: host is required")
 )
 
 // Host contains run identity, paths, logging, and persistence ports.
@@ -67,7 +67,17 @@ func Perform(ctx context.Context, host *Host, engine *Engine, state core.State) 
 	if engine == nil {
 		return core.State{}, errNilEngine
 	}
-	bindHost(host, engine, &state)
+	if host != nil {
+		if engine.Store == nil {
+			engine.Store = host.StateStore
+		}
+		if engine.Log == nil {
+			engine.Log = host.WAL
+		}
+		if state.RunID == "" {
+			state.RunID = host.RunID
+		}
+	}
 	return engine.Run(ctx, state)
 }
 
@@ -77,7 +87,14 @@ func ResumeRun(ctx context.Context, host *Host, engine *Engine, runID string) (c
 	if engine == nil {
 		return core.State{}, errNilEngine
 	}
-	bindHost(host, engine, nil)
+	if host != nil {
+		if engine.Store == nil {
+			engine.Store = host.StateStore
+		}
+		if engine.Log == nil {
+			engine.Log = host.WAL
+		}
+	}
 	return engine.Resume(ctx, runID)
 }
 
@@ -114,19 +131,4 @@ func Approve(ctx context.Context, host *Host, runID string, decision core.Approv
 		return nil
 	}
 	return host.StateStore.Save(ctx, state)
-}
-
-func bindHost(host *Host, engine *Engine, state *core.State) {
-	if host == nil {
-		return
-	}
-	if engine.Store == nil {
-		engine.Store = host.StateStore
-	}
-	if engine.Log == nil {
-		engine.Log = host.WAL
-	}
-	if state != nil && state.RunID == "" {
-		state.RunID = host.RunID
-	}
 }

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
@@ -10,16 +11,25 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 )
 
-// Deprecated: exit-code constants moved to agent/cli. The values are
-// unchanged (0 / 1); new code should import cli.EXIT_OK / cli.EXIT_ERROR.
-const (
-	EXIT_OK    = 0
-	EXIT_ERROR = 1
-)
+var errNoRunner = errors.New("agent: runner is required")
 
-// Run executes preflight, bootstrap, engine rounds, and completion without
-// taking ownership of the process.
-func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
+// Run executes bootstrap, engine rounds, and completion without taking
+// ownership of the process. Bootstrap owns the complete engine and opening
+// state; Run does not fill missing dependencies from Host.
+func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) error {
+	if a == nil {
+		return errNoRunner
+	}
+	if host == nil {
+		return errNoHost
+	}
+	if a.Name() == "" {
+		return errors.New("agent: Runner.Name must not be empty")
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("agent: run context: %w", err)
+	}
+
 	o := DefaultRunOpts()
 	for _, opt := range opts {
 		opt(&o)
@@ -30,23 +40,6 @@ func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
 		log = slog.Default().With(slog.String("app", a.Name()))
 	}
 
-	if a.Name() == "" {
-		log.Error("run: Runner.Name must not be empty")
-		return EXIT_ERROR
-	}
-
-	if err := ctx.Err(); err != nil {
-		log.Error("run context cancelled before bootstrap", "err", err)
-		return EXIT_ERROR
-	}
-
-	if p, ok := a.(Preflighter); ok {
-		if err := p.Preflight(ctx, host); err != nil {
-			log.Error("preflight failed", "err", err)
-			return EXIT_ERROR
-		}
-	}
-
 	if o.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, o.Timeout)
@@ -55,25 +48,17 @@ func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
 
 	engine, state, err := a.Bootstrap(ctx, host)
 	if err != nil {
-		log.Error("bootstrap failed", "err", err)
-		return EXIT_ERROR
+		return fmt.Errorf("agent: bootstrap: %w", err)
 	}
 	if engine == nil {
-		log.Error("bootstrap returned a nil Engine")
-		return EXIT_ERROR
+		return fmt.Errorf("agent: bootstrap: %w", errNilEngine)
 	}
-	bindHost(host, engine, &state)
 
 	start := time.Now()
 	log.Info("run_start", "run_id", state.RunID)
 	final, runErr := safeRun(ctx, engine, state)
 	if runErr != nil {
-		log.Error("run_failed",
-			"run_id", state.RunID,
-			"dur_ms", time.Since(start).Milliseconds(),
-			"turns", final.Turn,
-			"err", runErr)
-		return EXIT_ERROR
+		return fmt.Errorf("agent: engine run: %w", runErr)
 	}
 
 	if in, ok := a.(Interactive); ok {
@@ -84,18 +69,14 @@ func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
 			}
 			res, err := resolveRound(ctx, in, o.RoundTimeout, Pause{State: final, Reason: reason})
 			if err != nil {
-				log.Error("next_round failed",
-					"run_id", final.RunID, "reason", string(reason), "err", err)
-				return EXIT_ERROR
+				return fmt.Errorf("agent: next round (%s): %w", reason, err)
 			}
 			if res.Stop || (reason == PAUSE_ROUND_END && res.Input == "") {
 				break
 			}
 			next, err := advance(ctx, engine, final, reason, res)
 			if err != nil {
-				log.Error("advance failed",
-					"run_id", final.RunID, "reason", string(reason), "err", err)
-				return EXIT_ERROR
+				return fmt.Errorf("agent: advance (%s): %w", reason, err)
 			}
 			final = next
 			log.Info("round_advanced",
@@ -108,8 +89,7 @@ func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
 
 	if c, ok := a.(Completer); ok {
 		if err := c.OnComplete(ctx, final); err != nil {
-			log.Error("on_complete failed", "run_id", final.RunID, "err", err)
-			return EXIT_ERROR
+			return fmt.Errorf("agent: complete: %w", err)
 		}
 	}
 
@@ -119,7 +99,7 @@ func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) int {
 		"turns", final.Turn,
 		"rounds", final.Budget.UsedRounds,
 		"status", string(final.Status))
-	return EXIT_OK
+	return nil
 }
 
 func pauseReason(s core.State) (PauseReason, bool) {
@@ -172,21 +152,26 @@ func safeRun(ctx context.Context, e *Engine, state core.State) (final core.State
 		if rec == nil {
 			return
 		}
-		err = fmt.Errorf("panic: %v", rec)
-		slog.Error("run_panic", "run_id", state.RunID, "stack", string(debug.Stack()))
-		final = markFailed(ctx, e, state)
+		panicErr := fmt.Errorf("panic: %v\n%s", rec, debug.Stack())
+		var persistErr error
+		final, persistErr = markFailed(ctx, e, state)
+		if persistErr != nil {
+			err = errors.Join(panicErr, fmt.Errorf("persist failed state: %w", persistErr))
+			return
+		}
+		err = panicErr
 	}()
 	return e.Run(ctx, state)
 }
 
 // markFailed reloads the latest checkpoint and persists a failed status on
 // a cancellation-detached context.
-func markFailed(ctx context.Context, e *Engine, seed core.State) core.State {
+func markFailed(ctx context.Context, e *Engine, seed core.State) (core.State, error) {
 	out := seed
 	out.Status = core.RUN_STATUS_FAILED
 	out.UpdatedAt = time.Now().UTC()
 	if e == nil || e.Store == nil {
-		return out
+		return out, nil
 	}
 	saveCtx := context.WithoutCancel(ctx)
 	if latest, err := e.Store.Load(saveCtx, seed.RunID); err == nil {
@@ -195,7 +180,7 @@ func markFailed(ctx context.Context, e *Engine, seed core.State) core.State {
 		out.UpdatedAt = time.Now().UTC()
 	}
 	if err := e.Store.Save(saveCtx, out); err != nil {
-		slog.Error("run_panic: failed to persist FAILED status", "run_id", seed.RunID, "err", err)
+		return out, err
 	}
-	return out
+	return out, nil
 }

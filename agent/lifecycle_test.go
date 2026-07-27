@@ -56,15 +56,14 @@ func (panicTool) Call(context.Context, json.RawMessage) (core.ToolResult, error)
 	panic("tool exploded")
 }
 
-// testAgent is a configurable agent.Runner for the table below.
+// testAgent is a configurable agent.Runner for the table below. Its
+// Bootstrap method owns the complete engine and opening state.
 type testAgent struct {
 	name          string
 	tool          core.Tool
 	store         core.StateStore
-	preflightErr  error
 	bootstrapErr  error
 	completeErr   error
-	preflightRan  bool
 	bootstrapRan  bool
 	completeRan   bool
 	completeState core.State
@@ -72,7 +71,7 @@ type testAgent struct {
 
 func (a *testAgent) Name() string { return a.name }
 
-func (a *testAgent) Bootstrap(_ context.Context, _ *agent.AppConfig) (*runtime.Engine, core.State, error) {
+func (a *testAgent) Bootstrap(_ context.Context, host *agent.Host) (*runtime.Engine, core.State, error) {
 	a.bootstrapRan = true
 	if a.bootstrapErr != nil {
 		return nil, core.State{}, a.bootstrapErr
@@ -90,9 +89,10 @@ func (a *testAgent) Bootstrap(_ context.Context, _ *agent.AppConfig) (*runtime.E
 	})
 
 	engine := runtime.NewEngine(step, provider, reg)
-	engine.Store = a.store // nil in most cases — Run backfills from cfg
+	engine.Store = a.store
 
 	state := core.State{
+		RunID:          host.RunID,
 		ReasoningStyle: core.REASON_REACT,
 		Autonomy:       core.AUTONOMY_L4,
 		Budget:         core.Budget{MaxTurns: 5},
@@ -104,16 +104,6 @@ func (a *testAgent) OnComplete(_ context.Context, final core.State) error {
 	a.completeRan = true
 	a.completeState = final
 	return a.completeErr
-}
-
-// preflightAgent adds the optional Preflighter to testAgent. It is a
-// separate type so the other cases stay free of the hook entirely — a
-// Runner that does not implement Preflighter must skip that step.
-type preflightAgent struct{ *testAgent }
-
-func (a *preflightAgent) Preflight(context.Context, *agent.AppConfig) error {
-	a.preflightRan = true
-	return a.preflightErr
 }
 
 // testHost builds a Host for a single-agent.Run call. StateStore and
@@ -131,39 +121,52 @@ func TestRunHappyPath(t *testing.T) {
 	const name = "agentsdk-app-test-happy"
 
 	a := &testAgent{name: name, tool: echoTool{}}
-	code := agent.Run(context.Background(), a, testHost(name))
+	err := agent.Run(context.Background(), a, testHost(name))
 
-	assert.Equal(t, agent.EXIT_OK, code)
+	require.NoError(t, err)
 	assert.True(t, a.bootstrapRan)
 	assert.True(t, a.completeRan, "OnComplete should fire on a successful run")
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, a.completeState.Status)
 }
 
-func TestRunBackfillsPersistenceFromConfig(t *testing.T) {
-	const name = "agentsdk-app-test-backfill"
+func TestCustomRunnerOwnsOpeningState(t *testing.T) {
+	const name = "agentsdk-app-test-runner-state"
 	cleanupAppDir(t, name)
 
-	// store left nil in Bootstrap → Run must wire cfg.StateStore, so the
-	// run ID must be non-empty and the final state must have persisted.
 	a := &testAgent{name: name, tool: echoTool{}}
-	code := agent.Run(context.Background(), a, testHost(a.name))
+	err := agent.Run(context.Background(), a, testHost(a.name))
 
-	require.Equal(t, agent.EXIT_OK, code)
-	assert.NotEmpty(t, a.completeState.RunID, "Run should seed RunID from AppConfig")
+	require.NoError(t, err)
+	assert.Equal(t, name, a.completeState.RunID)
 }
 
-func TestRunPreflightFailureAbortsBeforeBootstrap(t *testing.T) {
-	const name = "agentsdk-app-test-preflight"
-	cleanupAppDir(t, name)
+func TestRunRejectsNilHostBeforeBootstrap(t *testing.T) {
+	a := &testAgent{name: "agentsdk-app-test-nil-host", tool: echoTool{}}
 
-	base := &testAgent{name: name, tool: echoTool{}, preflightErr: errors.New("no api key")}
-	a := &preflightAgent{testAgent: base}
+	err := agent.Run(context.Background(), a, nil)
 
-	code := agent.Run(context.Background(), a, testHost(a.name))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "host")
+	assert.False(t, a.bootstrapRan)
+}
 
-	assert.Equal(t, agent.EXIT_ERROR, code)
-	assert.True(t, base.preflightRan)
-	assert.False(t, base.bootstrapRan, "a failed preflight must not reach Bootstrap")
+func TestRunRejectsNilRunner(t *testing.T) {
+	err := agent.Run(context.Background(), nil, testHost("unused"))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "runner")
+}
+
+func TestRunRejectsCancelledContextBeforeBootstrap(t *testing.T) {
+	a := &testAgent{name: "agentsdk-app-test-cancelled-context", tool: echoTool{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := agent.Run(ctx, a, testHost(a.name))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.False(t, a.bootstrapRan)
 }
 
 func TestRunBootstrapFailure(t *testing.T) {
@@ -171,9 +174,10 @@ func TestRunBootstrapFailure(t *testing.T) {
 	cleanupAppDir(t, name)
 
 	a := &testAgent{name: name, tool: echoTool{}, bootstrapErr: errors.New("bad wiring")}
-	code := agent.Run(context.Background(), a, testHost(a.name))
+	err := agent.Run(context.Background(), a, testHost(a.name))
 
-	assert.Equal(t, agent.EXIT_ERROR, code)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bootstrap")
 	assert.False(t, a.completeRan)
 }
 
@@ -182,9 +186,10 @@ func TestRunOnCompleteFailureFailsProcess(t *testing.T) {
 	cleanupAppDir(t, name)
 
 	a := &testAgent{name: name, tool: echoTool{}, completeErr: errors.New("publish failed")}
-	code := agent.Run(context.Background(), a, testHost(a.name))
+	err := agent.Run(context.Background(), a, testHost(a.name))
 
-	assert.Equal(t, agent.EXIT_ERROR, code, "undelivered results are not a successful run")
+	require.Error(t, err, "undelivered results are not a successful run")
+	assert.Contains(t, err.Error(), "publish failed")
 	assert.True(t, a.completeRan)
 }
 
@@ -198,9 +203,10 @@ func TestRunRecoversToolPanic(t *testing.T) {
 	store := testutil.NewMemStore()
 	a := &testAgent{name: name, tool: panicTool{}, store: store}
 
-	code := agent.Run(context.Background(), a, testHost(a.name))
+	runErr := agent.Run(context.Background(), a, testHost(a.name))
 
-	assert.Equal(t, agent.EXIT_ERROR, code)
+	require.Error(t, runErr)
+	assert.Contains(t, runErr.Error(), "tool exploded")
 
 	runIDs, err := store.List(context.Background())
 	require.NoError(t, err)
@@ -215,7 +221,9 @@ func TestRunRecoversToolPanic(t *testing.T) {
 
 func TestRunRejectsEmptyName(t *testing.T) {
 	a := &testAgent{name: "", tool: echoTool{}}
-	assert.Equal(t, agent.EXIT_ERROR, agent.Run(context.Background(), a, testHost(a.name)))
+	err := agent.Run(context.Background(), a, testHost(a.name))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Name")
 	assert.False(t, a.bootstrapRan)
 }
 
@@ -233,9 +241,9 @@ func TestRunHonorsTimeout(t *testing.T) {
 		},
 	}
 
-	code := agent.Run(context.Background(), a, testHost(a.name), agent.WithTimeout(2*time.Second))
+	err := agent.Run(context.Background(), a, testHost(a.name), agent.WithTimeout(2*time.Second))
 
-	assert.Equal(t, agent.EXIT_OK, code)
+	require.NoError(t, err)
 	assert.True(t, gotDeadline, "Bootstrap should receive a ctx carrying the run deadline")
 }
 
@@ -244,9 +252,9 @@ type deadlineProbe struct {
 	probe func(context.Context)
 }
 
-func (a *deadlineProbe) Bootstrap(ctx context.Context, cfg *agent.AppConfig) (*runtime.Engine, core.State, error) {
+func (a *deadlineProbe) Bootstrap(ctx context.Context, host *agent.Host) (*runtime.Engine, core.State, error) {
 	a.probe(ctx)
-	return a.testAgent.Bootstrap(ctx, cfg)
+	return a.testAgent.Bootstrap(ctx, host)
 }
 
 // --- Interactive seam (Task 3) ---
@@ -303,8 +311,11 @@ type interactiveAgent struct {
 
 func (a *interactiveAgent) Name() string { return a.name }
 
-func (a *interactiveAgent) Bootstrap(_ context.Context, _ *agent.AppConfig) (*runtime.Engine, core.State, error) {
+func (a *interactiveAgent) Bootstrap(_ context.Context, host *agent.Host) (*runtime.Engine, core.State, error) {
 	eng, st := a.boot()
+	eng.Store = host.StateStore
+	eng.Log = host.WAL
+	st.RunID = host.RunID
 	return eng, st, nil
 }
 
@@ -327,8 +338,11 @@ type pausingAgent struct {
 }
 
 func (a *pausingAgent) Name() string { return a.name }
-func (a *pausingAgent) Bootstrap(_ context.Context, _ *agent.AppConfig) (*runtime.Engine, core.State, error) {
+func (a *pausingAgent) Bootstrap(_ context.Context, host *agent.Host) (*runtime.Engine, core.State, error) {
 	eng, st := pausingEngine()
+	eng.Store = host.StateStore
+	eng.Log = host.WAL
+	st.RunID = host.RunID
 	return eng, st, nil
 }
 func (a *pausingAgent) OnComplete(_ context.Context, final core.State) error {
@@ -355,8 +369,8 @@ func TestRunConsultsInteractiveOnApprovalPause(t *testing.T) {
 			return agent.Resume{Stop: true}, nil
 		},
 	}
-	code := agent.Run(context.Background(), a, testHost(a.name), agent.WithRoundTimeout(5*time.Second))
-	require.Equal(t, agent.EXIT_OK, code)
+	err := agent.Run(context.Background(), a, testHost(a.name), agent.WithRoundTimeout(5*time.Second))
+	require.NoError(t, err)
 	assert.Contains(t, seen, agent.PAUSE_APPROVAL)
 	assert.True(t, a.completeRan)
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, a.final.Status)
@@ -378,8 +392,8 @@ func TestRunInteractiveRejectCompletesRun(t *testing.T) {
 			return agent.Resume{Stop: true}, nil
 		},
 	}
-	code := agent.Run(context.Background(), a, testHost(a.name))
-	require.Equal(t, agent.EXIT_OK, code)
+	err := agent.Run(context.Background(), a, testHost(a.name))
+	require.NoError(t, err)
 	assert.True(t, a.completeRan)
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, a.final.Status)
 }
@@ -403,8 +417,8 @@ func TestRunFollowUpReopensCompletedRun(t *testing.T) {
 			return agent.Resume{}, nil // empty input at round_end → stop
 		},
 	}
-	code := agent.Run(context.Background(), a, testHost(a.name))
-	require.Equal(t, agent.EXIT_OK, code)
+	err := agent.Run(context.Background(), a, testHost(a.name))
+	require.NoError(t, err)
 	assert.Equal(t, 2, rounds, "asked after the first completion and after the follow-up")
 	assert.True(t, a.completeRan)
 }
@@ -416,8 +430,8 @@ func TestRunExitsOnPauseWithoutInteractive(t *testing.T) {
 	cleanupAppDir(t, name)
 
 	a := &pausingAgent{name: name}
-	code := agent.Run(context.Background(), a, testHost(a.name))
-	require.Equal(t, agent.EXIT_OK, code, "no Interactive → clean exit")
+	err := agent.Run(context.Background(), a, testHost(a.name))
+	require.NoError(t, err, "no Interactive → clean exit")
 	assert.True(t, a.completeRan)
 	assert.Equal(t, core.RUN_STATUS_PAUSED_APPROVAL, a.final.Status,
 		"the pause is left for an external verb")

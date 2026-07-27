@@ -89,21 +89,10 @@ func (a *Agent) Config() Config { return a.cfg }
 // Parts returns the last Bootstrap result.
 func (a *Agent) Parts() *Parts { return a.parts }
 
-// Preflight validates provider construction before creating run state.
-func (a *Agent) Preflight(_ context.Context, _ *Host) error {
-	_, err := a.deps.buildProvider(a.cfg.Model)
-	return err
-}
-
 // Runner supplies an engine and opening state to Run.
 type Runner interface {
 	Name() string
 	Bootstrap(ctx context.Context, host *Host) (*Engine, core.State, error)
-}
-
-// Preflighter performs optional checks before Bootstrap.
-type Preflighter interface {
-	Preflight(ctx context.Context, host *Host) error
 }
 
 // Completer receives a successfully completed run.

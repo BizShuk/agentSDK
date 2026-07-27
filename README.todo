@@ -60,7 +60,7 @@
 - [x] `M1` `agent/spec`：`Config` + 9 個 feature block、`Choice` 中繼資料、tier 展開、驗證、JSON 編解（`go list -deps` 只見 `core`）
 - [x] `M2` `agent.Once` / `OnceStream`：走 `one_shot` rule + 全 nil port 的同一條 Engine 路徑，不繞過；順手移除 `core/thinking.go` 三行 stale `STUB` 註解
 - [x] `M3` `prompt` package：`Slot`(system/user/reminder) / `Section` / `Source` / `Builder`，+ `agent` 內五個 adapter（persona / context files / skills / env / reminder）
-- [x] `M4` `agent/build.go` + `agent/options.go`：8 stage pipeline、`New`/`MustNew`/`Bootstrap`/`Preflight`、八個 `With*`
+- [x] `M4` `agent/build.go` + `agent/options.go`：8 stage pipeline、`New`/`MustNew`/`Bootstrap`、八個 `With*`；原 `Preflight` 已於 2026-07-27 併回單次 `Bootstrap`
 - [x] `M5` `provider/registry`：name → adapter 唯一真相，env 查詢注入化
 - [x] `M6` `sample/code-agent/cmd/compose.go` `333` → `101` 行；政策移到 `safety.go`、session 選取移到 `session.go`
 - [x] `M7` `cmd/wizard.go`：`wizard`/`w` 逐階段設定產生器，選項全部來自 `spec` 與 `agent.ProviderChoices()`

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/bizshuk/agentsdk/agent"
@@ -15,6 +16,7 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware/hook"
 	"github.com/bizshuk/agentsdk/prompt"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/runtime"
 	"github.com/bizshuk/agentsdk/skill"
 	"github.com/bizshuk/agentsdk/tool/builtin"
@@ -173,6 +175,18 @@ func TestBootstrapWiresBlocksToEngineFields(t *testing.T) {
 			tc.verify(t, eng)
 		})
 	}
+}
+
+func TestBootstrapRejectsNilHost(t *testing.T) {
+	a, err := agent.New(
+		agent.Config{Name: "x", Tier: spec.TIER_ONESHOT},
+		agent.WithProvider(testutil.NewScriptedProvider()),
+	)
+	require.NoError(t, err)
+
+	_, _, err = a.Bootstrap(context.Background(), nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "host")
 }
 
 func TestBootstrapSeedsStateFromLimits(t *testing.T) {
@@ -494,34 +508,30 @@ func TestAgentSatisfiesRunner(t *testing.T) {
 	// lifecycle rather than replacing it.
 	var _ interface {
 		Name() string
-		Bootstrap(context.Context, *agent.AppConfig) (*runtime.Engine, core.State, error)
-	} = (*agent.Agent)(nil)
-
-	var _ interface {
-		Preflight(context.Context, *agent.AppConfig) error
+		Bootstrap(context.Context, *agent.Host) (*runtime.Engine, core.State, error)
 	} = (*agent.Agent)(nil)
 }
 
-func TestPreflightSurfacesABadProviderName(t *testing.T) {
+func TestBootstrapSurfacesABadProviderName(t *testing.T) {
 	a, err := agent.New(agent.Config{Name: "x", Model: spec.Model{Provider: "bogus"}})
 	require.NoError(t, err, "an unknown provider is a runtime concern, not a schema error")
 
-	err = a.Preflight(context.Background(), appCfg(t))
+	_, _, err = a.Bootstrap(context.Background(), appCfg(t))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown provider")
 }
 
-func TestPreflightPassesWithAnInjectedProvider(t *testing.T) {
+func TestBootstrapPassesWithAnInjectedProvider(t *testing.T) {
 	a, err := agent.New(agent.Config{Name: "x"}, agent.WithProvider(testutil.NewScriptedProvider()))
 	require.NoError(t, err)
-	require.NoError(t, a.Preflight(context.Background(), appCfg(t)))
+	_, _, err = a.Bootstrap(context.Background(), appCfg(t))
+	require.NoError(t, err)
 }
 
-// TestPreflightPropagatesCredentialKindError ensures the strict-mode
-// error from provider.Options.Resolve reaches the operator at startup
-// rather than failing later inside the model call. minimax has no OAuth
-// env path; --credential-kind=oauth therefore fails fast.
-func TestPreflightPropagatesCredentialKindError(t *testing.T) {
+// TestBootstrapPropagatesCredentialKindError ensures the strict-mode error
+// from provider.Options.Resolve reaches the operator during the single
+// construction pass. minimax has no OAuth env path, so oauth fails fast.
+func TestBootstrapPropagatesCredentialKindError(t *testing.T) {
 	a, err := agent.New(agent.Config{
 		Name: "x",
 		Model: spec.Model{
@@ -531,16 +541,16 @@ func TestPreflightPropagatesCredentialKindError(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = a.Preflight(context.Background(), appCfg(t))
+	_, _, err = a.Bootstrap(context.Background(), appCfg(t))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not OAuth-capable",
-		"the registry message must surface through Preflight so the operator sees what env was expected")
+		"the registry message must surface through Bootstrap so the operator sees what env was expected")
 }
 
-// TestPreflightSucceedsWithCredentialKindAuto confirms the legacy
+// TestBootstrapSucceedsWithCredentialKindAuto confirms the legacy
 // auto precedence (OAuth > API key) still works when both env are set.
 // anthropic is the only adapter that registers both classes.
-func TestPreflightSucceedsWithCredentialKindAuto(t *testing.T) {
+func TestBootstrapSucceedsWithCredentialKindAuto(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "sk-from-env")
 
 	a, err := agent.New(agent.Config{
@@ -552,10 +562,73 @@ func TestPreflightSucceedsWithCredentialKindAuto(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, a.Preflight(context.Background(), appCfg(t)))
+	_, _, err = a.Bootstrap(context.Background(), appCfg(t))
+	require.NoError(t, err)
 }
 
 // --- end to end ---
+
+func TestRunKeepsDisabledPersistenceNil(t *testing.T) {
+	t.Chdir(t.TempDir())
+	prov := testutil.NewScriptedProvider()
+	prov.EnqueueEndTurn("done")
+
+	a, err := agent.New(agent.Config{
+		Name:   "memory-disabled",
+		Tier:   spec.TIER_BASIC,
+		Memory: &spec.Memory{Store: spec.MEMORY_STORE_NONE},
+	}, agent.WithProvider(prov))
+	require.NoError(t, err)
+
+	err = agent.Run(context.Background(), a, appCfg(t))
+	require.NoError(t, err)
+	require.NotNil(t, a.Parts())
+	assert.Nil(t, a.Parts().Engine.Store)
+	assert.Nil(t, a.Parts().Engine.Log)
+}
+
+var registryProviderSequence atomic.Uint64
+
+type registryAdapter struct {
+	*testutil.ScriptedProvider
+	name     string
+	metadata provider.Metadata
+}
+
+func (a *registryAdapter) Name() string                { return a.name }
+func (a *registryAdapter) Metadata() provider.Metadata { return a.metadata }
+
+func TestRunBuildsRegistryProviderOnce(t *testing.T) {
+	t.Chdir(t.TempDir())
+	name := fmt.Sprintf("phase1-counting-%d", registryProviderSequence.Add(1))
+	metadata := provider.Metadata{Label: name}
+	calls := 0
+	provider.Register(provider.Entry{
+		Name:     name,
+		Metadata: metadata,
+		New: func(provider.Options) (provider.Adapter, error) {
+			calls++
+			scripted := testutil.NewScriptedProvider()
+			scripted.EnqueueEndTurn("done")
+			return &registryAdapter{
+				ScriptedProvider: scripted,
+				name:             name,
+				metadata:         metadata,
+			}, nil
+		},
+	})
+
+	a, err := agent.New(agent.Config{
+		Name:  "provider-built-once",
+		Tier:  spec.TIER_ONESHOT,
+		Model: spec.Model{Provider: name},
+	})
+	require.NoError(t, err)
+
+	err = agent.Run(context.Background(), a, appCfg(t))
+	require.NoError(t, err)
+	assert.Equal(t, 1, calls)
+}
 
 func TestBootstrapProducesARunnableEngine(t *testing.T) {
 	t.Chdir(t.TempDir())

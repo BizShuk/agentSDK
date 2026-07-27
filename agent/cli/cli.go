@@ -79,6 +79,10 @@ func MustOpenForCLI(appName string, level slog.Level) *agent.Host {
 // supervisor's stop signal cancel the in-flight model call or tool
 // instead of killing the process mid-write.
 func Main(a agent.Runner, opts ...agent.RunOption) {
+	if a == nil {
+		slog.Error("cli: runner is required")
+		os.Exit(EXIT_ERROR)
+	}
 	name := a.Name()
 	if name == "" {
 		slog.Error("cli: Runner.Name must not be empty")
@@ -90,10 +94,14 @@ func Main(a agent.Runner, opts ...agent.RunOption) {
 }
 
 // Run is the testable core of Main: it builds a Host via OpenForCLI,
-// then hands off to agent.Run. Returns the same exit code agent.Run
-// does. A caller that wants to embed the agent without exiting the
-// process should call agent.Run directly with a Host of its own.
+// hands off to agent.Run, then maps the returned error to a process exit
+// code. A caller that wants to embed the agent without exiting the process
+// should call agent.Run directly with a Host of its own.
 func Run(ctx context.Context, a agent.Runner, opts ...agent.RunOption) int {
+	if a == nil {
+		slog.Error("cli: runner is required")
+		return EXIT_ERROR
+	}
 	o := agent.DefaultRunOpts()
 	for _, opt := range opts {
 		opt(&o)
@@ -107,7 +115,11 @@ func Run(ctx context.Context, a agent.Runner, opts ...agent.RunOption) int {
 	if o.LogToStdout {
 		useStdoutLog(host.RunID, o.LogLevel)
 	}
-	return agent.Run(ctx, a, host, opts...)
+	if err := agent.Run(ctx, a, host, opts...); err != nil {
+		slog.Error("run failed", "app", name, "err", err)
+		return EXIT_ERROR
+	}
+	return EXIT_OK
 }
 
 // useStdoutLog replaces the file handler OpenForCLI installed with a
