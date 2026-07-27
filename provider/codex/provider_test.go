@@ -65,6 +65,25 @@ func TestBearerHeaderFromOAuth(t *testing.T) {
 	assert.Equal(t, "Bearer oauth-abc", sawAuth)
 }
 
+func TestGenerateRejectsStreamReadFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: " + strings.Repeat("x", 2*1024*1024)))
+	}))
+	defer srv.Close()
+
+	p, err := codex.New(codex.WithAPIKey("k"), codex.WithBaseURL(srv.URL))
+	require.NoError(t, err)
+	_, err = p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{
+			Role:  core.ROLE_USER,
+			Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}},
+		}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "stream closed before terminal chunk")
+}
+
 func TestCodexHeaders(t *testing.T) {
 	var gotOriginator, gotVersion, gotUA, gotAccountID string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

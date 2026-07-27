@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -78,6 +79,17 @@ func TestGrep_NoMatches(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, out.Count)
+}
+
+func TestGrep_ReportsScannerError(t *testing.T) {
+	dir := t.TempDir()
+	content := strings.Repeat("x", 70*1024)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "long.txt"), []byte(content), 0o644))
+
+	g := NewGrep(nil, dir)
+	_, err := g.execute(context.Background(), GrepArgs{Query: "x", Cwd: dir})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "scan long.txt")
 }
 
 func TestGrep_RiskLevel(t *testing.T) {

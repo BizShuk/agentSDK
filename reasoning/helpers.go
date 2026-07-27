@@ -106,7 +106,7 @@ func scratchStringSlice(state core.State, key string) []string {
 	if !ok {
 		return nil
 	}
-	s, ok := v.([]string)
+	s, _ := v.([]string)
 	return s
 }
 

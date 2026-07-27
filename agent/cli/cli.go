@@ -25,8 +25,8 @@ import (
 // Exit codes. pm2 and any other supervisor read these to decide whether
 // a tick errored, so they are part of the contract.
 const (
-	EXIT_OK    = agent.EXIT_OK
-	EXIT_ERROR = agent.EXIT_ERROR
+	EXIT_OK    = 0
+	EXIT_ERROR = 1
 )
 
 // OpenForCLI builds a Host for a CLI binary: runs agent.Open, mkdirs the

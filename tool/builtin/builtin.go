@@ -79,17 +79,6 @@ func errPolicyRequired(toolName string) error {
 func defaultMaxBytes() int64 { return 1 << 20 } // 1 MiB
 func defaultMaxMatches() int { return 100 }
 
-func checkPathArgs(policy tool.Sandbox, toolName, path string) error {
-	if policy == nil {
-		return nil // no policy → no restriction
-	}
-	v := policy.Check(toolName, map[string]any{"path": path})
-	if v == tool.VERDICT_ALLOW {
-		return nil
-	}
-	return fmt.Errorf("sandbox denied tool %q: path %q is not allowed", toolName, path)
-}
-
 func checkCommandArgs(policy tool.Sandbox, toolName, cmd string) error {
 	if policy == nil {
 		return errors.New("bash requires a non-nil sandbox Policy (command denylist enforced)")

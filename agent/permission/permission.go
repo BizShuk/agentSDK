@@ -73,27 +73,6 @@ func (e *Engine) Decide(ctx struct{}, autonomy core.AutonomyLevel, eff core.Call
 	}
 }
 
-// matchRules evaluates deny > ask > allow: delegates to RulesApprovalPolicy.
-func (e *Engine) matchRules(call core.ToolCall) (Behavior, bool) {
-	action, ok := (RulesApprovalPolicy{Rules: e.Rules, Targets: e.Targets}).DecideMatch(call)
-	if !ok {
-		return "", false
-	}
-	switch action {
-	case core.APPROVAL_ACTION_DENY:
-		return BEHAVIOR_DENY, true
-	case core.APPROVAL_ACTION_ASK:
-		return BEHAVIOR_ASK, true
-	case core.APPROVAL_ACTION_ALLOW:
-		return BEHAVIOR_ALLOW, true
-	}
-	return "", false
-}
-
-func (e *Engine) target(call core.ToolCall) string {
-	return extractTarget(e.Targets, call)
-}
-
 // MatchSpec matches one specifier against a (toolName, target) pair.
 //
 //	"*"              → every call

@@ -46,7 +46,7 @@ func (echoTool) Call(_ context.Context, args json.RawMessage) (core.ToolResult, 
 
 // panicTool blows up on call — stands in for any tool bug that would
 // otherwise unwind through the engine.
-type panicTool struct{ echoTool }
+type panicTool struct{}
 
 func (panicTool) Name() string { return "boom" }
 func (panicTool) Spec() core.ToolSpec {

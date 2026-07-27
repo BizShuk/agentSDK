@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,10 +11,33 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/provider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type streamStub struct {
+	chunks []core.ModelChunk
+}
+
+func (streamStub) ID() string               { return "stream-stub" }
+func (streamStub) Models() []core.ModelSpec { return nil }
+func (streamStub) AuthSchemes() []string    { return nil }
+func (streamStub) CountTokens(context.Context, []core.Message) (int, error) {
+	return 0, nil
+}
+func (streamStub) Generate(context.Context, core.ModelRequest) (core.ModelResult, error) {
+	return core.ModelResult{}, nil
+}
+func (s streamStub) Stream(context.Context, core.ModelRequest) (<-chan core.ModelChunk, error) {
+	ch := make(chan core.ModelChunk, len(s.chunks))
+	for _, chunk := range s.chunks {
+		ch <- chunk
+	}
+	close(ch)
+	return ch, nil
+}
 
 // newFakeMessagesServer stands up an httptest server that mimics the
 // Anthropic-Messages-compatible wire format used by minimax. It inspects
@@ -96,6 +120,23 @@ func TestProviderGenerateRoundTrip(t *testing.T) {
 	assert.Contains(t, stderr, "[provider] minimax")
 	assert.Equal(t, "sk-test", *sawKey,
 		"x-api-key header must carry the API key verbatim")
+}
+
+func TestRunStreamRejectsMissingTerminalChunk(t *testing.T) {
+	var out bytes.Buffer
+	err := runStream(
+		context.Background(),
+		streamStub{chunks: []core.ModelChunk{{
+			Kind: core.PART_KIND_PLAIN_TEXT,
+			Text: "partial",
+		}}},
+		core.ModelRequest{},
+		&out,
+		false,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "stream closed before terminal chunk")
+	assert.Equal(t, "partial", out.String())
 }
 
 // TestProviderListModels drives --list-models against a fake /v1/models

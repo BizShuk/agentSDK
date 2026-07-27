@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
-	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/middleware"
@@ -88,7 +87,6 @@ func (s *Sanitizer) matchReason(i int, loc []int) string {
 }
 
 // Middleware returns a middleware that inspects CALL_TOOL return-path
-// Middleware returns a middleware that inspects CALL_TOOL return-path
 // text and replaces matched content with the sanitizer banner. The
 // replaced ToolResult.Output is also tagged via SanitizedTag so the
 // spotlight wrappers show up coherently.
@@ -111,7 +109,6 @@ func (s *Sanitizer) Middleware() middleware.Middleware {
 				return st, in, term, nil
 			}
 			in.ToolResult.Output = FormatSanitized(reason) + " original_len=" + itoa(len(text))
-			_ = text
 			// Propagate the sanitized form into the transcript too (the
 			// base dispatcher already appended the raw output into
 			// state.Messages). See spotlight.syncTranscriptOutput.
@@ -147,13 +144,6 @@ func outputToString(v any) string {
 	return ""
 }
 
-// textSnippet returns a short excerpt around the match.
-func textSnippet(s string, loc []int) string {
-	a := maxInt(0, loc[0]-10)
-	b := minInt(len(s), loc[1]+10)
-	return s[a:b]
-}
-
 func itoa(n int) string {
 	if n == 0 {
 		return "0"
@@ -175,21 +165,3 @@ func itoa(n int) string {
 	}
 	return string(buf[i:])
 }
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// strings contains is here to silence unused-import warnings if we
-// later swap textSnippet for strings.Trim.
-var _ = strings.Contains

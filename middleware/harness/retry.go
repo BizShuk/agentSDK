@@ -5,7 +5,6 @@ package harness
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
@@ -139,24 +138,3 @@ const (
 	RetryClassServer5xx = "server_5xx"
 	RetryClassTimeout   = "timeout"
 )
-
-// Helper to detect error class substrings from wrapped errors — providers
-// in M4 will set TransientError.Class explicitly; this stays for legacy
-// strings already emitted by some SDKs.
-func classifyByString(err error) string {
-	if err == nil {
-		return ""
-	}
-	msg := strings.ToLower(err.Error())
-	switch {
-	case strings.Contains(msg, "rate limit"):
-		return RetryClassRateLimit
-	case strings.Contains(msg, "timeout"):
-		return RetryClassTimeout
-	case strings.Contains(msg, "5xx") || strings.Contains(msg, "internal server"):
-		return RetryClassServer5xx
-	case strings.Contains(msg, "connection refused") || strings.Contains(msg, "network"):
-		return RetryClassNetwork
-	}
-	return ""
-}

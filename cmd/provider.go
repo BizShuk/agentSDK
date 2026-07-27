@@ -291,24 +291,33 @@ func runStream(ctx context.Context, prov core.Provider, req core.ModelRequest,
 	if err != nil {
 		return fmt.Errorf("stream: %w", err)
 	}
-	if asJSON {
-		enc := json.NewEncoder(out)
-		for c := range ch {
+	sawDone := false
+	enc := json.NewEncoder(out)
+	for c := range ch {
+		if c.Done {
+			sawDone = true
+		}
+		if asJSON {
 			if err := enc.Encode(c); err != nil {
 				return err
 			}
+			continue
 		}
-		return nil
-	}
-	var sb strings.Builder
-	for c := range ch {
 		if c.Done {
 			continue
 		}
 		if c.Kind == core.PART_KIND_PLAIN_TEXT && c.Text != "" {
-			sb.WriteString(c.Text)
 			fmt.Fprint(out, c.Text)
 		}
+	}
+	if !sawDone {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("stream interrupted: %w", err)
+		}
+		return fmt.Errorf("stream closed before terminal chunk")
+	}
+	if asJSON {
+		return nil
 	}
 	fmt.Fprintln(out)
 	return nil

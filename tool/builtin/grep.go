@@ -169,6 +169,9 @@ func (g *Grep) execute(_ context.Context, a GrepArgs) (GrepOutput, error) {
 			}
 		}
 
+		if err := scanner.Err(); err != nil {
+			return fmt.Errorf("scan %s: %w", rel, err)
+		}
 		return nil
 	})
 

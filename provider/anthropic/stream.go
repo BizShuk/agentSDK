@@ -151,6 +151,12 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 			}
 		}
 
+		// A transport read failure closes the channel without Done so
+		// consumers can distinguish an incomplete stream from clean EOF.
+		if scanner.Err() != nil {
+			return
+		}
+
 		// Terminal sentinel.
 		select {
 		case out <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Done: true}:

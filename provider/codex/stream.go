@@ -111,6 +111,12 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, erro
 			}
 		}
 
+		// A transport read failure closes the channel without Done so
+		// consumers can distinguish an incomplete stream from clean EOF.
+		if scanner.Err() != nil {
+			return
+		}
+
 		// EOF without an explicit terminal event — make sure the
 		// caller sees Done=true so they fold the stream.
 		emitDone(ctx, out)

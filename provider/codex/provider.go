@@ -130,8 +130,10 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 		return core.ModelResult{}, err
 	}
 	out := core.ModelResult{}
+	sawDone := false
 	for chunk := range ch {
 		if chunk.Done {
+			sawDone = true
 			break
 		}
 		switch chunk.Kind {
@@ -148,6 +150,12 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 				out.StopReason = "tool_use"
 			}
 		}
+	}
+	if !sawDone {
+		if err := ctx.Err(); err != nil {
+			return core.ModelResult{}, fmt.Errorf("codex: stream interrupted: %w", err)
+		}
+		return core.ModelResult{}, fmt.Errorf("codex: stream closed before terminal chunk")
 	}
 	return out, nil
 }
@@ -325,38 +333,6 @@ func translateTools(specs []core.ToolSpec) []Tool {
 			t.Parameters = raw
 		}
 		out = append(out, t)
-	}
-	return out
-}
-
-// fromResponse folds a non-stream Response into a core.ModelResult.
-// Generate uses the streaming code path, so this helper is kept as a
-// convenience for callers that want to feed a pre-marshalled Response
-// in tests; it is not on the hot path.
-func fromResponse(r Response) core.ModelResult {
-	out := core.ModelResult{StopReason: r.StopReason}
-	if r.Usage != nil {
-		out.Usage = core.TokenUsage{
-			PromptTokens:     r.Usage.InputTokens,
-			CompletionTokens: r.Usage.OutputTokens,
-			TotalTokens:      r.Usage.TotalTokens,
-		}
-	}
-	for _, item := range r.Output {
-		switch item.Type {
-		case "message":
-			for _, c := range item.Content {
-				if c.Type == "output_text" {
-					out.Text += c.Text
-				}
-			}
-		case "tool_call":
-			out.ToolCalls = append(out.ToolCalls, core.ToolCall{
-				ID:   item.ID,
-				Name: item.Name,
-				Args: decodeArgs(item.Arguments),
-			})
-		}
 	}
 	return out
 }
