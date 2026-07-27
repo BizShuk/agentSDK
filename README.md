@@ -118,7 +118,7 @@ go run . w --list model.provider # 列出單一欄位的選項
 
 ```tree
 agentsdk/
-├── go.work                    # 9 modules：root + 8 samples（provider 已併回 root，tui 已下沉 code-agent）
+├── go.work                    # 10 modules：root + 9 samples（provider 已併回 root，tui 已下沉 code-agent）
 ├── go.mod                     # module github.com/bizshuk/agentsdk
 ├── main.go                    # cobra root binary;掛載 `provider` 與 `wizard` 兩個子指令
 ├── cmd/                       # root subcommands (provider: smoke-test CLI；wizard/w: 設定產生器)
@@ -146,6 +146,7 @@ agentsdk/
 ├── utils/                     # 根層共用 utilities umbrella：utils/frontmatter/ + utils/testutil/（FakeProvider / MemStore / CapturingNotifier）
 ├── sample/code-agent/         # 全 harness 組合 CLI（tui 互動 / -p / --json、session flags、.agentsdk 探索）
 │   └── tui/                   # zero-dep differential-rendering terminal UI，不 import agentsdk（只有 agent 實作需要）
+├── sample/log-agent-v2/       # agent.WithListener + MiniMax 的 serialized scheduled log analyzer
 ├── sample/logdoctor-agent/          # MiniMax-only continuous log diagnosis sample
 ```
 
@@ -237,7 +238,7 @@ go run . watch
 ## 慣例
 
 - 常數一律 `SCREAMING_SNAKE_CASE` (含 unexported、block-scoped),與 gosdk 一致
-- `go.work` 多模組：目前 9 個 `use` entries（root + 8 samples；`provider/*` 已併回 root，`tui` 已下沉 `sample/code-agent/tui`）；`core/` 維持 stdlib-only，root config + agent 可使用應用層依賴
+- `go.work` 多模組：目前 10 個 `use` entries（root + 9 samples；`provider/*` 已併回 root，`tui` 已下沉 `sample/code-agent/tui`）；`core/` 維持 stdlib-only，root config + agent 可使用應用層依賴
 - 宣告層依賴紀律（CI 可驗）：`go list -deps ./agent/spec | grep agentsdk` 與 `go list -deps ./prompt | grep agentsdk` 都只該出現 `core` 與自己
 - 依賴分析工具已移至獨立 repo `~/projects/go-dependency-analysis`：`go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work --format text`
 - 測試:table-driven + `t.Run` + `testify`

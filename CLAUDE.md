@@ -4,7 +4,7 @@
 
 ## 技術基準 (Current Baseline)
 
-- 語言與 workspace：Go `1.26.0`、`go.work`，共 `9` 個 module entries（root + `8` 個 sample module）。`proxy` 與 `llm_provider` 均為外部 module dependency，不再列入本 workspace。Standalone dependency analyzer repo 仍位於 `~/projects/go-dependency-analysis`；in-tree prototype 已於 `19f0d41` 移除。`provider/*` 已於 `551410d` 併回 root module；`tui/` 於 2026-07-21 併回 root，2026-07-26 再下沉為 `sample/code-agent/tui`（只有 agent 實作需要終端機畫面，SDK 表面不需要），全程不帶自己的 `go.mod`。2026-07-19 移除原 `cli/` + `mcp/` 兩個未對接的套件,並移除外部 `video-utils` 依賴 (`go.mod` 與 `cmd/` wiring 同步清掉)。同日落地 harness/UX skeleton：`hook`、`permission`、`session`、`contextfile`、`skill`、`subagent`、`wire` 七個 core-only package + `tui` sub-package（zero-dep） + runtime steering/follow-up queue；`contextfile` 於 2026-07-24 併入 `prompt`（固定行為、無客製化縫），計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md)、來源調查見 [`docs/memory/2026-07-19-agent-client-feature-catalog.md`](docs/memory/2026-07-19-agent-client-feature-catalog.md)。2026-07-22 落地 agent skeleton：`agent/`（含 `agent/spec` 宣告層）、`prompt/`、`provider/registry.go` 三個新 package + root `wizard` 子指令，計畫見 [`plans/2026-07-22-agent-skeleton-config-opt-in.md`](plans/2026-07-22-agent-skeleton-config-opt-in.md)。
+- 語言與 workspace：Go `1.26.0`、`go.work`，共 `10` 個 module entries（root + `9` 個 sample module）。`proxy` 與 `llm_provider` 均為外部 module dependency，不再列入本 workspace。Standalone dependency analyzer repo 仍位於 `~/projects/go-dependency-analysis`；in-tree prototype 已於 `19f0d41` 移除。`provider/*` 已於 `551410d` 併回 root module；`tui/` 於 2026-07-21 併回 root，2026-07-26 再下沉為 `sample/code-agent/tui`（只有 agent 實作需要終端機畫面，SDK 表面不需要），全程不帶自己的 `go.mod`。2026-07-19 移除原 `cli/` + `mcp/` 兩個未對接的套件,並移除外部 `video-utils` 依賴 (`go.mod` 與 `cmd/` wiring 同步清掉)。同日落地 harness/UX skeleton：`hook`、`permission`、`session`、`contextfile`、`skill`、`subagent`、`wire` 七個 core-only package + `tui` sub-package（zero-dep） + runtime steering/follow-up queue；`contextfile` 於 2026-07-24 併入 `prompt`（固定行為、無客製化縫），計畫見 [`plans/2026-07-19-harness-ux-modularization.md`](plans/2026-07-19-harness-ux-modularization.md)、來源調查見 [`docs/memory/2026-07-19-agent-client-feature-catalog.md`](docs/memory/2026-07-19-agent-client-feature-catalog.md)。2026-07-22 落地 agent skeleton：`agent/`（含 `agent/spec` 宣告層）、`prompt/`、`provider/registry.go` 三個新 package + root `wizard` 子指令，計畫見 [`plans/2026-07-22-agent-skeleton-config-opt-in.md`](plans/2026-07-22-agent-skeleton-config-opt-in.md)。
 - root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/reasoning/tool/memory/middleware/runtime）、harness 群（middleware/hook、agent/permission、agent/session、agent/wire、skill、prompt）、組合層 `agent`、process host `agent/cli` 與 root CLI 子指令。`agent/spec` 是只 import `core` 的宣告層；`agent` 才組裝 reasoning/provider/harness。`core/` 保持 stdlib only。`auth` 只被 `provider/credential` import；`proxy` 已從 root module 移除。
 - `core/` 於 2026-07-26 依 domain 重分檔但維持單一 package：run state（`state.go`/`budget.go`/`run_status.go`/`autonomy.go`）、transition（`event.go`/`instruction.go`/`decision.go`）、model boundary（`message.go`/`model.go`/`provider.go`/`credential.go`）、tool/HITL（`tool.go`/`approval.go`）及 runtime ports（`observation.go`/`persistence.go`/`notification.go`/`hook.go`/`stream.go`）。`core.Decide` 留作純 transition contract；`State.ReasoningStyle` 直接使用 `string`，`REASON_*` 是無 named type 的字串常數。`DecisionRule`/`NewDecide` 歸到實際消費它們的 `reasoning/`。原本混合多個 domain 的 `input.go`/`port.go` 與沿用舊術語的 `effect.go`/`step.go`/`thinking.go` 已移除。
 - `agent/` 於 2026-07-26 收斂為 `7` 個 root production 檔：`agent.go` 集中公開契約與 aliases，`options.go` 集中注入，engine/runtime seams 併入 `build.go` 與 `host.go`；production code `1885 → 1397` 行，公開 API 與行為不變。`agent/spec` 的 built-in tool vocabulary 改為純宣告值並以 drift test 對 `tool.BuiltinNames`，production dependencies `206 → 69`，恢復只依賴 `core` 的邊界。2026-07-27 再移除無完整 consumer 的 `Output` 設定，`build.go` 收斂為 7-stage composition；presentation 由 frontend 以 `WithSink` 或直接設定 `Engine.Sink` 接管。
@@ -20,7 +20,7 @@
 agentsdk/
 ├── README.md                         # 業務範疇與使用者導覽
 ├── CLAUDE.md                         # 技術脈絡與架構決策（本檔）
-├── go.work                           # root + 8 sample modules（tui/provider 皆無獨立 go.mod）
+├── go.work                           # root + 9 sample modules（tui/provider 皆無獨立 go.mod）
 ├── go.mod                            # github.com/bizshuk/agentsdk
 ├── main.go                           # cobra root binary；掛載 `provider` 與 `wizard` 兩個子指令
 ├── cmd/                              # root cobra subcommands
@@ -77,6 +77,7 @@ agentsdk/
 │   │   └── tui/                      # zero-dep differential renderer、ANSI 工具、Component/Terminal 抽象（2026-07-26 自 root tui/ 移入）
 │   ├── file-agent/                   # 6 內建工具的檔案操作 agent
 │   ├── greet-agent/                  # 內建工具 + greet tool
+│   ├── log-agent-v2/                 # agent.WithListener + MiniMax 的 serialized scheduled log analyzer
 │   ├── logdoctor-agent/              # MiniMax-only log listener；單一 watch command 增量掃描 ~/.config/*/logs/*
 │   ├── skeleton-agent/               # wizard --print-go 樣板:cli.Main(agent.MustNew(cfg)) + stdinAgent 包裝
 │   ├── demo-memory/                  # StateStore/WAL/checkpoint demo
@@ -91,7 +92,7 @@ agentsdk/
 
 | 類別                      | 技術                                                | 現況                                                                                                                                   |
 | ------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Language                  | Go `1.26.0`                                         | `go.work` 管理 9 個 module entries                                                                                                     |
+| Language                  | Go `1.26.0`                                         | `go.work` 管理 10 個 module entries                                                                                                    |
 | Root runtime              | Go stdlib、`github.com/bizshuk/gosdk v1.2.1`        | config/log/notify 等組合點在 root 或 sample                                                                                            |
 | Auth module               | `viper` + stdlib                                    | Git submodule + 獨立 module；credential 機制、Resolver、active.json                                                                    |
 | HTTP proxy                | `gin-gonic/gin v1.11.0`、`gosdk/mw`、`gosdk/router` | 獨立 module；`/v1` API、health/ping、localhost CORS、API key、per-IP rate limit                                                        |
@@ -305,7 +306,7 @@ Analyzer 的 `go-tool-fact` 來自當次 Go toolchain/build context；`policy-he
 
 ```bash
 # provider/* 已併回 root module；auth/proxy 是獨立 repo，不在 go.work 內。
-for mod in . sample/code-agent sample/file-agent sample/greet-agent sample/logdoctor-agent \
+for mod in . sample/code-agent sample/file-agent sample/greet-agent sample/log-agent-v2 sample/logdoctor-agent \
   sample/demo-memory sample/demo-middleware sample/skeleton-agent sample/demo-strategy; do
   (cd "$mod" && go build ./... && go test ./... -count=1 -timeout=120s)
 done
