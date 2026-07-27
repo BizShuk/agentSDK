@@ -146,7 +146,7 @@ agentsdk/
 ├── utils/                     # 根層共用 utilities umbrella：utils/frontmatter/ + utils/testutil/（FakeProvider / MemStore / CapturingNotifier）
 ├── sample/code-agent/         # 全 harness 組合 CLI（tui 互動 / -p / --json、session flags、.agentsdk 探索）
 │   └── tui/                   # zero-dep differential-rendering terminal UI，不 import agentsdk（只有 agent 實作需要）
-├── sample/logdoctor-agent/          # 驗證 sample (cobra CLI + 兩個 tool)
+├── sample/logdoctor-agent/          # MiniMax-only continuous log diagnosis sample
 ```
 
 `auth` 與 `proxy` 都已脫離本 repo，是外部獨立 repo（無 `auth/`、`proxy/` 目錄，也無 `.gitmodules`）。`auth` 只由 `provider/credential` 使用；`proxy` 已無任何殘留（無目錄、無 require、無 import）。Root `main.go` 只掛載 root module 自己的兩個子指令：`provider`（wire-format smoke test，直接打 `core.Provider.Generate` / `core.StreamProvider.Stream`）與 `wizard`（設定產生器）。
@@ -192,22 +192,20 @@ go run . --fake --sessions         # session 列表
 go run . --fake                     # 互動 TUI
 ```
 
-`sample/logdoctor-agent` — M1 e2e：
+`sample/logdoctor-agent` — 每分鐘分析 `~/.config/*/logs/*` 的新增內容：
 
 ```bash
 cd sample/logdoctor-agent
-go run . --fake --max-turns=10 run --once --fixture testdata/error.log
+export MINIMAX_API_KEY=...
+go run . watch
 ```
 
-JSONL 輸出:
+診斷 Markdown 寫入 stdout；canonical `core.StreamEvent` JSONL 寫入 stderr：
 
-```
-effect call_model      ← 第一次思考
-effect call_tool       ← read_log_tail n=5
-effect call_model      ← 觀察結果
-effect call_tool       ← notify
-effect call_model      ← 最終回應
-effect done            ← end_turn
+```json
+{"kind":"run_start","run_id":"once-..."}
+{"kind":"message","run_id":"once-...","turn":1,"text":"# Diagnosis\n..."}
+{"kind":"run_end","run_id":"once-...","status":"completed"}
 ```
 
 ## 開發狀態 (Milestones)

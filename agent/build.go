@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,11 @@ import (
 	"github.com/bizshuk/agentsdk/skill"
 	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/tool/builtin"
+)
+
+var (
+	errListenerClosed     = errors.New("observation source closed before its first non-empty observation")
+	errNilObservationChan = errors.New("observation source returned a nil channel")
 )
 
 // NewEngine constructs the runtime container without exposing runtime in
@@ -112,9 +118,13 @@ func (a *Agent) Bootstrap(ctx context.Context, ac *Host) (*Engine, core.State, e
 		}
 	}
 
-	// Start listeners only after the engine is fully wired.
+	// Bind listeners only after the engine is fully wired. The first
+	// observation is queued synchronously so the opening model request
+	// cannot race ahead with only the seeded prompt.
 	if a.deps.listener != nil {
-		go pumpListener(ctx, eng, a.deps.listener)
+		if err := startListener(ctx, eng, a.deps.listener); err != nil {
+			return nil, core.State{}, fmt.Errorf("agent: listener: %w", err)
+		}
 	}
 
 	a.parts = &Parts{
@@ -373,15 +383,48 @@ func (a *Agent) promptMaxBytes() int {
 	return a.cfg.Prompt.MaxBytes
 }
 
-// pumpListener forwards non-empty observations to the concurrent-safe
-// steering queue.
-func pumpListener(ctx context.Context, eng *Engine, src core.ObservationSource) {
-	for obs := range src.Observations(ctx) {
-		if ctx.Err() != nil {
-			return
+// startListener queues the first non-empty observation before returning,
+// then leaves any remaining observations to the background pump.
+func startListener(ctx context.Context, eng *Engine, src core.ObservationSource) error {
+	observations := src.Observations(ctx)
+	if observations == nil {
+		return errNilObservationChan
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case obs, ok := <-observations:
+			if !ok {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				return errListenerClosed
+			}
+			if text := payloadToString(obs.Payload); text != "" {
+				eng.Steer(text)
+				go pumpListener(ctx, eng, observations)
+				return nil
+			}
 		}
-		if text := payloadToString(obs.Payload); text != "" {
-			eng.Steer(text)
+	}
+}
+
+// pumpListener forwards remaining non-empty observations to the
+// concurrent-safe steering queue.
+func pumpListener(ctx context.Context, eng *Engine, observations <-chan core.Observation) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case obs, ok := <-observations:
+			if !ok {
+				return
+			}
+			if text := payloadToString(obs.Payload); text != "" {
+				eng.Steer(text)
+			}
 		}
 	}
 }

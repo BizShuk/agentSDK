@@ -91,8 +91,10 @@ func WithNotifier(n core.Notifier) Option {
 	}
 }
 
-// WithListener forwards observations to Engine.Steer until the source
-// closes or Bootstrap's context is cancelled.
+// WithListener forwards observations to Engine.Steer. Bootstrap waits
+// until the first non-empty observation is queued, so the opening model
+// request cannot run without it. Remaining observations are forwarded
+// until the source closes or Bootstrap's context is cancelled.
 func WithListener(src core.ObservationSource) Option {
 	return func(b *builder) error {
 		if src == nil {

@@ -15,7 +15,9 @@ var errNoRunner = errors.New("agent: runner is required")
 
 // Run executes bootstrap, engine rounds, and completion without taking
 // ownership of the process. Bootstrap owns the complete engine and opening
-// state; Run does not fill missing dependencies from Host.
+// state; Run does not fill missing dependencies from Host. The context
+// passed to Bootstrap is cancelled when this run returns, so run-scoped
+// background work cannot outlive it.
 func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) error {
 	if a == nil {
 		return errNoRunner
@@ -40,10 +42,14 @@ func Run(ctx context.Context, a Runner, host *Host, opts ...RunOption) error {
 		log = slog.Default().With(slog.String("app", a.Name()))
 	}
 
+	runCtx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+	ctx = runCtx
+
 	if o.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, o.Timeout)
-		defer cancel()
+		var cancelTimeout context.CancelFunc
+		ctx, cancelTimeout = context.WithTimeout(ctx, o.Timeout)
+		defer cancelTimeout()
 	}
 
 	engine, state, err := a.Bootstrap(ctx, host)

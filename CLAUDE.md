@@ -77,7 +77,7 @@ agentsdk/
 │   │   └── tui/                      # zero-dep differential renderer、ANSI 工具、Component/Terminal 抽象（2026-07-26 自 root tui/ 移入）
 │   ├── file-agent/                   # 6 內建工具的檔案操作 agent
 │   ├── greet-agent/                  # 內建工具 + greet tool
-│   ├── logdoctor-agent/              # log listener、todo tools、watch/resume/approve CLI（唯一繞過 agent/ 的完整 agent，理由見 bd83a07）
+│   ├── logdoctor-agent/              # MiniMax-only log listener；單一 watch command 增量掃描 ~/.config/*/logs/*
 │   ├── skeleton-agent/               # wizard --print-go 樣板:cli.Main(agent.MustNew(cfg)) + stdinAgent 包裝
 │   ├── demo-memory/                  # StateStore/WAL/checkpoint demo
 │   ├── demo-middleware/              # middleware chain demo
@@ -370,7 +370,8 @@ go run . provider "summarize X" --provider anthropic --model claude-sonnet-5
 #   (bizshuk/proxy) go run .                 # 啟動 LLM protocol proxy server
 
 cd sample/logdoctor-agent
-go run . --fake --max-turns=10 run --once --fixture testdata/error.log
+export MINIMAX_API_KEY=...
+go run . watch
 
 cd sample/code-agent
 go run . --fake -p "看看這個專案"        # print 模式（進度走 stderr）
@@ -387,7 +388,7 @@ go run . --provider anthropic -p "..."    # 改讀 ANTHROPIC_API_KEY（含 minim
 
 `code-agent` 的 provider 選擇：`--provider minimax`（預設，讀 `MINIMAX_API_KEY`/`MINIMAX_BASE_URL`，`provider/minimax` stdlib adapter）或 `--provider anthropic`（讀 `ANTHROPIC_API_KEY`）；`--model` 留空用 adapter flagship 預設；`--api-key`/`--base-url` 為顯式覆寫。
 
-`sample/logdoctor-agent` 的 real provider 旗標為 `anthropic`、`openaicompat`、`google`；`--fake` 與 `--provider` 互斥。`sample/file-agent` 與 `sample/greet-agent` 使用 Anthropic-compatible adapter 與 `preset.Secure`。
+`sample/logdoctor-agent` 是單一用途的 `watch` command，固定使用 MiniMax（`MINIMAX_API_KEY`），不提供 `--provider`、`--fake`、tool、approval 或 session lifecycle；CLI 由 `cmd.New()` 顯式組裝，不使用 package-level command/flags 或 `init()` 註冊。啟動時立即掃描，之後預設每分鐘讀取最多 `1 MiB` 新 log，Markdown 寫 stdout、`core.StreamEvent` JSONL 寫 stderr。`sample/file-agent` 與 `sample/greet-agent` 使用 Anthropic-compatible adapter 與 `preset.Secure`。
 
 `sample/skeleton-agent` 是 `cmd/agent/wizard.go::goLiteral` 輸出範本逐字對應的單檔 sample:沒有 cobra、沒有四種 dispatch mode、不需要 `*Parts.Sessions`/`*Parts.Skills`。差別在 main 比 code-agent 少 `~260` 行,只為了展示 wizard `--print-go` 模板可直接落地;唯一的 12 行 `stdinAgent` 包裝是為了把 stdin 內容塞進 Bootstrap 回傳的 opening state。對比 shape 見 `sample/skeleton-agent/README.md`。
 

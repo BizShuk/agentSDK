@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/bizshuk/agentsdk/agent"
 	"github.com/bizshuk/agentsdk/agent/spec"
@@ -386,11 +387,10 @@ func TestNilInjectionsAreRejected(t *testing.T) {
 	}
 }
 
-// --- listener pump ---
+// --- listener lifecycle ---
 
 // channelSource is a test double for core.ObservationSource: the channel
-// is buffered so callers can pre-load observations and assert on what
-// reaches the engine without racing the pump goroutine.
+// is buffered so callers can pre-load observations deterministically.
 type channelSource struct{ ch chan core.Observation }
 
 func (c *channelSource) Observations(ctx context.Context) <-chan core.Observation {
@@ -417,28 +417,176 @@ func (c *channelSource) Observations(ctx context.Context) <-chan core.Observatio
 	return out
 }
 
-func TestWithListenerPumpsObservationsIntoSteerQueue(t *testing.T) {
+func TestWithListenerQueuesFirstNonEmptyObservationBeforeModelRequest(t *testing.T) {
 	src := &channelSource{ch: make(chan core.Observation, 4)}
-	src.ch <- core.Observation{ID: "1", Payload: "first log line"}
-	src.ch <- core.Observation{ID: "2", Payload: "second log line"}
-	src.ch <- core.Observation{ID: "3", Payload: ""} // empty payload must be dropped
+	src.ch <- core.Observation{ID: "empty-nil"}
+	src.ch <- core.Observation{ID: "empty-string", Payload: ""}
+	src.ch <- core.Observation{ID: "first", Payload: "first log line"}
 	close(src.ch)
 
-	eng, _, _ := bootstrap(t,
-		agent.Config{Name: "x", Tier: spec.TIER_BASIC},
-		agent.WithListener(src))
+	prov := testutil.NewScriptedProvider()
+	prov.EnqueueEndTurn("analysis")
 
-	// Bootstrap spawned the pump in a goroutine; give it a moment to drain
-	// the buffered channel before checking the steering queue indirectly.
-	// Steering is internal state — what we CAN observe is that the engine
-	// kept running (no panic) and that an empty payload did not wedge it.
-	require.NotNil(t, eng)
-	// Cancel to ensure the spawned goroutine exits cleanly when ctx is
-	// cancelled mid-run; without this, the test would leak the goroutine.
-	t.Cleanup(func() {
-		// Bootstrap's ctx is the caller's context.Background(); the pump
-		// exits on channel close, which we already did above.
-	})
+	a, err := agent.New(
+		agent.Config{Name: "x", Tier: spec.TIER_BASIC},
+		agent.WithProvider(prov),
+		agent.WithListener(src),
+	)
+	require.NoError(t, err)
+
+	err = agent.Run(
+		context.Background(),
+		a,
+		appCfg(t),
+		agent.WithTimeout(0),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 1, prov.RequestCount())
+	assert.Equal(t, []string{"first log line"}, userText(prov.LastRequest()))
+}
+
+func TestWithListenerRejectsSourceClosedBeforeFirstObservation(t *testing.T) {
+	src := &channelSource{ch: make(chan core.Observation, 1)}
+	src.ch <- core.Observation{ID: "empty", Payload: ""}
+	close(src.ch)
+
+	a, err := agent.New(
+		agent.Config{Name: "x", Tier: spec.TIER_BASIC},
+		agent.WithProvider(testutil.NewScriptedProvider()),
+		agent.WithListener(src),
+	)
+	require.NoError(t, err)
+
+	_, _, err = a.Bootstrap(context.Background(), appCfg(t))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "listener")
+	assert.Contains(t, err.Error(), "closed before its first non-empty observation")
+	assert.Nil(t, a.Parts())
+}
+
+type nilChannelSource struct{}
+
+func (nilChannelSource) Observations(context.Context) <-chan core.Observation {
+	return nil
+}
+
+func TestWithListenerRejectsNilObservationChannel(t *testing.T) {
+	a, err := agent.New(
+		agent.Config{Name: "x", Tier: spec.TIER_BASIC},
+		agent.WithProvider(testutil.NewScriptedProvider()),
+		agent.WithListener(nilChannelSource{}),
+	)
+	require.NoError(t, err)
+
+	_, _, err = a.Bootstrap(context.Background(), appCfg(t))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "returned a nil channel")
+}
+
+type blockingSource struct {
+	called       chan struct{}
+	observations chan core.Observation
+}
+
+func (s *blockingSource) Observations(context.Context) <-chan core.Observation {
+	close(s.called)
+	return s.observations
+}
+
+func TestWithListenerWaitHonorsCancellation(t *testing.T) {
+	src := &blockingSource{
+		called:       make(chan struct{}),
+		observations: make(chan core.Observation),
+	}
+	a, err := agent.New(
+		agent.Config{Name: "x", Tier: spec.TIER_BASIC},
+		agent.WithProvider(testutil.NewScriptedProvider()),
+		agent.WithListener(src),
+	)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	host := appCfg(t)
+	go func() {
+		_, _, runErr := a.Bootstrap(ctx, host)
+		result <- runErr
+	}()
+
+	<-src.called
+	cancel()
+
+	select {
+	case err := <-result:
+		require.Error(t, err)
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("Bootstrap did not stop after context cancellation")
+	}
+}
+
+type trackingSource struct {
+	first   core.Observation
+	stopped chan struct{}
+}
+
+func (s *trackingSource) Observations(ctx context.Context) <-chan core.Observation {
+	out := make(chan core.Observation)
+	go func() {
+		defer close(out)
+		defer close(s.stopped)
+		select {
+		case out <- s.first:
+		case <-ctx.Done():
+			return
+		}
+		<-ctx.Done()
+	}()
+	return out
+}
+
+func TestRunCancelsListenerContextWhenRunReturns(t *testing.T) {
+	src := &trackingSource{
+		first:   core.Observation{ID: "first", Payload: "new log"},
+		stopped: make(chan struct{}),
+	}
+	prov := testutil.NewScriptedProvider()
+	prov.EnqueueEndTurn("analysis")
+	a, err := agent.New(
+		agent.Config{Name: "x", Tier: spec.TIER_BASIC},
+		agent.WithProvider(prov),
+		agent.WithListener(src),
+	)
+	require.NoError(t, err)
+
+	err = agent.Run(
+		context.Background(),
+		a,
+		appCfg(t),
+		agent.WithTimeout(0),
+	)
+	require.NoError(t, err)
+
+	select {
+	case <-src.stopped:
+	case <-time.After(time.Second):
+		t.Fatal("listener context remained active after agent.Run returned")
+	}
+}
+
+func userText(req core.ModelRequest) []string {
+	var out []string
+	for _, message := range req.Messages {
+		if message.Role != core.ROLE_USER {
+			continue
+		}
+		for _, part := range message.Parts {
+			if part.Kind == core.PART_KIND_PLAIN_TEXT {
+				out = append(out, part.Text)
+			}
+		}
+	}
+	return out
 }
 
 func TestPayloadToStringFlattensEachShape(t *testing.T) {
@@ -471,8 +619,8 @@ func (s stringerImpl) String() string { return string(s) }
 func payloadToStringForTest(p any) string {
 	// Reach into the package by calling a tiny exported wrapper would be
 	// cleaner, but for a single helper used twice this inline re-creation
-	// keeps the test surface minimal. The actual pump code is exercised
-	// by TestWithListenerPumpsObservationsIntoSteerQueue above.
+	// keeps the test surface minimal. The production conversion path is
+	// exercised by TestWithListenerQueuesFirstNonEmptyObservationBeforeModelRequest.
 	switch v := p.(type) {
 	case nil:
 		return ""
