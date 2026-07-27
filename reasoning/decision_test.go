@@ -22,6 +22,31 @@ func (s *stubRule) NextStep(state core.State) (core.State, []core.Instruction) {
 	return state, s.instrs
 }
 
+func TestNewRuleConstructsEveryBuiltin(t *testing.T) {
+	styles := []string{
+		core.REASON_REACT,
+		core.REASON_PLAN_THEN_RUN,
+		core.REASON_DO_THEN_REVIEW,
+		core.REASON_ONE_SHOT,
+		core.REASON_LEARN_FROM_FAILURE,
+		core.REASON_PICK_AGENT,
+	}
+	for _, style := range styles {
+		t.Run(style, func(t *testing.T) {
+			rule, err := reasoning.NewRule(style)
+			require.NoError(t, err)
+			assert.Equal(t, style, rule.Kind())
+		})
+	}
+}
+
+func TestNewRuleRejectsUnknownStyle(t *testing.T) {
+	rule, err := reasoning.NewRule("unknown")
+	require.Error(t, err)
+	assert.Nil(t, rule)
+	assert.Contains(t, err.Error(), `unknown reasoning style "unknown"`)
+}
+
 func TestNewDecideDispatchesByKind(t *testing.T) {
 	react := &stubRule{kind: core.REASON_REACT, instrs: []core.Instruction{
 		{Kind: core.INSTRUCTION_CALL_MODEL, CallModel: &core.ModelRequest{RequestID: "r1"}},

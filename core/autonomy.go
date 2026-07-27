@@ -1,5 +1,7 @@
 package core
 
+import "fmt"
+
 // AutonomyLevel is the graduated trust level for tool execution and mutation.
 // L0 — fully manual (every action requires human approval)
 // L1 — low-risk automatic, higher-risk gated (enterprise floor)
@@ -23,6 +25,16 @@ const (
 	AUTONOMY_DEFAULT        = AUTONOMY_L2
 	AUTONOMY_DEFAULT_STRING = "L2"
 )
+
+// ParseAutonomyLevel parses the canonical, case-sensitive config form.
+func ParseAutonomyLevel(value string) (AutonomyLevel, error) {
+	for level := AUTONOMY_L0; level <= AUTONOMY_L4; level++ {
+		if value == level.String() {
+			return level, nil
+		}
+	}
+	return 0, fmt.Errorf("core: unknown autonomy level %q", value)
+}
 
 // String renders the level in its canonical config form.
 func (a AutonomyLevel) String() string {

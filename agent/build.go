@@ -138,8 +138,11 @@ func (a *Agent) buildTools(cwd, userDir string, prov core.Provider) (core.ToolRe
 		if workDir == "" {
 			workDir = cwd
 		}
-		if err := registerBuiltins(reg, a.cfg.Tools.Builtin, workDir); err != nil {
-			return nil, err
+		if err := builtin.Register(reg, a.cfg.Tools.Builtin, builtin.Options{
+			Policy:     tool.DefaultPolicy(),
+			WorkingDir: workDir,
+		}); err != nil {
+			return nil, fmt.Errorf("agent: register built-in tools: %w", err)
 		}
 	}
 
@@ -156,57 +159,16 @@ func (a *Agent) buildTools(cwd, userDir string, prov core.Provider) (core.ToolRe
 			return nil, err
 		}
 		if len(defs) > 0 {
-			spawner := skill.NewSpawner(a.subagentRunner(prov), defs...)
+			run, err := a.subagentRunner(prov)
+			if err != nil {
+				return nil, err
+			}
+			spawner := skill.NewSpawner(run, defs...)
 			spawner.MaxDepth = a.cfg.Subagents.MaxDepth
 			reg.Register(spawner)
 		}
 	}
 	return reg, nil
-}
-
-// registerBuiltins treats an empty allowlist as all built-ins.
-func registerBuiltins(reg *tool.Registry, allow []string, workDir string) error {
-	policy := tool.DefaultPolicy()
-	if len(allow) == 0 {
-		if err := builtin.RegisterDefaults(reg, builtin.Options{Policy: policy, WorkingDir: workDir}); err != nil {
-			return fmt.Errorf("agent: register built-in tools: %w", err)
-		}
-		return nil
-	}
-	for _, name := range allow {
-		switch name {
-		case builtin.NAME_READ:
-			r := builtin.NewRead(policy, workDir)
-			reg.Register(r)
-		case builtin.NAME_GLOB:
-			g := builtin.NewGlob(policy, workDir)
-			reg.Register(g)
-		case builtin.NAME_GREP:
-			gr := builtin.NewGrep(policy, workDir)
-			reg.Register(gr)
-		case builtin.NAME_WRITE:
-			w, err := builtin.NewWrite(policy, workDir)
-			if err != nil {
-				return fmt.Errorf("agent: write tool: %w", err)
-			}
-			reg.Register(w)
-		case builtin.NAME_EDIT:
-			e, err := builtin.NewEdit(policy, workDir)
-			if err != nil {
-				return fmt.Errorf("agent: edit tool: %w", err)
-			}
-			reg.Register(e)
-		case builtin.NAME_BASH:
-			b, err := builtin.NewBash(policy, workDir)
-			if err != nil {
-				return fmt.Errorf("agent: bash tool: %w", err)
-			}
-			reg.Register(b)
-		default:
-			return fmt.Errorf("agent: unknown built-in tool %q", name)
-		}
-	}
-	return nil
 }
 
 // discoverSubagentDefs lets project definitions override user definitions.
@@ -226,8 +188,12 @@ func discoverSubagentDefs(cfg Config, userDir, cwd string) ([]skill.SubAgent, er
 
 // subagentRunner uses an ephemeral engine with the shared provider and its
 // own turn budget.
-func (a *Agent) subagentRunner(prov core.Provider) skill.RunFunc {
+func (a *Agent) subagentRunner(prov core.Provider) (skill.RunFunc, error) {
 	maxTurns := a.cfg.Subagents.MaxTurns
+	autonomy, err := core.ParseAutonomyLevel(a.cfg.Limits.Autonomy)
+	if err != nil {
+		return nil, fmt.Errorf("agent: subagent autonomy: %w", err)
+	}
 	return func(ctx context.Context, def skill.SubAgent, promptText string) (string, error) {
 		reg := tool.NewRegistry()
 		if a.cfg.Tools != nil {
@@ -241,8 +207,11 @@ func (a *Agent) subagentRunner(prov core.Provider) skill.RunFunc {
 			if len(allow) == 0 {
 				allow = a.cfg.Tools.Builtin
 			}
-			if err := registerBuiltins(reg, allow, workDir); err != nil {
-				return "", err
+			if err := builtin.Register(reg, allow, builtin.Options{
+				Policy:     tool.DefaultPolicy(),
+				WorkingDir: workDir,
+			}); err != nil {
+				return "", fmt.Errorf("agent: register subagent built-in tools: %w", err)
 			}
 		}
 		step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
@@ -258,7 +227,7 @@ func (a *Agent) subagentRunner(prov core.Provider) skill.RunFunc {
 		st := core.State{
 			RunID:          fmt.Sprintf("sub-%d", time.Now().UnixNano()),
 			ReasoningStyle: core.REASON_REACT,
-			Autonomy:       autonomyLevel(a.cfg.Limits.Autonomy),
+			Autonomy:       autonomy,
 			Budget:         core.Budget{MaxTurns: maxTurns},
 		}
 		if def.Prompt != "" {
@@ -271,7 +240,7 @@ func (a *Agent) subagentRunner(prov core.Provider) skill.RunFunc {
 			return "", err
 		}
 		return LastAssistantText(final), nil
-	}
+	}, nil
 }
 
 // --- stage 3 ---
@@ -280,9 +249,9 @@ func (a *Agent) subagentRunner(prov core.Provider) skill.RunFunc {
 func (a *Agent) buildDecide() (core.Decide, error) {
 	rules := map[string]reasoning.DecisionRule{}
 	for _, name := range a.cfg.Reasoning.Enable {
-		rule, err := ruleFor(name)
+		rule, err := reasoning.NewRule(name)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("agent: build reasoning: %w", err)
 		}
 		rules[rule.Kind()] = rule
 	}
@@ -290,26 +259,6 @@ func (a *Agent) buildDecide() (core.Decide, error) {
 		rules[rule.Kind()] = rule
 	}
 	return reasoning.NewDecide(rules), nil
-}
-
-// ruleFor maps declarative reasoning styles to implementations.
-func ruleFor(style string) (reasoning.DecisionRule, error) {
-	switch style {
-	case core.REASON_REACT:
-		return reasoning.NewThinkThenAct(), nil
-	case core.REASON_PLAN_THEN_RUN:
-		return reasoning.NewPlanThenRun(), nil
-	case core.REASON_DO_THEN_REVIEW:
-		return reasoning.NewRunThenReview(), nil
-	case core.REASON_ONE_SHOT:
-		return reasoning.NewOneShotReasoning(), nil
-	case core.REASON_LEARN_FROM_FAILURE:
-		return reasoning.NewLearnFromFailure(), nil
-	case core.REASON_PICK_AGENT:
-		return reasoning.NewChooseAgent(), nil
-	default:
-		return nil, fmt.Errorf("agent: no rule for reasoning style %q", style)
-	}
 }
 
 // --- stage 5 ---
@@ -394,10 +343,14 @@ func (a *Agent) buildSessions(ac *Host, store core.StateStore, wal core.WriteAhe
 // seedState builds the opening State: budget and autonomy from Limits,
 // messages from the prompt builder.
 func (a *Agent) seedState(ctx context.Context, ac *Host, b prompt.Builder, cwd string) (core.State, error) {
+	autonomy, err := core.ParseAutonomyLevel(a.cfg.Limits.Autonomy)
+	if err != nil {
+		return core.State{}, fmt.Errorf("agent: limits.autonomy: %w", err)
+	}
 	state := core.State{
 		RunID:          ac.RunID,
 		ReasoningStyle: a.cfg.Reasoning.Style,
-		Autonomy:       autonomyLevel(a.cfg.Limits.Autonomy),
+		Autonomy:       autonomy,
 		Budget: core.Budget{
 			MaxTurns:     a.cfg.Limits.MaxTurns,
 			MaxRounds:    a.cfg.Limits.MaxRounds,
@@ -418,25 +371,6 @@ func (a *Agent) promptMaxBytes() int {
 		return 0
 	}
 	return a.cfg.Prompt.MaxBytes
-}
-
-// autonomyLevel maps the config string to the core constant. spec has
-// already validated the value, so an unrecognized one can only mean the
-// two lists drifted; L2 is the safe reading (low-risk automatic,
-// high-risk asks).
-func autonomyLevel(s string) core.AutonomyLevel {
-	switch s {
-	case "L0":
-		return core.AUTONOMY_L0
-	case "L1":
-		return core.AUTONOMY_L1
-	case "L3":
-		return core.AUTONOMY_L3
-	case "L4":
-		return core.AUTONOMY_L4
-	default:
-		return core.AUTONOMY_L2
-	}
 }
 
 // pumpListener forwards non-empty observations to the concurrent-safe

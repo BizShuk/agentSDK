@@ -46,6 +46,32 @@ func TestRegisterDefaults_MissingPolicy_Errors(t *testing.T) {
 	assert.Contains(t, err.Error(), "bash:")
 }
 
+func TestRegister_Allowlist(t *testing.T) {
+	reg := tool.NewRegistry()
+	err := builtin.Register(reg, []string{builtin.NAME_READ, builtin.NAME_GREP}, builtin.Options{
+		Policy: tool.DefaultPolicy(),
+	})
+	require.NoError(t, err)
+
+	_, hasRead := reg.Get(builtin.NAME_READ)
+	_, hasGrep := reg.Get(builtin.NAME_GREP)
+	_, hasWrite := reg.Get(builtin.NAME_WRITE)
+	assert.True(t, hasRead)
+	assert.True(t, hasGrep)
+	assert.False(t, hasWrite)
+	assert.Len(t, reg.List(), 2)
+}
+
+func TestRegister_UnknownNameFailsBeforeMutation(t *testing.T) {
+	reg := tool.NewRegistry()
+	err := builtin.Register(reg, []string{builtin.NAME_READ, "unknown"}, builtin.Options{
+		Policy: tool.DefaultPolicy(),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown built-in tool "unknown"`)
+	assert.Empty(t, reg.List())
+}
+
 func TestMustPolicy_PanicsOnNil(t *testing.T) {
 	assert.Panics(t, func() {
 		builtin.MustPolicy(nil)

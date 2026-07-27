@@ -1,5 +1,5 @@
 // Package builtin ships built-in agent tools — Read, Write, Edit, Bash, Glob, Grep —
-// that any agent can register via RegisterDefaults.
+// that any agent can register as a complete set or an allowlist.
 package builtin
 
 import (
@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/tool"
 )
 
@@ -15,51 +16,58 @@ func BuiltinNames() []string {
 	return []string{NAME_READ, NAME_WRITE, NAME_EDIT, NAME_BASH, NAME_GLOB, NAME_GREP}
 }
 
-// RegisterDefaults constructs all 6 built-in tools and registers them into reg.
-// Errors if a required invariant is broken (e.g. Write without a Policy).
-func RegisterDefaults(reg *tool.Registry, opts Options) error {
+// Register constructs and registers the named built-in tools. An empty
+// allowlist selects every built-in. Construction is all-or-nothing: invalid
+// names or options leave reg unchanged.
+func Register(reg *tool.Registry, allow []string, opts Options) error {
+	if reg == nil {
+		return errors.New("builtin.Register: registry is required")
+	}
+	if len(allow) == 0 {
+		allow = BuiltinNames()
+	}
+
+	built := make([]core.Tool, 0, len(allow))
 	var errs []string
-
-	// --- Read ---
-	r := NewRead(opts.Policy, opts.WorkingDir, opts.ReadOpts...)
-	reg.Register(r)
-
-	// --- Write ---
-	w, err := NewWrite(opts.Policy, opts.WorkingDir, opts.WriteOpts...)
-	if err != nil {
-		errs = append(errs, "write: "+err.Error())
-	} else {
-		reg.Register(w)
+	for _, name := range allow {
+		t, err := newTool(name, opts)
+		if err != nil {
+			errs = append(errs, name+": "+err.Error())
+			continue
+		}
+		built = append(built, t)
 	}
-
-	// --- Edit ---
-	e, err := NewEdit(opts.Policy, opts.WorkingDir, opts.EditOpts...)
-	if err != nil {
-		errs = append(errs, "edit: "+err.Error())
-	} else {
-		reg.Register(e)
-	}
-
-	// --- Bash ---
-	b, err := NewBash(opts.Policy, opts.WorkingDir, opts.BashOpts...)
-	if err != nil {
-		errs = append(errs, "bash: "+err.Error())
-	} else {
-		reg.Register(b)
-	}
-
-	// --- Glob ---
-	g := NewGlob(opts.Policy, opts.WorkingDir, opts.GlobOpts...)
-	reg.Register(g)
-
-	// --- Grep ---
-	gr := NewGrep(opts.Policy, opts.WorkingDir, opts.GrepOpts...)
-	reg.Register(gr)
-
 	if len(errs) > 0 {
-		return fmt.Errorf("builtin.RegisterDefaults: %s", strings.Join(errs, "; "))
+		return fmt.Errorf("builtin.Register: %s", strings.Join(errs, "; "))
+	}
+	for _, t := range built {
+		reg.Register(t)
 	}
 	return nil
+}
+
+// RegisterDefaults registers every built-in tool.
+func RegisterDefaults(reg *tool.Registry, opts Options) error {
+	return Register(reg, nil, opts)
+}
+
+func newTool(name string, opts Options) (core.Tool, error) {
+	switch name {
+	case NAME_READ:
+		return NewRead(opts.Policy, opts.WorkingDir, opts.ReadOpts...), nil
+	case NAME_WRITE:
+		return NewWrite(opts.Policy, opts.WorkingDir, opts.WriteOpts...)
+	case NAME_EDIT:
+		return NewEdit(opts.Policy, opts.WorkingDir, opts.EditOpts...)
+	case NAME_BASH:
+		return NewBash(opts.Policy, opts.WorkingDir, opts.BashOpts...)
+	case NAME_GLOB:
+		return NewGlob(opts.Policy, opts.WorkingDir, opts.GlobOpts...), nil
+	case NAME_GREP:
+		return NewGrep(opts.Policy, opts.WorkingDir, opts.GrepOpts...), nil
+	default:
+		return nil, fmt.Errorf("unknown built-in tool %q", name)
+	}
 }
 
 // MustPolicy panics if policy is nil — a convenience for callers that

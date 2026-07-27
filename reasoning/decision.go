@@ -1,6 +1,10 @@
 package reasoning
 
-import "github.com/bizshuk/agentsdk/core"
+import (
+	"fmt"
+
+	"github.com/bizshuk/agentsdk/core"
+)
 
 // DecisionRule owns one reduce step. NextStep is a pure function: given
 // the current state, produce the next state and instructions to execute.
@@ -13,6 +17,26 @@ type DecisionRule interface {
 	Kind() string
 	// NextStep is deterministic given state and working memory.
 	NextStep(state core.State) (core.State, []core.Instruction)
+}
+
+// NewRule constructs the built-in rule for a reasoning style.
+func NewRule(style string) (DecisionRule, error) {
+	switch style {
+	case core.REASON_REACT:
+		return NewThinkThenAct(), nil
+	case core.REASON_PLAN_THEN_RUN:
+		return NewPlanThenRun(), nil
+	case core.REASON_DO_THEN_REVIEW:
+		return NewRunThenReview(), nil
+	case core.REASON_ONE_SHOT:
+		return NewOneShotReasoning(), nil
+	case core.REASON_LEARN_FROM_FAILURE:
+		return NewLearnFromFailure(), nil
+	case core.REASON_PICK_AGENT:
+		return NewChooseAgent(), nil
+	default:
+		return nil, fmt.Errorf("reasoning: unknown reasoning style %q", style)
+	}
 }
 
 // NewDecide returns a pure transition function that dispatches on

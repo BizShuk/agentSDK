@@ -291,6 +291,24 @@ func TestOptionsReachTheEngine(t *testing.T) {
 		assert.Contains(t, names, "deploy")
 	})
 
+	t.Run("custom tool replaces configured built-in", func(t *testing.T) {
+		eng, _, _ := bootstrap(t, agent.Config{Name: "x", Tier: spec.TIER_STANDARD},
+			agent.WithTools(&fakeTool{name: builtin.NAME_READ}))
+		registered, ok := eng.Tools.Get(builtin.NAME_READ)
+		require.True(t, ok)
+		assert.Equal(t, "test tool", registered.Spec().Description)
+	})
+
+	t.Run("custom rule replaces configured built-in", func(t *testing.T) {
+		custom := &fakeRule{kind: core.REASON_REACT}
+		eng, state, _ := bootstrap(t, agent.Config{Name: "x", Tier: spec.TIER_BASIC},
+			agent.WithRules(custom))
+		_, instructions := eng.Step(state, core.Event{})
+		assert.Equal(t, 1, custom.called)
+		require.Len(t, instructions, 1)
+		assert.Equal(t, core.INSTRUCTION_DONE, instructions[0].Kind)
+	})
+
 	t.Run("hooks", func(t *testing.T) {
 		eng, _, _ := bootstrap(t, agent.Config{Name: "x", Tier: spec.TIER_BASIC},
 			agent.WithHooks(hook.Rule{Event: core.HOOK_PRE_TOOL_USE, Match: "bash"}))
@@ -658,4 +676,15 @@ func (f *fakeTool) Spec() core.ToolSpec {
 }
 func (f *fakeTool) Call(context.Context, json.RawMessage) (core.ToolResult, error) {
 	return core.ToolResult{OK: true, Output: "ok"}, nil
+}
+
+type fakeRule struct {
+	kind   string
+	called int
+}
+
+func (f *fakeRule) Kind() string { return f.kind }
+func (f *fakeRule) NextStep(state core.State) (core.State, []core.Instruction) {
+	f.called++
+	return state, []core.Instruction{{Kind: core.INSTRUCTION_DONE}}
 }

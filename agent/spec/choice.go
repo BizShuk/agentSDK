@@ -117,11 +117,11 @@ func VariantChoices(key string) []Choice {
 		}
 	case "limits.autonomy":
 		return []Choice{
-			{Value: "L0", Label: "L0", Note: "every tool call needs approval"},
-			{Value: "L1", Label: "L1"},
-			{Value: "L2", Label: "L2", Default: true, Note: "low-risk automatic, high-risk asks"},
-			{Value: "L3", Label: "L3"},
-			{Value: "L4", Label: "L4", Note: "fully autonomous"},
+			{Value: core.AUTONOMY_L0.String(), Label: "L0", Note: "every tool call needs approval"},
+			{Value: core.AUTONOMY_L1.String(), Label: "L1"},
+			{Value: core.AUTONOMY_L2.String(), Label: "L2", Default: true, Note: "low-risk automatic, high-risk asks"},
+			{Value: core.AUTONOMY_L3.String(), Label: "L3"},
+			{Value: core.AUTONOMY_L4.String(), Label: "L4", Note: "fully autonomous"},
 		}
 	case "model.credential_kind":
 		return []Choice{

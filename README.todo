@@ -64,6 +64,7 @@
 - [x] `M5` `provider/registry`：name → adapter 唯一真相，env 查詢注入化
 - [x] `M6` `sample/code-agent/cmd/compose.go` `333` → `101` 行；政策移到 `safety.go`、session 選取移到 `session.go`
 - [x] `M7` `cmd/wizard.go`：`wizard`/`w` 逐階段設定產生器，選項全部來自 `spec` 與 `agent.ProviderChoices()`
+- [x] vocabulary factory：`builtin.Register` / `reasoning.NewRule` / `core.ParseAutonomyLevel` 接管 name-to-implementation mapping，`agent` 只組裝（2026-07-27）
 - [x] `CLAUDE.md` / `README.md` 同步（含順手修正的既有漂移：幽靈 `auth/`+`proxy/` 子樹、失效驗證迴圈、舊 workspace 路徑）
 
 待補：

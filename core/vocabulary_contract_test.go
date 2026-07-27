@@ -4,9 +4,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/bizshuk/agentsdk/agent/spec"
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/reasoning"
+	"github.com/bizshuk/agentsdk/tool"
 	"github.com/bizshuk/agentsdk/tool/builtin"
 )
 
@@ -33,14 +36,9 @@ func TestStyleDefaultTracesToCore(t *testing.T) {
 		"spec.DEFAULT_STYLE must mirror the runtime contract")
 }
 
-// TestBuiltinNamesTracesToSpec pins the built-in tool allowlist across
-// three sites: the package that owns the implementation (tool), the
-// catalog that the wizard enumerates (spec.VariantChoices), and the
-// runtime switch in agent/build.go. A new built-in added to
-// tool/BuiltinNames() without an entry in spec.VariantChoices would
-// leave the wizard offering no default; a name in spec.VariantChoices
-// without a constructor in tool/<name>.go would fail agent/build.go
-// at runtime. The cross-check is the only way to catch both.
+// TestBuiltinNamesTracesToSpec pins the built-in tool allowlist across the
+// implementation owner and the declarative catalog. Register proves every
+// catalog value reaches a constructor without involving agent composition.
 func TestBuiltinNamesTracesToSpec(t *testing.T) {
 	choices := spec.VariantChoices("tools.builtin")
 	for _, n := range builtin.BuiltinNames() {
@@ -64,5 +62,28 @@ func TestBuiltinNamesTracesToSpec(t *testing.T) {
 		}
 		assert.True(t, found,
 			"spec.VariantChoices('tools.builtin') entry %q must have a matching tool.NAME_*", c.Value)
+
+		reg := tool.NewRegistry()
+		err := builtin.Register(reg, []string{c.Value}, builtin.Options{
+			Policy:     tool.DefaultPolicy(),
+			WorkingDir: t.TempDir(),
+		})
+		require.NoError(t, err, "tool %q must have a built-in constructor", c.Value)
+	}
+}
+
+func TestReasoningStylesTraceToFactory(t *testing.T) {
+	for _, choice := range spec.StyleChoices() {
+		rule, err := reasoning.NewRule(choice.Value)
+		require.NoError(t, err, "reasoning style %q must have a built-in rule", choice.Value)
+		assert.Equal(t, choice.Value, rule.Kind())
+	}
+}
+
+func TestAutonomyChoicesTraceToCoreParser(t *testing.T) {
+	for _, choice := range spec.VariantChoices("limits.autonomy") {
+		level, err := core.ParseAutonomyLevel(choice.Value)
+		require.NoError(t, err, "autonomy value %q must parse in core", choice.Value)
+		assert.Equal(t, choice.Value, level.String())
 	}
 }

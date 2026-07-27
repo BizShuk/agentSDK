@@ -10,8 +10,8 @@ Go Agentic Loop SDK：以`宣告式設定`組裝目標導向控制迴圈 (Goal-d
 | ----------- | -------------------------- | -------------------------------------------------------------------------------------------- |
 | 1. 認知架構 | `core` (ObservationSource) | 觀察來源 port (Observations channel);原 `perception/` 套件無 consumer 已移除                 |
 | 2. 系統韌性 | `memory/`                  | Window / Compactor / Checkpoint (M2)                                                         |
-| 3. 工具生態 | `tool/`                    | `core.Tool` / RawMessage converter / Registry / 內建工具 / Sandbox                           |
-| 4. 推理     | `reasoning/`               | 6 種 DecisionRule (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router)    |
+| 3. 工具生態 | `tool/`                    | `core.Tool` / RawMessage converter / Registry / allowlist-aware 內建工具 factory / Sandbox   |
+| 4. 推理     | `reasoning/`               | `NewRule` + 6 種 DecisionRule (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router) |
 | 5. 組裝     | `agent/` + `agent/spec/`   | 宣告式 `Config` → 7 stage pipeline → `*agent.Engine`；`prompt/` 管進 context window 的內容   |
 
 `core/` 是純狀態機 (state + event + instruction + reasoning),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
@@ -157,7 +157,7 @@ client response ← reverse directed pair transform ← provider response
 ## 設計原則
 
 - **核心純粹**:`core/` 零 vendor 依賴,可獨立發佈;所有 I/O 都在 `runtime/` 與 ports adapter
-- **六種 ThinkingPattern**:透過 `reasoning.NewDecide` 與純函式 DecisionRule dispatch;working memory 作為 pattern 與 runtime 間的通訊介面
+- **六種 ThinkingPattern**:`reasoning.NewRule` 擁有 style → implementation，`reasoning.NewDecide` 以純函式 DecisionRule dispatch；working memory 作為 pattern 與 runtime 間的通訊介面
 - **Tagged union Instruction**:5 種 live instruction kind 透過 Kind discriminator + optional pointer 欄位表達,JSON round-trip 透過 `omitempty` 精簡
 - **Notifier 結構性相容**: `core.Notifier` 介面方法集與 `gosdk/notify.Notifier` 完全相同,gosdk 的 Multi / Stdout / Slack 直接傳入,無需 adapter
 - **Harness 能力可插拔**: hooks / permission / session / skill（內含 `SubAgent`/`Spawner`）/ wire / prompt 各自為只依賴 `core` 的 package,`runtime.Engine` 持有 nil 即 no-op 的 port,全部由 `agent` (composition root) 注入 — 借鏡 pi 的單向依賴與 claude-code 的 harness 事件面

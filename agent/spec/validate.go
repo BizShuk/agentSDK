@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/bizshuk/agentsdk/core"
 )
 
 // Validate checks an EXPANDED config. Run Expand first, or call Prepare
@@ -91,7 +93,10 @@ func (c Config) Validate() error {
 		add("spec: limits.max_turns (%d) is below limits.max_rounds (%d) — a round costs at least one turn, so the round budget could never be reached",
 			c.Limits.MaxTurns, c.Limits.MaxRounds)
 	}
-	checkVariant(add, "limits.autonomy", c.Limits.Autonomy)
+	if _, err := core.ParseAutonomyLevel(c.Limits.Autonomy); err != nil {
+		add("spec: unknown limits.autonomy %q (want one of %v)",
+			c.Limits.Autonomy, Values(VariantChoices("limits.autonomy")))
+	}
 
 	// --- blocks ---
 	if c.Middleware != nil {
