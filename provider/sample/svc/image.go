@@ -1,0 +1,63 @@
+package svc
+
+import (
+	"context"
+	"fmt"
+	"io"
+
+	"github.com/bizshuk/agentsdk/provider"
+	_ "github.com/bizshuk/agentsdk/provider/all"
+)
+
+// Image executes an image generation request against the target provider.
+func Image(ctx context.Context, req Request, out io.Writer) error {
+	generator, err := provider.NewImage(req.Provider, req.Options)
+	if err != nil {
+		return err
+	}
+	result, err := generator.GenerateImage(ctx, provider.ImageRequest{Prompt: req.Prompt})
+	if err != nil {
+		return fmt.Errorf("image: %w", err)
+	}
+	if req.JSON {
+		return WriteJSON(out, result)
+	}
+	for index, image := range result.Images {
+		if image.URL != "" {
+			if _, err := fmt.Fprintf(out, "image[%d].url=%s\n", index, image.URL); err != nil {
+				return fmt.Errorf("write image URL: %w", err)
+			}
+		}
+		if image.Base64 != "" {
+			if _, err := fmt.Fprintf(
+				out,
+				"image[%d].base64_chars=%d mime=%s\n",
+				index,
+				len(image.Base64),
+				image.MIMEType,
+			); err != nil {
+				return fmt.Errorf("write image metadata: %w", err)
+			}
+		}
+		if image.RevisedPrompt != "" {
+			if _, err := fmt.Fprintf(
+				out,
+				"image[%d].revised_prompt=%s\n",
+				index,
+				image.RevisedPrompt,
+			); err != nil {
+				return fmt.Errorf("write revised prompt: %w", err)
+			}
+		}
+	}
+	if _, err := fmt.Fprintf(
+		out,
+		"[images=%d tokens=%d cost_ticks=%d]\n",
+		len(result.Images),
+		result.Usage.TotalTokens,
+		result.Usage.CostInUSDTicks,
+	); err != nil {
+		return fmt.Errorf("write image usage: %w", err)
+	}
+	return nil
+}

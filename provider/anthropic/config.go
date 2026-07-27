@@ -1,6 +1,6 @@
 package anthropic
 
-// APIKeyEnvVar is the standard env var for an Anthropic API key.
+// APIKeyEnvVar is the standard construction-time env var for an Anthropic API key.
 const APIKeyEnvVar = "ANTHROPIC_API_KEY"
 
 // APIKeyOAuthEnvVar is the env var for a pre-issued OAuth access token

@@ -14,6 +14,7 @@ func init() {
 			Label:              "Antigravity",
 			Note:               "Antigravity gateway",
 			APIKeyEnv:          []string{APIKeyEnvVar},
+			OAuthEnv:           []string{OAuthEnvVar},
 			BaseURLEnv:         BaseURLEnvVar,
 			CredentialRequired: true,
 		},

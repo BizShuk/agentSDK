@@ -1,13 +1,14 @@
-// Package grok adapts xAI's Grok API (OpenAI-compatible chat-completions
-// endpoint) to agentsdk's core.Provider interface.
+// Package grok adapts xAI's OpenAI-compatible chat and image-generation APIs
+// to agentsdk's provider contracts.
 //
 // File layout:
 //
 //   - provider.go    — entry point, Provider struct, interface methods
 //   - dto.go         — wire-format types (RequestBody, Response, ...)
 //   - validate.go    — RequestBody.Validate()
-//   - auth_api.go    — endpoint and environment names
+//   - config.go      — endpoint and environment names
 //   - stream.go      — SSE parser -> core.ModelChunk
+//   - image.go       — OpenAI-compatible image generation
 //   - models.go      — DefaultCatalog
 //
 // xAI supports API-key and OAuth credentials. Both enter through
@@ -30,15 +31,18 @@ import (
 
 const defaultModel = "grok-3"
 
-// Provider implements core.Provider against the xAI Grok API.
+// Provider implements model generation, model streaming, and image generation
+// against the xAI Grok API.
 type Provider struct {
 	baseURL string
 	// auth holds whichever credential class the constructor was given.
 	// Bearer outranks APIKey inside core.Auth.Token, so the OAuth path
 	// still wins without a second field to keep in sync.
-	auth   core.Auth
-	model  string
-	client *http.Client
+	auth        core.Auth
+	model       string
+	imageModel  string
+	client      *http.Client
+	imageClient *http.Client
 }
 
 // New returns a Provider from registry-resolved construction config.
@@ -50,10 +54,12 @@ func New(cfg provider.ResolvedConfig) (*Provider, error) {
 		cfg.Model = defaultModel
 	}
 	return &Provider{
-		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
-		auth:    cfg.Auth,
-		model:   cfg.Model,
-		client:  &http.Client{Timeout: 120 * time.Second},
+		baseURL:     strings.TrimRight(cfg.BaseURL, "/"),
+		auth:        cfg.Auth,
+		model:       cfg.Model,
+		imageModel:  defaultImageModel,
+		client:      &http.Client{Timeout: 120 * time.Second},
+		imageClient: &http.Client{Timeout: 3 * time.Minute},
 	}, nil
 }
 
@@ -79,8 +85,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 	if err != nil {
 		return core.ModelResult{}, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", p.authHeader(req.Auth))
+	p.applyHeaders(httpReq, req.Auth, false)
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return core.ModelResult{}, fmt.Errorf("grok: http: %w", err)
@@ -122,9 +127,7 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "text/event-stream")
-	httpReq.Header.Set("Authorization", p.authHeader(req.Auth))
+	p.applyHeaders(httpReq, req.Auth, true)
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("grok: http: %w", err)
@@ -136,7 +139,27 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 // over a baked-in API key when both are present, matching the priority
 // documented for the anthropic provider.
 func (p *Provider) authHeader(override core.Auth) string {
-	return "Bearer " + p.auth.Merge(override).Token()
+	token := p.auth.Merge(override).Token()
+	if token == "" {
+		return ""
+	}
+	return "Bearer " + token
+}
+
+func (p *Provider) applyHeaders(req *http.Request, override core.Auth, stream bool) {
+	auth := p.auth.Merge(override)
+	req.Header.Set("Content-Type", "application/json")
+	if stream {
+		req.Header.Set("Accept", "text/event-stream")
+	}
+	if token := auth.Token(); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	for key, value := range auth.Headers {
+		if value != "" {
+			req.Header.Set(key, value)
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------

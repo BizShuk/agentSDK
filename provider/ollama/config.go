@@ -1,6 +1,6 @@
 package ollama
 
-// APIKeyEnvVar is the optional Bearer token for protected servers
+// APIKeyEnvVar configures the optional Bearer token for protected servers
 // (LM Studio with auth, vLLM with --api-key, OpenAI). Empty for local
 // Ollama, which is key-less by default.
 const APIKeyEnvVar = "OPENAI_API_KEY"

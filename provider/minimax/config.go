@@ -1,12 +1,15 @@
 package minimax
 
-// minimax accepts long-lived API keys only — no OAuth. The auth header
+// MiniMax configuration accepts long-lived API keys only — no OAuth. The auth header
 // uses Anthropic's convention `x-api-key: <key>` rather than the more
 // common `Authorization: Bearer` because the underlying endpoint is an
 // Anthropic-Messages-compat surface.
 
 // APIKeyEnvVar is the standard env var for a minimax API key.
 const APIKeyEnvVar = "MINIMAX_API_KEY"
+
+// OAuthEnvVar is the standard env var for a minimax OAuth access token.
+const OAuthEnvVar = "MINIMAX_OAUTH_TOKEN"
 
 // BaseURLEnvVar lets operators point at a self-hosted or proxy-fronted
 // minimax endpoint without recompiling.

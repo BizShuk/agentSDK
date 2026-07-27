@@ -1,7 +1,6 @@
-// Package provider is the layer that talks to LLM services: the adapter
-// contract (Adapter, Metadata), the name → constructor registry, and the
-// credential resolution that stands between a config value and a live
-// client.
+// Package provider is the layer that talks to model services: model and image
+// capability contracts, the name → constructor registry, and the credential
+// resolution that stands between a config value and a live client.
 //
 // Adapters register themselves from their package init() — this package
 // imports no adapter. Each binary decides which adapters to link by
@@ -41,18 +40,18 @@ import (
 // set.
 const DEFAULT_NAME = "minimax"
 
-// Factory builds an adapter from resolved options. The provider.Factory
-// signature is the source of truth for the generate + stream capability
-// required of registered adapters.
+// Factory builds a model adapter from resolved options. Its signature is the
+// source of truth for the paired generate + stream capability.
 type Factory func(ResolvedConfig) (Adapter, error)
 
-// Entry is everything callers need to know about one adapter: how to
-// build it, the static metadata a CLI listing or wizard menu renders,
-// and the bundled model catalog used when live discovery is unavailable.
+// Entry is everything callers need to know about one provider: how to build
+// each supported capability, the metadata a CLI or wizard renders, and the
+// bundled model catalog used when live discovery is unavailable.
 type Entry struct {
 	Name     string
 	Metadata Metadata
 	New      Factory
+	NewImage ImageFactory
 	Catalog  func() []core.ModelSpec
 }
 
@@ -63,13 +62,16 @@ var (
 	entries = map[string]Entry{}
 )
 
-// Register adds an adapter to the registry. It panics on a duplicate
+// Register adds a provider entry to the registry. It panics on a duplicate
 // name (idiomatic Go for init()-time contract violations — see
-// database/sql/driver). Adapters should call this exactly once from
+// database/sql/driver). Providers should call this exactly once from
 // their package's init().
 func Register(e Entry) {
-	if e.Name == "" || e.New == nil {
-		panic(fmt.Sprintf("provider: Register requires Name and New (got %+v)", e))
+	if strings.TrimSpace(e.Name) == "" || (e.New == nil && e.NewImage == nil) {
+		panic(fmt.Sprintf(
+			"provider: Register requires Name and at least one factory (got %+v)",
+			e,
+		))
 	}
 	key := strings.ToLower(strings.TrimSpace(e.Name))
 	mu.Lock()
@@ -98,9 +100,10 @@ func Entries() []Entry {
 	mu.RLock()
 	defer mu.RUnlock()
 	out := make([]Entry, 0, len(entries))
-	for _, name := range Names() {
-		out = append(out, entries[name])
+	for _, entry := range entries {
+		out = append(out, entry)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 
@@ -131,21 +134,75 @@ func Catalog(name string) ([]core.ModelSpec, bool) {
 // New builds the named adapter, resolving credentials from Options and
 // then the environment.
 func New(name string, o Options) (Adapter, error) {
-	e, ok := Lookup(name)
-	if !ok {
-		return nil, fmt.Errorf("unknown provider %q (registered: %s)",
-			name, strings.Join(Names(), ", "))
-	}
-	resolved, err := o.Resolve(e.Metadata)
+	e, err := lookup(name)
 	if err != nil {
-		return nil, fmt.Errorf("provider %s: %w", e.Name, err)
+		return nil, err
 	}
-	if e.Metadata.CredentialRequired && resolved.Auth.Token() == "" && o.Decorator == nil {
-		return nil, fmt.Errorf("provider %s: credential is required", e.Name)
+	if e.New == nil {
+		return nil, &UnsupportedCapabilityError{
+			Provider:   e.Name,
+			Capability: CAPABILITY_MODEL_GENERATE,
+		}
+	}
+	resolved, decorator, err := resolveOptions(e, o)
+	if err != nil {
+		return nil, err
 	}
 	p, err := e.New(resolved)
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: %w", e.Name, err)
 	}
-	return WithDecorator(e.Name, p, o.Decorator), nil
+	return WithDecorator(e.Name, p, decorator), nil
+}
+
+// NewImage builds the named provider's image-generation capability using the
+// same credential resolution and request-time decorator precedence as New.
+func NewImage(name string, o Options) (ImageGenerator, error) {
+	e, err := lookup(name)
+	if err != nil {
+		return nil, err
+	}
+	if e.NewImage == nil {
+		return nil, &UnsupportedCapabilityError{
+			Provider:   e.Name,
+			Capability: CAPABILITY_IMAGE_GENERATE,
+		}
+	}
+	resolved, decorator, err := resolveOptions(e, o)
+	if err != nil {
+		return nil, err
+	}
+	generator, err := e.NewImage(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s: image: %w", e.Name, err)
+	}
+	return WithImageDecorator(e.Name, generator, decorator), nil
+}
+
+func lookup(name string) (Entry, error) {
+	e, ok := Lookup(name)
+	if !ok {
+		return Entry{}, fmt.Errorf("unknown provider %q (registered: %s)",
+			name, strings.Join(Names(), ", "))
+	}
+	return e, nil
+}
+
+func resolveOptions(e Entry, o Options) (ResolvedConfig, Decorator, error) {
+	resolved, err := o.Resolve(e.Metadata)
+	if err != nil {
+		return ResolvedConfig{}, nil, fmt.Errorf("provider %s: %w", e.Name, err)
+	}
+	if e.Metadata.CredentialRequired && resolved.Auth.Token() == "" && o.Decorator == nil {
+		return ResolvedConfig{}, nil, fmt.Errorf("provider %s: credential is required", e.Name)
+	}
+
+	// Options.APIKey is the highest-precedence construction credential.
+	// Resolve leaves it in Auth; do not then attach an ambient decorator
+	// that could replace it. A later per-request Auth still outranks it.
+	decorator := o.Decorator
+	if !resolved.Auth.IsZero() {
+		decorator = nil
+	}
+	return resolved, decorator, nil
 }

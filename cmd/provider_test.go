@@ -281,9 +281,9 @@ func TestProviderFlagDefaultReferencesProviderDefaultName(t *testing.T) {
 // explicit credential is given, Options.Resolve never inspects
 // CredentialKind at all.
 func TestProviderCredentialKindStrictRejectsUnsupportedProvider(t *testing.T) {
-	t.Setenv("MINIMAX_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
 	_, _, err := runCLI(t,
-		"--provider", "minimax",
+		"--provider", "google",
 		"--credential-kind", "oauth",
 		"ping",
 	)

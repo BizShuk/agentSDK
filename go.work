@@ -12,7 +12,6 @@ use (
 	./sample/demo-strategy
 	./sample/file-agent
 	./sample/greet-agent
-	./sample/log-agent-v2
 	./sample/logdoctor-agent
 	./sample/skeleton-agent
 )

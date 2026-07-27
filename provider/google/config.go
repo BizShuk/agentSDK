@@ -1,6 +1,6 @@
 package google
 
-// APIKeyEnvVar is the required Bearer token for Google AI Studio.
+// APIKeyEnvVar configures the required Bearer token for Google AI Studio.
 // Empty API key fails construction in New(); there is no keyless path.
 const APIKeyEnvVar = "GOOGLE_API_KEY"
 

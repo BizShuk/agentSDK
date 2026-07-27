@@ -1,5 +1,5 @@
-// Package google adapts Google Generative AI's OpenAI-compatible
-// /chat/completions endpoint to agentsdk's provider contracts.
+// Package google adapts Google Generative AI's OpenAI-compatible chat and
+// image-generation endpoints to agentsdk's provider contracts.
 package google
 
 import (
@@ -18,13 +18,15 @@ import (
 
 const defaultModel = "gemini-3-flash-preview"
 
-// Provider implements the generate and stream capabilities against Google
-// Generative AI's OpenAI-compatible endpoint.
+// Provider implements model generation, model streaming, and image generation
+// against Google Generative AI's OpenAI-compatible endpoint.
 type Provider struct {
-	baseURL string
-	auth    core.Auth
-	model   string
-	client  *http.Client
+	baseURL     string
+	auth        core.Auth
+	model       string
+	imageModel  string
+	client      *http.Client
+	imageClient *http.Client
 }
 
 // New returns a Provider from registry-resolved construction config.
@@ -36,10 +38,12 @@ func New(cfg provider.ResolvedConfig) (*Provider, error) {
 		cfg.Model = defaultModel
 	}
 	return &Provider{
-		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
-		auth:    cfg.Auth,
-		model:   cfg.Model,
-		client:  &http.Client{Timeout: 120 * time.Second},
+		baseURL:     strings.TrimRight(cfg.BaseURL, "/"),
+		auth:        cfg.Auth,
+		model:       cfg.Model,
+		imageModel:  defaultImageModel,
+		client:      &http.Client{Timeout: 120 * time.Second},
+		imageClient: &http.Client{Timeout: 3 * time.Minute},
 	}, nil
 }
 

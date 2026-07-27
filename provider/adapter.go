@@ -2,11 +2,12 @@ package provider
 
 import "github.com/bizshuk/agentsdk/core"
 
-// Adapter is the capability contract every registered provider implements.
+// Adapter is the paired model generate + stream capability contract.
 //
-// Runtime only consumes core.Provider. The registry additionally requires
-// streaming because every built-in adapter supports the provider smoke-test
-// CLI. Discovery data belongs to Entry, not to a constructed adapter.
+// Runtime only consumes core.Provider. A registry entry that exposes model
+// generation returns Adapter so the provider smoke-test CLI can also stream.
+// Image-only entries can omit this capability. Discovery data belongs to
+// Entry, not to a constructed adapter.
 type Adapter interface {
 	core.Provider
 	core.StreamProvider

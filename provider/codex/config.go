@@ -5,7 +5,7 @@ import (
 	"runtime"
 )
 
-// Codex is OAuth-first — most users authenticate via ChatGPT Plus/Pro
+// Codex configuration is OAuth-first — most users authenticate via ChatGPT Plus/Pro
 // credentials resolved by provider/credential. The API key path is provided
 // for completeness and local mocks that do not require the OAuth handshake.
 
@@ -14,6 +14,9 @@ const (
 	// arbitrary OpenAI keys. Most deployments should use the OAuth
 	// credential flow instead.
 	APIKeyEnvVar = "OPENAI_API_KEY"
+
+	// OAuthEnvVar is the env var for a pre-issued OpenAI OAuth access token.
+	OAuthEnvVar = "OPENAI_OAUTH_TOKEN"
 
 	// BaseURLEnvVar — override the upstream base URL. Useful for
 	// pointing tests at a local mock.

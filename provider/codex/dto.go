@@ -21,7 +21,7 @@
 //   - provider.go    — entry point, Provider struct, interface methods
 //   - dto.go         — wire-format types (RequestBody, Response, StreamChunk)
 //   - validate.go    — RequestBody.Validate()
-//   - auth_api.go    — endpoint, environment, and client identity constants
+//   - config.go      — endpoint, environment, and client identity constants
 //   - stream.go      — SSE parser → core.ModelChunk
 //   - models.go      — DefaultCatalog and IsLiteModel
 package codex

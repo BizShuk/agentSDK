@@ -11,7 +11,7 @@
 //   - provider.go    — entry point, Provider struct, interface methods
 //   - dto.go         — wire-format types (RequestBody, ContentBlock, ...)
 //   - validate.go    — RequestBody.Validate()
-//   - auth_api.go    — endpoint and environment names
+//   - config.go      — endpoint and environment names
 //   - stream.go      — SSE parser → core.ModelChunk
 //   - models.go      — DefaultCatalog
 package minimax

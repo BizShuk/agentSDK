@@ -14,6 +14,7 @@ func init() {
 			Label:              "MiniMax",
 			Note:               "default; OpenAI-compatible",
 			APIKeyEnv:          []string{APIKeyEnvVar},
+			OAuthEnv:           []string{OAuthEnvVar},
 			BaseURLEnv:         BaseURLEnvVar,
 			CredentialRequired: true,
 		},

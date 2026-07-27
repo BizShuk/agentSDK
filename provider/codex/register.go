@@ -14,6 +14,7 @@ func init() {
 			Label:              "Codex",
 			Note:               "OpenAI Codex Responses via credential decorator",
 			APIKeyEnv:          []string{APIKeyEnvVar},
+			OAuthEnv:           []string{OAuthEnvVar},
 			BaseURLEnv:         BaseURLEnvVar,
 			CredentialRequired: true,
 		},

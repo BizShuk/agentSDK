@@ -25,11 +25,40 @@ provider 建構只有一條 pipeline：`provider.Options`（尚未解析的 live
 再交給 adapter `New`。env / viper lookup 不進 adapter；`core.Auth` 只承載 credential 與
 provider-specific headers，endpoint 固定是 construction config。
 
+認證 (authentication) 是所有 outbound API 共用的 request policy，不是另一個模型
+capability：`provider.Decorator` 每次呼叫重新解析/refresh credential，再由單次 request 的
+`Auth` override。完整優先序是`單次 request Auth → 明示 Options.APIKey → Decorator →
+env`；model 與 image factory 共用同一條 resolution pipeline。
+
 Google 與 Ollama 經跨 adapter golden tests 證明使用相同的 OpenAI Chat Completions
 request、response 與 SSE wire contract，因此共用 provider protocol codec
 `provider/protocol/openaichat`。通用 SSE frame boundary、multiline data、BOM、大小限制與
 讀寫由 stdlib-only `provider/protocol/sse` 擁有；`[DONE]` 等 provider terminal semantics
-仍留在具體 protocol package。其他 provider 保留各自 DTO，不以欄位相似作為合併依據。
+仍留在具體 protocol package。Google 與 xAI Grok 的
+`POST /v1/images/generations` 另由跨 adapter golden tests 鎖定，才共用
+`provider/protocol/openaiimage`。其他 provider 保留各自 DTO，不以欄位相似作為合併依據。
+
+圖片生成是 `provider.ImageGenerator` optional capability，不進 agent runtime 的
+`core.Provider`。caller 必須明確走 `NewImage`；不支援的 adapter 回傳可用
+`errors.Is(err, provider.ErrUnsupportedCapability)` 判斷的錯誤：
+
+```go
+generator, err := provider.NewImage("grok", provider.Options{})
+if err != nil {
+	return err
+}
+result, err := generator.GenerateImage(ctx, provider.ImageRequest{
+	Prompt:         "新加坡雨夜的電影感街景",
+	ResponseFormat: "b64_json",
+})
+```
+
+binary 仍需 blank-import 目標 adapter（或 `provider/all`）讓它註冊。URL result 可能是
+短效連結；要持久化時由 caller 複製資產。
+
+可執行的 [`provider/sample`](provider/sample/README.md) 直接展示 provider、auth mode 與
+`chat / image / audio` API type matrix。`audio` 目前刻意回 typed unsupported：audio
+尚未決定是 speech synthesis、transcription 或 audio-chat，也沒有 adapter wire consumer。
 
 ## 怎麼用 (Getting Started)
 
@@ -140,12 +169,16 @@ agentsdk/
 │   └── hook/                  # lifecycle hooks (PreToolUse/PostToolUse/...; command hook exit 2 = block)
 ├── runtime/                   # Loop: dispatch + checkpoint + WAL
 ├── skill/                     # SKILL.md skills + slash commands + prompt templates (progressive disclosure) + SubAgent/Spawner ("task" tool)
-├── provider/                  # 7 個 adapter（Generate + Stream capability；已併回 root module）
-│   ├── registry.go            # Entry 是 name / metadata / static catalog / factory 的唯一真相
+├── provider/                  # 7 個 adapter；model + optional image capabilities
+│   ├── capability.go          # capability discovery + typed unsupported error
+│   ├── image.go               # ImageGenerator / ImageRequest / ImageResult + auth decorator
+│   ├── registry.go            # Entry 是 name / metadata / factories / static catalog 的唯一真相
 │   ├── registry_options.go    # Options → ResolvedConfig 的唯一 env / credential resolution pipeline
+│   ├── sample/                # provider/auth/chat-image-audio 可執行 capability sample
 │   └── protocol/
 │       ├── sse/               # stdlib-only 完整 SSE frame decoder / writer
-│       └── openaichat/        # Google/Ollama 共用的 OpenAI Chat wire protocol codec
+│       ├── openaichat/        # Google/Ollama 共用的 OpenAI Chat wire protocol codec
+│       └── openaiimage/       # Google/Grok 共用的 /images/generations codec
 ├── auth / proxy               # 外部獨立 repo，本 repo 無此目錄（auth 為 go.mod require，proxy 已完全脫離）
 ├── utils/                     # 根層共用 utilities umbrella：utils/frontmatter/ + utils/testutil/（FakeProvider / MemStore / CapturingNotifier）
 ├── sample/code-agent/         # 全 harness 組合 CLI（tui 互動 / -p / --json、session flags、.agentsdk 探索）

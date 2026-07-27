@@ -696,7 +696,7 @@ func TestBootstrapPropagatesCredentialKindError(t *testing.T) {
 	a, err := agent.New(agent.Config{
 		Name: "x",
 		Model: spec.Model{
-			Provider:       "minimax",
+			Provider:       "google",
 			CredentialKind: core.CREDENTIAL_KIND_OAUTH,
 		},
 	})

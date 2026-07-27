@@ -1,4 +1,4 @@
-// Auth helpers for the API-key (long-lived secret) flavor of xAI Grok.
+// Configuration for the API-key (long-lived secret) flavor of xAI Grok.
 //
 // xAI documents this flow at https://docs.x.ai/docs/authentication —
 // generate a key in the xAI console and pass it via XAI_API_KEY.
@@ -8,6 +8,9 @@ package grok
 const (
 	// APIKeyEnvVar is the standard env var for an xAI API key.
 	APIKeyEnvVar = "XAI_API_KEY"
+
+	// OAuthEnvVar is the standard env var for an xAI OAuth access token.
+	OAuthEnvVar = "XAI_OAUTH_TOKEN"
 
 	// BaseURLEnvVar is the standard env var for overriding the Grok API
 	// endpoint (e.g. for a corporate proxy or local mock).

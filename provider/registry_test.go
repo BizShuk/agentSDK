@@ -2,6 +2,7 @@ package provider_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -83,8 +84,12 @@ func TestEveryEntryIsSelfDescribing(t *testing.T) {
 			assert.Truef(t, hasEnvPath || hasDecoratorPath,
 				"entry %q has no credential path (OAuthEnv=%v APIKeyEnv=%v Note=%q); declare an env OR document a decorator path",
 				e.Name, e.Metadata.OAuthEnv, e.Metadata.APIKeyEnv, e.Metadata.Note)
-			assert.NotNil(t, e.New)
-			assert.NotNil(t, e.Catalog, "every entry must expose its bundled catalog")
+			assert.True(t, e.New != nil || e.NewImage != nil,
+				"every entry must expose at least one factory")
+			if e.New != nil {
+				assert.NotNil(t, e.Catalog,
+					"every model-capable entry must expose its bundled catalog")
+			}
 		})
 	}
 }
@@ -161,7 +166,7 @@ func TestCredentialResolutionPrecedence(t *testing.T) {
 			wantErr: "requires api_key credential",
 		},
 		{
-			name: "strict oauth rejects provider without OAuth env", provider: "minimax",
+			name: "strict oauth rejects provider without OAuth env", provider: "google",
 			opts: provider.Options{
 				CredentialKind: core.CREDENTIAL_KIND_OAUTH,
 				LookupEnv:      func(string) string { return "should-not-be-used" },
@@ -221,6 +226,53 @@ func TestNewBuildsAProvider(t *testing.T) {
 	assert.NotEmpty(t, entry.Catalog(), "the registry entry owns the static catalog")
 }
 
+func TestImageCapabilitiesAreExplicit(t *testing.T) {
+	for _, name := range []string{"google", "grok"} {
+		t.Run(name, func(t *testing.T) {
+			entry, ok := provider.Lookup(name)
+			require.True(t, ok)
+			assert.True(t, entry.Supports(provider.CAPABILITY_IMAGE_GENERATE))
+			assert.Contains(t, entry.Capabilities(), provider.CAPABILITY_IMAGE_GENERATE)
+		})
+	}
+	for _, name := range []string{"anthropic", "antigravity", "codex", "minimax", "ollama"} {
+		t.Run(name, func(t *testing.T) {
+			entry, ok := provider.Lookup(name)
+			require.True(t, ok)
+			assert.False(t, entry.Supports(provider.CAPABILITY_IMAGE_GENERATE))
+			assert.NotContains(t, entry.Capabilities(), provider.CAPABILITY_IMAGE_GENERATE)
+		})
+	}
+}
+
+func TestNewImageRejectsUnsupportedCapabilityBeforeCredentialResolution(t *testing.T) {
+	_, err := provider.NewImage("anthropic", provider.Options{
+		LookupEnv: func(string) string { return "" },
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, provider.ErrUnsupportedCapability)
+
+	var unsupported *provider.UnsupportedCapabilityError
+	require.True(t, errors.As(err, &unsupported))
+	assert.Equal(t, "anthropic", unsupported.Provider)
+	assert.Equal(t, provider.CAPABILITY_IMAGE_GENERATE, unsupported.Capability)
+}
+
+func TestNewImageAllowsDeferredCredentialConstruction(t *testing.T) {
+	for _, name := range []string{"google", "grok"} {
+		t.Run(name, func(t *testing.T) {
+			generator, err := provider.NewImage(name, provider.Options{
+				LookupEnv: func(string) string { return "" },
+				Decorator: func(context.Context) (core.Auth, error) {
+					return core.Auth{Bearer: "resolved-per-request"}, nil
+				},
+			})
+			require.NoError(t, err)
+			assert.NotNil(t, generator)
+		})
+	}
+}
+
 func TestDecoratorAllowsDeferredCredentialConstruction(t *testing.T) {
 	for _, entry := range provider.Entries() {
 		if !entry.Metadata.CredentialRequired {
@@ -259,7 +311,7 @@ func TestRegisterRejectsIncompleteEntry(t *testing.T) {
 		name  string
 		entry provider.Entry
 	}{
-		{"missing New", provider.Entry{Name: "incomplete-only-name"}},
+		{"missing factories", provider.Entry{Name: "incomplete-only-name"}},
 		{"missing Name", provider.Entry{New: func(provider.ResolvedConfig) (provider.Adapter, error) {
 			return nil, nil
 		}}},
@@ -270,7 +322,7 @@ func TestRegisterRejectsIncompleteEntry(t *testing.T) {
 				r := recover()
 				require.NotNil(t, r, "Register must panic on incomplete entry")
 				msg := strings.TrimSpace(fmt.Sprint(r))
-				assert.Containsf(t, msg, "provider: Register requires Name and New",
+				assert.Containsf(t, msg, "provider: Register requires Name and at least one factory",
 					"panic message %q should mention the missing-field invariant", msg)
 			}()
 			provider.Register(tc.entry)

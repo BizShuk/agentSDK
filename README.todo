@@ -46,6 +46,12 @@
       經跨 adapter golden/httptest 證明相容後，收斂到 `provider/protocol/openaichat` codec；其他
       provider DTO 保持 vendor-local。通用完整 frame codec 已下沉至 stdlib-only
       `provider/protocol/sse`，provider terminal semantics 不進 generic package
+- [x] `Phase 7` model/image 共用 auth policy + optional image capability：`Entry.NewImage` /
+      `provider.NewImage` / `Entry.Supports` 接上；Google / Grok 經跨 adapter golden tests 後
+      共用 `provider/protocol/openaiimage`，支援 `/images/generations` 的 URL / base64 result、
+      usage、bounded structured error 與 request-time credential decorator。明示
+      `Options.APIKey` 不再可能被 ambient decorator 覆蓋；七個誤名 `auth_api.go` 統一改為
+      `config.go`
 
 落地後仍未關閉的兩件事：
 
@@ -58,6 +64,14 @@
       `auth` → root
 - [ ] `provider/credential` 尚無 caller —— `Source.Decorator()` 與 `Login` 已就緒，
       但沒有 CLI 或 agent 接上去。接線是獨立題目（login 子指令 + `spec` 增加 credential source 開關）
+- [ ] Google / xAI image endpoint 尚未用真實 credential 跑 live smoke；目前驗證是官方
+      contract 對照 + cross-adapter golden/httptest，不把 build-time contract test 說成上游
+      runtime acceptance
+- [ ] Image edits / variations / streaming 尚無 production consumer；出現 consumer 後再以
+      sibling optional capability 接回，不擴肥 `core.Provider`
+- [ ] Audio capability：先選定 `speech synthesis`、`transcription`、`audio-chat input`
+      的獨立 contract 與真實 adapter consumer，再把 `provider/sample --type audio` 從 typed
+      unsupported 接到對應 factory；不得直接把三種 wire API 合成單一 fat interface
 
 ## Agent Skeleton（2026-07-22 落地，`M1`–`M7` 完成）
 

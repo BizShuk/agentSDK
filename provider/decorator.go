@@ -59,12 +59,25 @@ func (d *decorated) Stream(ctx context.Context, req core.ModelRequest) (<-chan c
 // speaking directly about this one request and outranks the ambient
 // credential; the decorator only fills what the caller left blank.
 func (d *decorated) apply(ctx context.Context, req core.ModelRequest) (core.ModelRequest, error) {
-	resolved, err := d.decorate(ctx)
+	resolved, err := resolveRequestAuth(ctx, d.name, d.decorate, req.Auth)
 	if err != nil {
-		return req, fmt.Errorf("provider %s: resolve credential: %w", d.name, err)
+		return req, err
 	}
-	req.Auth = resolved.Merge(req.Auth)
+	req.Auth = resolved
 	return req, nil
+}
+
+func resolveRequestAuth(
+	ctx context.Context,
+	name string,
+	decorate Decorator,
+	explicit core.Auth,
+) (core.Auth, error) {
+	resolved, err := decorate(ctx)
+	if err != nil {
+		return explicit, fmt.Errorf("provider %s: resolve credential: %w", name, err)
+	}
+	return resolved.Merge(explicit), nil
 }
 
 // WithDecorator returns a wrapped Adapter that resolves its credential before
