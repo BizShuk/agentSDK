@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/provider/google"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,7 +50,10 @@ func newFakeGoogle(t *testing.T) (*httptest.Server, *string) {
 
 func TestProviderRoundTripAgainstFakeGoogle(t *testing.T) {
 	srv, gotModel := newFakeGoogle(t)
-	p, err := google.New(google.WithBaseURL(srv.URL), google.WithAPIKey("test-key"))
+	p, err := google.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "test-key"},
+	})
 	require.NoError(t, err)
 
 	req := core.ModelRequest{Messages: []core.Message{
@@ -72,13 +76,16 @@ func TestProviderIncludesBearerHeader(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := google.New(google.WithBaseURL(srv.URL), google.WithAPIKey("sk-test"))
+	p, err := google.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "sk-test"},
+	})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
 	})
 	require.NoError(t, err)
-	assert.True(t, strings.Contains(sawAuth, "Bearer sk-test"))
+	assert.Equal(t, "Bearer sk-test", sawAuth)
 }
 
 func TestProviderPropagatesError(t *testing.T) {
@@ -87,7 +94,10 @@ func TestProviderPropagatesError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := google.New(google.WithBaseURL(srv.URL), google.WithAPIKey("test-key"))
+	p, err := google.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "test-key"},
+	})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
@@ -98,9 +108,9 @@ func TestProviderPropagatesError(t *testing.T) {
 
 func TestProviderRejectsEmptyAPIKey(t *testing.T) {
 	t.Setenv("GOOGLE_API_KEY", "")
-	_, err := google.New(google.WithBaseURL("http://example/v1"))
+	_, err := provider.New("google", provider.Options{BaseURL: "http://example/v1"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "API key")
+	assert.Contains(t, err.Error(), "credential")
 }
 
 func TestRequestBodyValidate(t *testing.T) {
@@ -130,38 +140,6 @@ func TestRequestBodyValidate(t *testing.T) {
 		}.Validate()
 		assert.NoError(t, err, "role %q should validate", role)
 	}
-}
-
-func TestAuthResolvers(t *testing.T) {
-	t.Run("ResolveAPIKey prefers explicit over env", func(t *testing.T) {
-		t.Setenv("GOOGLE_API_KEY", "env-key")
-		assert.Equal(t, "explicit-key", google.ResolveAPIKey("explicit-key"))
-	})
-
-	t.Run("ResolveAPIKey falls back to env", func(t *testing.T) {
-		t.Setenv("GOOGLE_API_KEY", "env-key")
-		assert.Equal(t, "env-key", google.ResolveAPIKey(""))
-	})
-
-	t.Run("ResolveAPIKey empty when both are empty", func(t *testing.T) {
-		t.Setenv("GOOGLE_API_KEY", "")
-		assert.Equal(t, "", google.ResolveAPIKey(""))
-	})
-
-	t.Run("ResolveBaseURL prefers explicit over env", func(t *testing.T) {
-		t.Setenv("GOOGLE_BASE_URL", "https://env-host/v1beta/openai")
-		assert.Equal(t, "https://explicit/v1beta/openai", google.ResolveBaseURL("https://explicit/v1beta/openai"))
-	})
-
-	t.Run("ResolveBaseURL falls back to env", func(t *testing.T) {
-		t.Setenv("GOOGLE_BASE_URL", "https://env-host/v1beta/openai")
-		assert.Equal(t, "https://env-host/v1beta/openai", google.ResolveBaseURL(""))
-	})
-
-	t.Run("ResolveBaseURL defaults to AI Studio", func(t *testing.T) {
-		t.Setenv("GOOGLE_BASE_URL", "")
-		assert.Equal(t, "https://generativelanguage.googleapis.com/v1beta/openai", google.ResolveBaseURL(""))
-	})
 }
 
 func TestProviderModelsCatalog(t *testing.T) {
@@ -219,7 +197,10 @@ func TestProviderStreamAgainstFakeGoogle(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := google.New(google.WithBaseURL(srv.URL), google.WithAPIKey("test-key"))
+	p, err := google.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "test-key"},
+	})
 	require.NoError(t, err)
 
 	ch, err := p.Stream(context.Background(), core.ModelRequest{

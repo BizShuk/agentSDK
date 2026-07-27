@@ -11,23 +11,14 @@ func init() {
 	provider.Register(provider.Entry{
 		Name: "minimax",
 		Metadata: provider.Metadata{
-			Label:      "MiniMax",
-			Note:       "default; OpenAI-compatible",
-			APIKeyEnv:  []string{"MINIMAX_API_KEY"},
-			BaseURLEnv: "MINIMAX_BASE_URL",
+			Label:              "MiniMax",
+			Note:               "default; OpenAI-compatible",
+			APIKeyEnv:          []string{APIKeyEnvVar},
+			BaseURLEnv:         BaseURLEnvVar,
+			CredentialRequired: true,
 		},
-		New: func(o provider.Options) (provider.Adapter, error) {
-			var opts []Option
-			if o.Model != "" {
-				opts = append(opts, WithModel(o.Model))
-			}
-			if o.APIKey != "" {
-				opts = append(opts, WithAPIKey(o.APIKey))
-			}
-			if o.BaseURL != "" {
-				opts = append(opts, WithBaseURL(o.BaseURL))
-			}
-			return New(opts...)
+		New: func(cfg provider.ResolvedConfig) (provider.Adapter, error) {
+			return New(cfg)
 		},
 		Catalog: DefaultCatalog,
 	})

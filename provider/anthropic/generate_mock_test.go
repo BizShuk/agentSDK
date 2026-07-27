@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/provider/anthropic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,10 +49,10 @@ func TestGenerateParsesTextAndToolUse(t *testing.T) {
 	}`
 	srv := newFakeAnthropic(t, body)
 
-	p, err := anthropic.New(
-		anthropic.WithAPIKey("sk-test"),
-		anthropic.WithBaseURL(srv.URL),
-	)
+	p, err := anthropic.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "sk-test"},
+	})
 	require.NoError(t, err)
 
 	mr, err := p.Generate(context.Background(), core.ModelRequest{
@@ -70,6 +71,55 @@ func TestGenerateParsesTextAndToolUse(t *testing.T) {
 	assert.Equal(t, 18, mr.Usage.TotalTokens, "input+output")
 }
 
+func TestGenerateAuthHeaders(t *testing.T) {
+	cases := []struct {
+		name              string
+		auth              core.Auth
+		wantAuthorization string
+		wantAPIKey        string
+		wantBeta          string
+	}{
+		{
+			name:       "api key",
+			auth:       core.Auth{APIKey: "sk-test"},
+			wantAPIKey: "sk-test",
+		},
+		{
+			name:              "oauth bearer",
+			auth:              core.Auth{Bearer: "oauth-test"},
+			wantAuthorization: "Bearer oauth-test",
+			wantBeta:          anthropic.OAuthBetaValue,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotAuthorization, gotAPIKey, gotBeta string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotAuthorization = r.Header.Get("Authorization")
+				gotAPIKey = r.Header.Get("x-api-key")
+				gotBeta = r.Header.Get(anthropic.OAuthBetaHeader)
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"id":"m","type":"message","role":"assistant","model":"x","stop_reason":"end_turn","content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1,"output_tokens":1}}`))
+			}))
+			defer srv.Close()
+
+			p, err := anthropic.New(provider.ResolvedConfig{BaseURL: srv.URL, Auth: tc.auth})
+			require.NoError(t, err)
+			_, err = p.Generate(context.Background(), core.ModelRequest{
+				Messages: []core.Message{{
+					Role:  core.ROLE_USER,
+					Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"}},
+				}},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantAuthorization, gotAuthorization)
+			assert.Equal(t, tc.wantAPIKey, gotAPIKey)
+			assert.Equal(t, tc.wantBeta, gotBeta)
+		})
+	}
+}
+
 // TestGeneratePropagatesHTTPError verifies a non-2xx surfaces as an error
 // rather than a zero-value ModelResult.
 func TestGeneratePropagatesHTTPError(t *testing.T) {
@@ -78,7 +128,10 @@ func TestGeneratePropagatesHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := anthropic.New(anthropic.WithAPIKey("sk-bad"), anthropic.WithBaseURL(srv.URL))
+	p, err := anthropic.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "sk-bad"},
+	})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
@@ -99,11 +152,11 @@ func TestGenerateUsesConfiguredModel(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := anthropic.New(
-		anthropic.WithAPIKey("sk-x"),
-		anthropic.WithBaseURL(srv.URL),
-		anthropic.WithModel("claude-opus-4-8"),
-	)
+	p, err := anthropic.New(provider.ResolvedConfig{
+		Model:   "claude-opus-4-8",
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "sk-x"},
+	})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{
@@ -131,7 +184,10 @@ func TestToolSpecForwardedAsInputSchema(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := anthropic.New(anthropic.WithAPIKey("sk-test"), anthropic.WithBaseURL(srv.URL))
+	p, err := anthropic.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "sk-test"},
+	})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"}}}},

@@ -13,10 +13,9 @@
 // File layout:
 //
 //	provider.go    — entry point, Provider struct, interface methods
-//	options.go     — functional options for New
 //	dto.go         — wire-format types (RequestBody, ChatMessage, ...)
 //	validate.go    — RequestBody.Validate()
-//	auth_api.go    — ResolveAPIKey / ResolveBaseURL
+//	auth_api.go    — endpoint and environment names
 //	stream.go      — SSE parser → core.ModelChunk
 //	models.go      — DefaultCatalog
 package google
@@ -32,7 +31,10 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 )
+
+const defaultModel = "gemini-3-flash-preview"
 
 // Provider implements core.Provider against Google Generative AI's
 // OpenAI-compatible /chat/completions endpoint.
@@ -43,23 +45,18 @@ type Provider struct {
 	client  *http.Client
 }
 
-// New returns a Provider. baseURL defaults to
-// https://generativelanguage.googleapis.com/v1beta/openai; apiKey
-// defaults to GOOGLE_API_KEY env. model defaults to
-// "gemini-3-flash-preview".
-func New(opts ...Option) (*Provider, error) {
-	cfg := defaultConfig()
-	for _, o := range opts {
-		o(&cfg)
+// New returns a Provider from registry-resolved construction config.
+func New(cfg provider.ResolvedConfig) (*Provider, error) {
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = DefaultBaseURL
 	}
-	key := ResolveAPIKey(cfg.apiKey)
-	if key == "" {
-		return nil, fmt.Errorf("google: API key not set (use WithAPIKey or GOOGLE_API_KEY)")
+	if cfg.Model == "" {
+		cfg.Model = defaultModel
 	}
 	return &Provider{
-		baseURL: strings.TrimRight(ResolveBaseURL(cfg.baseURL), "/"),
-		auth:    core.Auth{APIKey: key},
-		model:   cfg.model,
+		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
+		auth:    cfg.Auth,
+		model:   cfg.Model,
 		client:  &http.Client{Timeout: 120 * time.Second},
 	}, nil
 }

@@ -19,11 +19,9 @@
 // File layout:
 //
 //   - provider.go    — entry point, Provider struct, interface methods
-//   - options.go     — functional options for New
 //   - dto.go         — wire-format types (RequestBody, Response, StreamChunk)
 //   - validate.go    — RequestBody.Validate()
-//   - auth_api.go    — ResolveAPIKey / ResolveBaseURL
-//   - auth_oauth.go  — OAuth PKCE flow + token refresh
+//   - auth_api.go    — endpoint, environment, and client identity constants
 //   - stream.go      — SSE parser → core.ModelChunk
 //   - models.go      — DefaultCatalog and IsLiteModel
 package codex

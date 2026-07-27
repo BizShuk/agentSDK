@@ -577,36 +577,45 @@ go run .
 final status: completed (turn 2)
 ```
 
-## 9. 換成真實 LLM Provider (M4)
+## 9. 換成真實 LLM Provider
 
-M4 提供三個 provider adapter，都實作 `core.ModelProvider` 介面：
+內建七個 adapter 都走同一條 `provider.Options → ResolvedConfig → Entry.New`
+pipeline。binary 以 `provider/all` link 全部 adapter，credential / endpoint 只在
+registry 解析一次：
 
 ```go
-// Anthropic
-import anthropicprovider "github.com/bizshuk/agentsdk/provider/anthropic"
+import (
+    "os"
 
-provider := anthropicprovider.New(
-    anthropicprovider.WithAPIKey(os.Getenv("ANTHROPIC_API_KEY")),
-    anthropicprovider.WithModel("claude-sonnet-4-6"),
+    "github.com/bizshuk/agentsdk/provider"
+    _ "github.com/bizshuk/agentsdk/provider/all"
 )
 
-// OpenAI-compatible
-import openaiprovider "github.com/bizshuk/agentsdk/provider/openaicompat"
+anthropicClient, err := provider.New("anthropic", provider.Options{
+    Model:  "claude-sonnet-5",
+    APIKey: os.Getenv("ANTHROPIC_API_KEY"),
+})
+if err != nil {
+    return err
+}
 
-provider := openaiprovider.New(
-    openaiprovider.WithAPIKey(os.Getenv("OPENAI_API_KEY")),
-    openaiprovider.WithBaseURL("https://api.openai.com/v1"),
-)
+ollamaClient, err := provider.New("ollama", provider.Options{
+    Model:   "llama3.2",
+    BaseURL: "http://localhost:11434/v1",
+})
+if err != nil {
+    return err
+}
 
-// Google GenAI
-import googleprovider "github.com/bizshuk/agentsdk/provider/google"
-
-provider := googleprovider.New(
-    googleprovider.WithAPIKey(os.Getenv("GOOGLE_API_KEY")),
-)
+googleClient, err := provider.New("google", provider.Options{
+    APIKey: os.Getenv("GOOGLE_API_KEY"),
+})
+if err != nil {
+    return err
+}
 ```
 
-切換 provider 只需改一行 — `Loop` 不關心 provider 實作細節。
+切換 provider 只改 registry name / options；runtime 只依賴最小的 `core.Provider`。
 
 ## 10. HITL (Human-in-the-Loop) 審批
 

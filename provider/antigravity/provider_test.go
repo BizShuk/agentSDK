@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/provider/antigravity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,14 +18,13 @@ import (
 // TestNewRequiresAPIKey — without an explicit key or env, New() fails fast.
 func TestNewRequiresAPIKey(t *testing.T) {
 	t.Setenv("ANTIGRAVITY_API_KEY", "")
-	_, err := antigravity.New()
+	_, err := provider.New("antigravity", provider.Options{})
 	assert.Error(t, err)
 }
 
-// TestNewWithExplicitAPIKey — explicit option wins.
+// TestNewWithExplicitAPIKey — resolved construction auth is accepted directly.
 func TestNewWithExplicitAPIKey(t *testing.T) {
-	t.Setenv("ANTIGRAVITY_API_KEY", "")
-	p, err := antigravity.New(antigravity.WithAPIKey("sk-direct"))
+	p, err := antigravity.New(provider.ResolvedConfig{Auth: core.Auth{APIKey: "sk-direct"}})
 	require.NoError(t, err)
 	assert.NotNil(t, p)
 }
@@ -34,12 +33,14 @@ func TestNewWithExplicitAPIKey(t *testing.T) {
 // the Anthropic-Messages response shape and verify Generate() round-trips.
 func TestGenerateAgainstFakeServer(t *testing.T) {
 	var (
-		gotAuth string
-		gotPath string
-		gotBody []byte
+		gotAuth   string
+		gotAPIKey string
+		gotPath   string
+		gotBody   []byte
 	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
+		gotAPIKey = r.Header.Get("x-api-key")
 		gotPath = r.URL.Path
 		gotBody, _ = io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
@@ -58,7 +59,7 @@ func TestGenerateAgainstFakeServer(t *testing.T) {
 	t.Setenv("ANTIGRAVITY_API_KEY", "sk-from-env")
 	t.Setenv("ANTIGRAVITY_BASE_URL", srv.URL)
 
-	p, err := antigravity.New()
+	p, err := provider.New("antigravity", provider.Options{})
 	require.NoError(t, err)
 
 	res, err := p.Generate(context.Background(), core.ModelRequest{
@@ -88,10 +89,11 @@ func TestGenerateAgainstFakeServer(t *testing.T) {
 
 	// Default auth is the API-key path.
 	assert.Empty(t, gotAuth, "API-key mode must not send an Authorization header")
+	assert.Equal(t, "sk-from-env", gotAPIKey)
 }
 
-// TestBearerHeaderFromOAuth — when constructed via NewWithOAuth the request
-// carries Authorization: Bearer <token>, not x-api-key.
+// TestBearerHeaderFromOAuth — resolved OAuth auth carries Authorization:
+// Bearer <token>, not x-api-key.
 func TestBearerHeaderFromOAuth(t *testing.T) {
 	var gotAuth, gotAPIKey string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -110,14 +112,10 @@ func TestBearerHeaderFromOAuth(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	t.Setenv("ANTIGRAVITY_API_KEY", "")
-	t.Setenv("ANTIGRAVITY_BASE_URL", srv.URL)
-
-	creds := antigravity.OAuthCredentials{
-		AccessToken: "ya29.fake-bearer-token",
-		ExpiresAt:   time.Now().Add(time.Hour),
-	}
-	p, err := antigravity.NewWithOAuth(creds)
+	p, err := antigravity.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{Bearer: "ya29.fake-bearer-token"},
+	})
 	require.NoError(t, err)
 
 	_, err = p.Generate(context.Background(), core.ModelRequest{
@@ -129,13 +127,6 @@ func TestBearerHeaderFromOAuth(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer ya29.fake-bearer-token", gotAuth)
 	assert.Empty(t, gotAPIKey, "OAuth mode must not send x-api-key")
-}
-
-// TestNewWithOAuthRejectsEmptyToken — defensive check.
-func TestNewWithOAuthRejectsEmptyToken(t *testing.T) {
-	t.Setenv("ANTIGRAVITY_API_KEY", "")
-	_, err := antigravity.NewWithOAuth(antigravity.OAuthCredentials{})
-	assert.Error(t, err)
 }
 
 // TestRequestBodyValidate — covers the four Validate() failure modes.
@@ -188,18 +179,4 @@ func TestRequestBodyValidate(t *testing.T) {
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}
-}
-
-// TestOAuthCredentialsIsExpired — confirms the 60s grace window + zero
-// ExpiresAt behavior.
-func TestOAuthCredentialsIsExpired(t *testing.T) {
-	past := antigravity.OAuthCredentials{ExpiresAt: time.Now().Add(-time.Hour)}
-	future := antigravity.OAuthCredentials{ExpiresAt: time.Now().Add(time.Hour)}
-	withinGrace := antigravity.OAuthCredentials{ExpiresAt: time.Now().Add(30 * time.Second)}
-	zero := antigravity.OAuthCredentials{}
-
-	assert.True(t, past.IsExpired(), "past expiry must report expired")
-	assert.False(t, future.IsExpired(), "future expiry must report fresh")
-	assert.True(t, withinGrace.IsExpired(), "within 60s grace window must report expired")
-	assert.False(t, zero.IsExpired(), "zero ExpiresAt must NOT report expired")
 }

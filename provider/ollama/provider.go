@@ -6,10 +6,9 @@
 // File layout:
 //
 //	provider.go   — entry point, Provider struct, interface methods
-//	options.go    — functional options for New
 //	dto.go        — wire-format types (RequestBody, ChatMessage, ...)
 //	validate.go   — RequestBody.Validate()
-//	auth_api.go   — ResolveAPIKey / ResolveBaseURL
+//	auth_api.go   — endpoint and environment names
 //	stream.go     — SSE parser → core.ModelChunk
 //	models.go     — DefaultCatalog
 package ollama
@@ -25,7 +24,10 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 )
+
+const defaultModel = "llama3.2"
 
 // Provider implements core.Provider against any OpenAI-compatible
 // /chat/completions endpoint. Stream is implemented in-process over
@@ -38,18 +40,18 @@ type Provider struct {
 	client  *http.Client
 }
 
-// New constructs a Provider. baseURL defaults to http://localhost:11434/v1
-// (local Ollama); apiKey is optional — Ollama is keyless, while LM
-// Studio / vLLM / OpenAI all accept a Bearer.
-func New(opts ...Option) (*Provider, error) {
-	cfg := defaultConfig()
-	for _, o := range opts {
-		o(&cfg)
+// New constructs a Provider from registry-resolved construction config.
+func New(cfg provider.ResolvedConfig) (*Provider, error) {
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = DefaultBaseURL
+	}
+	if cfg.Model == "" {
+		cfg.Model = defaultModel
 	}
 	return &Provider{
-		baseURL: strings.TrimRight(ResolveBaseURL(cfg.baseURL), "/"),
-		auth:    core.Auth{APIKey: ResolveAPIKey(cfg.apiKey)},
-		model:   cfg.model,
+		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
+		auth:    cfg.Auth,
+		model:   cfg.Model,
 		client:  &http.Client{Timeout: 120 * time.Second},
 	}, nil
 }

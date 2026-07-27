@@ -20,11 +20,14 @@ type Adapter interface {
 // priority list so callers can demand a strict credential class —
 // `Options.CredentialKind = "oauth"` consults only OAuthEnv; "api_key"
 // consults only APIKeyEnv. The empty / "auto" mode preserves the old
-// precedence: OAuthEnv first, then APIKeyEnv.
+// precedence: OAuthEnv first, then APIKeyEnv. CredentialRequired keeps
+// fail-fast validation at the registry boundary without forcing custom
+// credentialless entries to opt out.
 type Metadata struct {
-	Label      string
-	Note       string
-	OAuthEnv   []string // OAuth token env list (highest precedence in auto mode)
-	APIKeyEnv  []string // API key env list (lowest precedence in auto mode)
-	BaseURLEnv string
+	Label              string
+	Note               string
+	OAuthEnv           []string // OAuth token env list (highest precedence in auto mode)
+	APIKeyEnv          []string // API key env list (lowest precedence in auto mode)
+	BaseURLEnv         string
+	CredentialRequired bool
 }

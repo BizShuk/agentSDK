@@ -1,6 +1,7 @@
 package provider_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -73,14 +74,14 @@ func TestEveryEntryIsSelfDescribing(t *testing.T) {
 			assert.NotEmpty(t, e.Metadata.Label, "a wizard menu renders Label")
 			// Each registered entry must document at least one credential
 			// path: an OAuthEnv (looked up first in auto mode), an
-			// APIKeyEnv, or a constructor-based path (e.g. codex's OAuth
-			// is provided via NewWithOAuth, not an env var). Entries that
+			// APIKeyEnv, or a decorator-based path (e.g. codex's OAuth
+			// is provided by provider/credential, not an env var). Entries that
 			// declare NONE of the above have no way to bootstrap a
 			// credential through the registry at all.
 			hasEnvPath := len(e.Metadata.OAuthEnv) > 0 || len(e.Metadata.APIKeyEnv) > 0
-			hasConstructorPath := strings.Contains(strings.ToLower(e.Metadata.Note), "constructor")
-			assert.Truef(t, hasEnvPath || hasConstructorPath,
-				"entry %q has no credential path (OAuthEnv=%v APIKeyEnv=%v Note=%q); declare an env OR document a constructor path",
+			hasDecoratorPath := strings.Contains(strings.ToLower(e.Metadata.Note), "decorator")
+			assert.Truef(t, hasEnvPath || hasDecoratorPath,
+				"entry %q has no credential path (OAuthEnv=%v APIKeyEnv=%v Note=%q); declare an env OR document a decorator path",
 				e.Name, e.Metadata.OAuthEnv, e.Metadata.APIKeyEnv, e.Metadata.Note)
 			assert.NotNil(t, e.New)
 			assert.NotNil(t, e.Catalog, "every entry must expose its bundled catalog")
@@ -97,6 +98,7 @@ func TestCredentialResolutionPrecedence(t *testing.T) {
 		"ANTHROPIC_API_KEY":     "from-api-key",
 		"MINIMAX_API_KEY":       "mini-key",
 		"MINIMAX_BASE_URL":      "https://example.test/v1",
+		"OPENAI_API_KEY":        "openai-key",
 	}
 	lookup := func(k string) string { return env[k] }
 
@@ -104,30 +106,35 @@ func TestCredentialResolutionPrecedence(t *testing.T) {
 		name        string
 		provider    string
 		opts        provider.Options
-		wantAPIKey  string
+		wantAuth    core.Auth
 		wantBaseURL string
 		wantErr     string
 	}{
 		{
 			name: "oauth outranks api key", provider: "anthropic",
-			opts:       provider.Options{LookupEnv: lookup},
-			wantAPIKey: "from-oauth",
+			opts:     provider.Options{LookupEnv: lookup},
+			wantAuth: core.Auth{Bearer: "from-oauth"},
 		},
 		{
 			name: "explicit key outranks env", provider: "anthropic",
-			opts:       provider.Options{APIKey: "explicit", LookupEnv: lookup},
-			wantAPIKey: "explicit",
+			opts:     provider.Options{APIKey: "explicit", LookupEnv: lookup},
+			wantAuth: core.Auth{APIKey: "explicit"},
 		},
 		{
 			name: "base url from env", provider: "minimax",
 			opts:        provider.Options{LookupEnv: lookup},
-			wantAPIKey:  "mini-key",
+			wantAuth:    core.Auth{APIKey: "mini-key"},
 			wantBaseURL: "https://example.test/v1",
 		},
 		{
 			name: "APIKeyEnv override redirects the lookup", provider: "minimax",
-			opts:       provider.Options{APIKeyEnv: "ANTHROPIC_API_KEY", LookupEnv: lookup},
-			wantAPIKey: "from-api-key",
+			opts:     provider.Options{APIKeyEnv: "ANTHROPIC_API_KEY", LookupEnv: lookup},
+			wantAuth: core.Auth{APIKey: "from-api-key"},
+		},
+		{
+			name: "codex API key env resolves in registry", provider: "codex",
+			opts:     provider.Options{LookupEnv: lookup},
+			wantAuth: core.Auth{APIKey: "openai-key"},
 		},
 		{
 			name: "strict oauth picks OAuth env over API key", provider: "anthropic",
@@ -135,7 +142,7 @@ func TestCredentialResolutionPrecedence(t *testing.T) {
 				CredentialKind: core.CREDENTIAL_KIND_OAUTH,
 				LookupEnv:      lookup,
 			},
-			wantAPIKey: "from-oauth",
+			wantAuth: core.Auth{Bearer: "from-oauth"},
 		},
 		{
 			name: "strict api_key ignores OAuth env", provider: "anthropic",
@@ -143,7 +150,7 @@ func TestCredentialResolutionPrecedence(t *testing.T) {
 				CredentialKind: core.CREDENTIAL_KIND_APIKEY,
 				LookupEnv:      lookup,
 			},
-			wantAPIKey: "from-api-key",
+			wantAuth: core.Auth{APIKey: "from-api-key"},
 		},
 		{
 			name: "strict api_key rejects when no API key env set", provider: "anthropic",
@@ -162,12 +169,12 @@ func TestCredentialResolutionPrecedence(t *testing.T) {
 			wantErr: "not OAuth-capable",
 		},
 		{
-			name: "strict api_key rejects provider without API key env", provider: "codex",
+			name: "strict api_key requires configured env", provider: "codex",
 			opts: provider.Options{
 				CredentialKind: core.CREDENTIAL_KIND_APIKEY,
 				LookupEnv:      func(string) string { return "" },
 			},
-			wantErr: "OAuth-only",
+			wantErr: "requires api_key credential",
 		},
 	}
 
@@ -186,7 +193,7 @@ func TestCredentialResolutionPrecedence(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tc.wantAPIKey, got.APIKey)
+			assert.Equal(t, tc.wantAuth, got.Auth)
 			if tc.wantBaseURL != "" {
 				assert.Equal(t, tc.wantBaseURL, got.BaseURL)
 			}
@@ -214,11 +221,30 @@ func TestNewBuildsAProvider(t *testing.T) {
 	assert.NotEmpty(t, entry.Catalog(), "the registry entry owns the static catalog")
 }
 
+func TestDecoratorAllowsDeferredCredentialConstruction(t *testing.T) {
+	for _, entry := range provider.Entries() {
+		if !entry.Metadata.CredentialRequired {
+			continue
+		}
+		t.Run(entry.Name, func(t *testing.T) {
+			p, err := provider.New(entry.Name, provider.Options{
+				CredentialKind: core.CREDENTIAL_KIND_OAUTH,
+				LookupEnv:      func(string) string { return "" },
+				Decorator: func(context.Context) (core.Auth, error) {
+					return core.Auth{Bearer: "resolved-per-request"}, nil
+				},
+			})
+			require.NoError(t, err)
+			assert.NotNil(t, p)
+		})
+	}
+}
+
 func TestRegisterPanicsOnDuplicate(t *testing.T) {
 	// A second registration with the same Name must panic at init time;
 	// we exercise it directly to verify the invariant.
 	assert.Panics(t, func() {
-		provider.Register(provider.Entry{Name: "minimax", New: func(provider.Options) (provider.Adapter, error) {
+		provider.Register(provider.Entry{Name: "minimax", New: func(provider.ResolvedConfig) (provider.Adapter, error) {
 			return nil, nil
 		}})
 	}, "Register must reject duplicate names")
@@ -234,7 +260,7 @@ func TestRegisterRejectsIncompleteEntry(t *testing.T) {
 		entry provider.Entry
 	}{
 		{"missing New", provider.Entry{Name: "incomplete-only-name"}},
-		{"missing Name", provider.Entry{New: func(provider.Options) (provider.Adapter, error) {
+		{"missing Name", provider.Entry{New: func(provider.ResolvedConfig) (provider.Adapter, error) {
 			return nil, nil
 		}}},
 	}

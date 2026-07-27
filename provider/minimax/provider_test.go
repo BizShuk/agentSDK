@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/provider/minimax"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,41 +50,22 @@ func newFakeMinimax(t *testing.T) (*httptest.Server, *http.Request, *string) {
 
 func TestNewRequiresAPIKey(t *testing.T) {
 	t.Setenv("MINIMAX_API_KEY", "")
-	_, err := minimax.New()
+	_, err := provider.New("minimax", provider.Options{})
 	assert.Error(t, err)
 }
 
-func TestResolveBaseURLDefault(t *testing.T) {
-	assert.Equal(t, "https://api.minimax.io/anthropic", minimax.ResolveBaseURL(""))
-}
-
-func TestResolveBaseURLExplicit(t *testing.T) {
-	assert.Equal(t, "https://example.com/proxy", minimax.ResolveBaseURL("https://example.com/proxy"))
-}
-
-func TestResolveBaseURLEnvOverride(t *testing.T) {
-	t.Setenv("MINIMAX_BASE_URL", "https://env.example.com/anthropic")
-	assert.Equal(t, "https://env.example.com/anthropic", minimax.ResolveBaseURL(""))
-}
-
-func TestResolveAPIKeyExplicitWins(t *testing.T) {
-	t.Setenv("MINIMAX_API_KEY", "from-env")
-	assert.Equal(t, "from-explicit", minimax.ResolveAPIKey("from-explicit"))
-}
-
-func TestResolveAPIKeyEnvFallback(t *testing.T) {
-	t.Setenv("MINIMAX_API_KEY", "from-env")
-	assert.Equal(t, "from-env", minimax.ResolveAPIKey(""))
+func minimaxConfig(baseURL, apiKey string) provider.ResolvedConfig {
+	return provider.ResolvedConfig{
+		BaseURL: baseURL,
+		Auth:    core.Auth{APIKey: apiKey},
+	}
 }
 
 func TestBearerHeader(t *testing.T) {
 	// minimax uses x-api-key, NOT Authorization: Bearer — that's the
 	// Anthropic-Messages convention.
 	srv, seen, _ := newFakeMinimax(t)
-	p, err := minimax.New(
-		minimax.WithAPIKey("sk-test-key"),
-		minimax.WithBaseURL(srv.URL),
-	)
+	p, err := minimax.New(minimaxConfig(srv.URL, "sk-test-key"))
 	require.NoError(t, err)
 
 	_, err = p.Generate(context.Background(), core.ModelRequest{
@@ -97,10 +79,7 @@ func TestBearerHeader(t *testing.T) {
 
 func TestGenerateAgainstFakeServer(t *testing.T) {
 	srv, _, _ := newFakeMinimax(t)
-	p, err := minimax.New(
-		minimax.WithAPIKey("sk-test"),
-		minimax.WithBaseURL(srv.URL),
-	)
+	p, err := minimax.New(minimaxConfig(srv.URL, "sk-test"))
 	require.NoError(t, err)
 
 	mr, err := p.Generate(context.Background(), core.ModelRequest{
@@ -156,10 +135,7 @@ func TestSystemPromptLifted(t *testing.T) {
 	// System messages must end up in the top-level `system` field, not
 	// inside the messages array.
 	srv, _, seenBody := newFakeMinimax(t)
-	p, err := minimax.New(
-		minimax.WithAPIKey("sk-test"),
-		minimax.WithBaseURL(srv.URL),
-	)
+	p, err := minimax.New(minimaxConfig(srv.URL, "sk-test"))
 	require.NoError(t, err)
 
 	_, err = p.Generate(context.Background(), core.ModelRequest{
@@ -186,10 +162,7 @@ func TestMaxTokensDefault(t *testing.T) {
 	// When req.MaxTokens is 0, we default to 4096 so the API never rejects
 	// us with "max_tokens must be specified".
 	srv, _, seenBody := newFakeMinimax(t)
-	p, err := minimax.New(
-		minimax.WithAPIKey("sk-test"),
-		minimax.WithBaseURL(srv.URL),
-	)
+	p, err := minimax.New(minimaxConfig(srv.URL, "sk-test"))
 	require.NoError(t, err)
 
 	_, err = p.Generate(context.Background(), core.ModelRequest{
@@ -206,10 +179,7 @@ func TestMaxTokensDefault(t *testing.T) {
 func TestMaxTokensExplicit(t *testing.T) {
 	// When req.MaxTokens is set, we forward it verbatim.
 	srv, _, seenBody := newFakeMinimax(t)
-	p, err := minimax.New(
-		minimax.WithAPIKey("sk-test"),
-		minimax.WithBaseURL(srv.URL),
-	)
+	p, err := minimax.New(minimaxConfig(srv.URL, "sk-test"))
 	require.NoError(t, err)
 
 	_, err = p.Generate(context.Background(), core.ModelRequest{
@@ -236,10 +206,7 @@ func TestStreamAgainstFakeServer(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p, err := minimax.New(
-		minimax.WithAPIKey("sk-test"),
-		minimax.WithBaseURL(srv.URL),
-	)
+	p, err := minimax.New(minimaxConfig(srv.URL, "sk-test"))
 	require.NoError(t, err)
 
 	ch, err := p.Stream(context.Background(), core.ModelRequest{

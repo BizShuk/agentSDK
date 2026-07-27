@@ -435,6 +435,25 @@ Rollback：
 - `go list -deps ./agent` 與 `go list -deps ./provider` 仍不含
   `github.com/bizshuk/auth`；只有 `provider/credential` 可依賴它。
 
+實作結果（2026-07-27）：
+
+- `provider.Options.Resolve` 現回傳 `ResolvedConfig{Model, BaseURL, Auth}`；OAuth env
+  明確進 `Auth.Bearer`，API key env 進 `Auth.APIKey`，`Decorator` 留在 registry
+  factory 外層並可在 strict OAuth 模式下延後到每個 request 解析。
+- 七個 adapter 的 `New` 全部直接接 `ResolvedConfig`；七份 private config /
+  functional options、七份 adapter env resolver 與七個 register converter 已移除。
+  六個遠端 adapter 以 `Metadata.CredentialRequired` 在 registry boundary 維持缺
+  credential fail-fast；keyless Ollama 與既有 custom entries 不需 opt-out。
+- 四組零 production caller 的 `OAuthCredentials/NewWithOAuth` 與舊
+  `credential.RefreshingProvider` 已移除；stored OAuth 只走
+  `credential.Source.Decorator()`。Codex account ID 保留在 `Auth.Headers`，
+  Anthropic 在 `Auth.Bearer` 存在時自動送 `anthropic-beta: oauth-2025-04-20`。
+- `BaseURL` 已從 `core.Auth` 移除並以 structural contract test 鎖定；
+  `credential.toAuth` 不再把 stored endpoint 投影成 request credential。
+- 七個 adapter 的 API-key/OAuth header tests、root 與 8 個 sample module 的
+  build/test/vet、`staticcheck 2026.1`、changed production files 的 `gopls check`
+  與 auth dependency boundary checks 全部通過。
+
 Rollback：
 
 - 先讓舊 constructors delegate 到 `ResolvedConfig`，完成 caller migration 後再刪；

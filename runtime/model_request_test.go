@@ -32,7 +32,7 @@ func TestRunInstructionForwardsCanonicalModelRequest(t *testing.T) {
 		StopReasons: []string{"stop"},
 		Auth: core.Auth{
 			Bearer:  "token",
-			BaseURL: "https://example.invalid",
+			Headers: map[string]string{"x-request-auth": "forwarded"},
 		},
 	}
 

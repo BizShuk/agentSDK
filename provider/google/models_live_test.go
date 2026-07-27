@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -51,7 +52,10 @@ func TestListModels(t *testing.T) {
 
 	// Point the OpenAI-compat base at the fake server's /openai path so we
 	// also exercise nativeBaseURL's suffix trimming.
-	prov, err := New(WithAPIKey("k"), WithBaseURL(srv.URL+"/openai"))
+	prov, err := New(provider.ResolvedConfig{
+		BaseURL: srv.URL + "/openai",
+		Auth:    core.Auth{APIKey: "k"},
+	})
 	require.NoError(t, err)
 
 	specs, err := prov.ListModels(context.Background())
@@ -87,7 +91,10 @@ func TestListModelsEmptyIsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	prov, err := New(WithAPIKey("k"), WithBaseURL(srv.URL))
+	prov, err := New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "k"},
+	})
 	require.NoError(t, err)
 
 	_, err = prov.ListModels(context.Background())

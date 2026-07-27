@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/provider/ollama"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,7 +48,7 @@ func newFakeOllama(t *testing.T) (*httptest.Server, *string) {
 
 func TestProviderRoundTripAgainstFakeOllama(t *testing.T) {
 	srv, gotModel := newFakeOllama(t)
-	p, err := ollama.New(ollama.WithBaseURL(srv.URL))
+	p, err := ollama.New(provider.ResolvedConfig{BaseURL: srv.URL})
 	require.NoError(t, err)
 
 	req := core.ModelRequest{Messages: []core.Message{
@@ -71,13 +71,16 @@ func TestProviderIncludesBearerHeader(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := ollama.New(ollama.WithBaseURL(srv.URL), ollama.WithAPIKey("sk-test"))
+	p, err := ollama.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "sk-test"},
+	})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
 	})
 	require.NoError(t, err)
-	assert.True(t, strings.Contains(sawAuth, "Bearer sk-test"))
+	assert.Equal(t, "Bearer sk-test", sawAuth)
 }
 
 func TestProviderPropagatesError(t *testing.T) {
@@ -86,7 +89,7 @@ func TestProviderPropagatesError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := ollama.New(ollama.WithBaseURL(srv.URL))
+	p, err := ollama.New(provider.ResolvedConfig{BaseURL: srv.URL})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
@@ -104,7 +107,7 @@ func TestProviderSkipsBearerForLocalHost(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := ollama.New(ollama.WithBaseURL(srv.URL), ollama.WithAPIKey(""))
+	p, err := ollama.New(provider.ResolvedConfig{BaseURL: srv.URL})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
@@ -140,38 +143,6 @@ func TestRequestBodyValidate(t *testing.T) {
 		}.Validate()
 		assert.NoError(t, err, "role %q should validate", role)
 	}
-}
-
-func TestAuthResolvers(t *testing.T) {
-	t.Run("ResolveAPIKey prefers explicit over env", func(t *testing.T) {
-		t.Setenv("OPENAI_API_KEY", "env-key")
-		assert.Equal(t, "explicit-key", ollama.ResolveAPIKey("explicit-key"))
-	})
-
-	t.Run("ResolveAPIKey falls back to env", func(t *testing.T) {
-		t.Setenv("OPENAI_API_KEY", "env-key")
-		assert.Equal(t, "env-key", ollama.ResolveAPIKey(""))
-	})
-
-	t.Run("ResolveAPIKey empty when both are empty", func(t *testing.T) {
-		t.Setenv("OPENAI_API_KEY", "")
-		assert.Equal(t, "", ollama.ResolveAPIKey(""))
-	})
-
-	t.Run("ResolveBaseURL prefers explicit over env", func(t *testing.T) {
-		t.Setenv("OPENAI_BASE_URL", "http://env-host/v1")
-		assert.Equal(t, "http://explicit/v1", ollama.ResolveBaseURL("http://explicit/v1"))
-	})
-
-	t.Run("ResolveBaseURL falls back to env", func(t *testing.T) {
-		t.Setenv("OPENAI_BASE_URL", "http://env-host/v1")
-		assert.Equal(t, "http://env-host/v1", ollama.ResolveBaseURL(""))
-	})
-
-	t.Run("ResolveBaseURL defaults to local Ollama", func(t *testing.T) {
-		t.Setenv("OPENAI_BASE_URL", "")
-		assert.Equal(t, "http://localhost:11434/v1", ollama.ResolveBaseURL(""))
-	})
 }
 
 func TestProviderModelsCatalog(t *testing.T) {

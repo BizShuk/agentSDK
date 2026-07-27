@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 )
+
+const defaultModel = "gpt-5.5"
 
 // Provider implements core.Provider against the OpenAI Codex
 // endpoint (chatgpt.com/backend-api/codex/responses). It is the
-// sole entry point for clients — call New for the API-key path or
-// NewWithOAuth for the ChatGPT-Plus/Pro OAuth path.
+// sole entry point for clients.
 type Provider struct {
 	baseURL string
 	// auth carries the credential AND the Codex account id. The account
@@ -28,54 +30,20 @@ type Provider struct {
 	client *http.Client
 }
 
-// New returns a Provider using an API key (or OPENAI_API_KEY env
-// fallback). For ChatGPT Plus/Pro OAuth use NewWithOAuth instead.
-//
-// model defaults to "gpt-5".
-func New(opts ...Option) (*Provider, error) {
-	cfg := defaultConfig()
-	for _, o := range opts {
-		o(&cfg)
+// New returns a Provider from registry-resolved construction config.
+func New(cfg provider.ResolvedConfig) (*Provider, error) {
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = DefaultBaseURL
 	}
-	key := ResolveAPIKey(cfg.apiKey)
-	if key == "" {
-		return nil, fmt.Errorf("codex: API key not set (use WithAPIKey or OPENAI_API_KEY)")
+	if cfg.Model == "" {
+		cfg.Model = defaultModel
 	}
-	return newProvider(cfg.baseURL, authFor(key, "", cfg.accountID), cfg.model), nil
-}
-
-// NewWithOAuth constructs a Provider from an OAuth credential
-// produced by ExchangeCode / RefreshToken. The AccessToken is sent
-// as Authorization: Bearer; AccountID becomes ChatGPT-Account-ID.
-func NewWithOAuth(creds OAuthCredentials, opts ...Option) (*Provider, error) {
-	cfg := defaultConfig()
-	for _, o := range opts {
-		o(&cfg)
-	}
-	if creds.AccessToken == "" {
-		return nil, fmt.Errorf("codex: OAuth access token is empty")
-	}
-	return newProvider(cfg.baseURL, authFor("", creds.AccessToken, creds.AccountID), cfg.model), nil
-}
-
-func newProvider(baseURL string, auth core.Auth, model string) *Provider {
 	return &Provider{
-		baseURL: strings.TrimRight(ResolveBaseURL(baseURL), "/"),
-		auth:    auth,
-		model:   model,
+		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
+		auth:    cfg.Auth,
+		model:   cfg.Model,
 		client:  &http.Client{Timeout: 120 * time.Second},
-	}
-}
-
-// authFor packs the two credential classes and the account id into one
-// core.Auth. An empty account id contributes no header rather than an
-// empty one, because Codex rejects a blank ChatGPT-Account-ID.
-func authFor(apiKey, bearer, accountID string) core.Auth {
-	a := core.Auth{APIKey: apiKey, Bearer: bearer}
-	if accountID != "" {
-		a.Headers = map[string]string{"ChatGPT-Account-ID": accountID}
-	}
-	return a
+	}, nil
 }
 
 // Generate implements core.Provider. It POSTs the Codex-shaped

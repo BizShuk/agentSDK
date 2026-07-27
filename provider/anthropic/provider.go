@@ -6,12 +6,9 @@
 // File layout:
 //
 //   - provider.go    — entry point, Provider struct, interface methods
-//   - options.go     — functional options for New
 //   - dto.go         — wire-format types (RequestBody, ContentBlock, ...)
 //   - validate.go    — RequestBody.Validate()
 //   - translate.go   — core.Message ⇄ Anthropic wire conversion
-//   - auth_api.go    — ResolveAPIKey / IsOAuth
-//   - auth_oauth.go  — OAuth device flow + PKCE helpers
 //   - stream.go      — SSE parser → core.ModelChunk
 //   - models.go      — DefaultCatalog
 package anthropic
@@ -22,11 +19,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 )
+
+const defaultModel = "claude-3-5-sonnet-latest"
 
 // Provider implements core.Provider against the Anthropic API.
 type Provider struct {
@@ -38,52 +39,23 @@ type Provider struct {
 	apiVer   string
 }
 
-// New returns a Provider using an API key (or ANTHROPIC_API_KEY env
-// fallback). model defaults to claude-3-5-sonnet-latest.
-func New(opts ...Option) (*Provider, error) {
-	cfg := defaultConfig()
-	for _, o := range opts {
-		o(&cfg)
+// New returns a Provider from registry-resolved construction config.
+func New(cfg provider.ResolvedConfig) (*Provider, error) {
+	if cfg.Model == "" {
+		cfg.Model = defaultModel
 	}
-	key := ResolveAPIKey(cfg.apiKey)
-	if key == "" {
-		return nil, fmt.Errorf("anthropic: API key not set (use WithAPIKey, WithAuth, or ANTHROPIC_API_KEY)")
-	}
-	clientOpts := []option.RequestOption{option.WithAPIKey(key)}
-	if cfg.baseURL != "" {
-		clientOpts = append(clientOpts, option.WithBaseURL(cfg.baseURL))
+	cfg.BaseURL = strings.TrimRight(cfg.BaseURL, "/")
+	clientOpts := authRequestOptions(cfg.Auth)
+	if cfg.BaseURL != "" {
+		clientOpts = append(clientOpts, option.WithBaseURL(cfg.BaseURL))
 	}
 	client := anthropic.NewClient(clientOpts...)
 	return &Provider{
 		client:   &client,
-		model:    anthropic.Model(cfg.model),
-		auth:     core.Auth{APIKey: key, BaseURL: cfg.baseURL},
+		model:    anthropic.Model(cfg.Model),
+		auth:     cfg.Auth,
 		httpDoer: http.DefaultClient,
-		endpoint: resolveEndpoint(cfg.baseURL),
-		apiVer:   "2023-06-01",
-	}, nil
-}
-
-// NewWithOAuth constructs a provider from an OAuth credential.
-func NewWithOAuth(token OAuthCredentials, opts ...Option) (*Provider, error) {
-	cfg := defaultConfig()
-	for _, o := range opts {
-		o(&cfg)
-	}
-	if token.AccessToken == "" {
-		return nil, fmt.Errorf("anthropic: OAuth access token is empty")
-	}
-	clientOpts := []option.RequestOption{option.WithAuthToken(token.AccessToken)}
-	if cfg.baseURL != "" {
-		clientOpts = append(clientOpts, option.WithBaseURL(cfg.baseURL))
-	}
-	client := anthropic.NewClient(clientOpts...)
-	return &Provider{
-		client:   &client,
-		model:    anthropic.Model(cfg.model),
-		auth:     core.Auth{Bearer: token.AccessToken, BaseURL: cfg.baseURL, Headers: map[string]string{OAuthBetaHeader: "true"}},
-		httpDoer: http.DefaultClient,
-		endpoint: resolveEndpoint(cfg.baseURL),
+		endpoint: resolveEndpoint(cfg.BaseURL),
 		apiVer:   "2023-06-01",
 	}, nil
 }
@@ -168,22 +140,24 @@ func (p *Provider) buildHTTPRequest(ctx context.Context, body RequestBody, strea
 	return req, nil
 }
 
-// authOptions translates the per-call Auth override into SDK options.
-// Empty override → no options; the SDK uses the credential bound at
-// construction time.
+// authOptions translates the construction credential plus per-call override
+// into SDK request options.
 func (p *Provider) authOptions(req core.ModelRequest) []option.RequestOption {
-	a := req.Auth
-	if a.APIKey == "" && a.Bearer == "" {
-		return nil
-	}
+	return authRequestOptions(p.auth.Merge(req.Auth))
+}
+
+func authRequestOptions(a core.Auth) []option.RequestOption {
 	var opts []option.RequestOption
 	if a.Bearer != "" {
 		opts = append(opts, option.WithAuthToken(a.Bearer))
+		opts = append(opts, option.WithHeader(OAuthBetaHeader, OAuthBetaValue))
 	} else {
 		opts = append(opts, option.WithAPIKey(a.APIKey))
 	}
-	if a.BaseURL != "" {
-		opts = append(opts, option.WithBaseURL(a.BaseURL))
+	for key, value := range a.Headers {
+		if value != "" {
+			opts = append(opts, option.WithHeader(key, value))
+		}
 	}
 	return opts
 }
@@ -199,6 +173,7 @@ func (p *Provider) applyAuthHeaders(req *http.Request, override core.Auth) {
 	}
 	if src.Bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+src.Bearer)
+		req.Header.Set(OAuthBetaHeader, OAuthBetaValue)
 	} else if src.APIKey != "" {
 		req.Header.Set("x-api-key", src.APIKey)
 	}

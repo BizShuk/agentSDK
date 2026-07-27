@@ -9,10 +9,9 @@
 // File layout:
 //
 //   - provider.go    — entry point, Provider struct, interface methods
-//   - options.go     — functional options for New
 //   - dto.go         — wire-format types (RequestBody, ContentBlock, ...)
 //   - validate.go    — RequestBody.Validate()
-//   - auth_api.go    — ResolveAPIKey / ResolveBaseURL
+//   - auth_api.go    — endpoint and environment names
 //   - stream.go      — SSE parser → core.ModelChunk
 //   - models.go      — DefaultCatalog
 package minimax
@@ -28,7 +27,10 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 )
+
+const defaultModel = "MiniMax-M3"
 
 // Provider implements core.Provider against the minimax Anthropic-compat
 // API. We avoid anthropic-sdk-go here because minimax is a thin compat
@@ -40,22 +42,18 @@ type Provider struct {
 	client  *http.Client
 }
 
-// New returns a Provider. apiKey defaults to MINIMAX_API_KEY env.
-// baseURL defaults to https://api.minimax.io/anthropic.
-// model defaults to "MiniMax-M3".
-func New(opts ...Option) (*Provider, error) {
-	cfg := defaultConfig()
-	for _, o := range opts {
-		o(&cfg)
+// New returns a Provider from registry-resolved construction config.
+func New(cfg provider.ResolvedConfig) (*Provider, error) {
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = DefaultBaseURL
 	}
-	key := ResolveAPIKey(cfg.apiKey)
-	if key == "" {
-		return nil, fmt.Errorf("minimax: API key not set (use WithAPIKey or MINIMAX_API_KEY)")
+	if cfg.Model == "" {
+		cfg.Model = defaultModel
 	}
 	return &Provider{
-		baseURL: strings.TrimRight(ResolveBaseURL(cfg.baseURL), "/"),
-		auth:    core.Auth{APIKey: key},
-		model:   cfg.model,
+		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
+		auth:    cfg.Auth,
+		model:   cfg.Model,
 		client:  &http.Client{Timeout: 120 * time.Second},
 	}, nil
 }

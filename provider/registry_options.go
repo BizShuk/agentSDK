@@ -7,10 +7,9 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 )
 
-// Options are the per-construction overrides. Every field is optional:
-// an empty field means "let the adapter apply its own environment
-// fallback", which is why a zero Options still builds a working provider
-// on a machine with the credentials exported.
+// Options are unresolved live inputs owned by the provider registry. Every
+// field is optional; Resolve combines them with Entry.Metadata before an
+// adapter sees the construction request.
 type Options struct {
 	Model   string
 	APIKey  string
@@ -45,6 +44,15 @@ type Options struct {
 	CredentialKind string
 }
 
+// ResolvedConfig is the complete construction input handed to an adapter.
+// Unlike Options, it contains no environment lookup or request decorator:
+// both concerns are consumed by the registry before the factory is called.
+type ResolvedConfig struct {
+	Model   string
+	BaseURL string
+	Auth    core.Auth
+}
+
 func (o Options) lookup(key string) string {
 	if key == "" {
 		return ""
@@ -70,51 +78,62 @@ func (o Options) firstEnv(keys []string, override string) string {
 	return ""
 }
 
-// Resolve fills empty credential fields from the environment, honouring
-// the strict modes in Options.CredentialKind. The returned Options is
-// always usable; the error is non-nil only when a strict mode rejects
-// the resolved state.
+// Resolve turns unresolved options into the single construction config handed
+// to an adapter. OAuth environment values become Auth.Bearer; API-key
+// environment values become Auth.APIKey.
 //
 // Precedence (any mode):
 //  1. An explicit Options.APIKey wins outright, before any env lookup.
-//  2. Otherwise the chosen env class supplies the key.
-//  3. Options.BaseURL still resolves from Metadata.BaseURLEnv, independent of CredentialKind.
+//  2. A Decorator defers credential resolution to each outbound request.
+//  3. Otherwise the chosen env class supplies the construction credential.
+//  4. Options.BaseURL still resolves from Metadata.BaseURLEnv, independent of CredentialKind.
 //
 // Exported because "which credential would this actually use" is a
 // question callers legitimately ask before building anything — a preflight
 // check, or a wizard showing which env var it found.
-func (o Options) Resolve(m Metadata) (Options, error) {
-	if o.APIKey == "" {
+func (o Options) Resolve(m Metadata) (ResolvedConfig, error) {
+	resolved := ResolvedConfig{
+		Model:   o.Model,
+		BaseURL: o.BaseURL,
+	}
+	if o.APIKey != "" {
+		resolved.Auth.APIKey = o.APIKey
+	} else if o.Decorator == nil {
 		switch o.CredentialKind {
 		case core.CREDENTIAL_KIND_OAUTH:
 			if len(m.OAuthEnv) == 0 {
-				return o, fmt.Errorf("provider %q: not OAuth-capable (no OAuth env registered)", m.Label)
+				return resolved, fmt.Errorf("provider %q: not OAuth-capable (no OAuth env registered)", m.Label)
 			}
 			if v := o.firstEnv(m.OAuthEnv, o.APIKeyEnv); v != "" {
-				o.APIKey = v
+				resolved.Auth.Bearer = v
 			} else {
-				return o, fmt.Errorf("provider %q: requires OAuth credential but %v is unset",
+				return resolved, fmt.Errorf("provider %q: requires OAuth credential but %v is unset",
 					m.Label, m.OAuthEnv)
 			}
 		case core.CREDENTIAL_KIND_APIKEY:
 			if len(m.APIKeyEnv) == 0 {
-				return o, fmt.Errorf("provider %q: OAuth-only, does not accept api_key credential", m.Label)
+				return resolved, fmt.Errorf("provider %q: OAuth-only, does not accept api_key credential", m.Label)
 			}
 			if v := o.firstEnv(m.APIKeyEnv, o.APIKeyEnv); v != "" {
-				o.APIKey = v
+				resolved.Auth.APIKey = v
 			} else {
-				return o, fmt.Errorf("provider %q: requires api_key credential but %v is unset",
+				return resolved, fmt.Errorf("provider %q: requires api_key credential but %v is unset",
 					m.Label, m.APIKeyEnv)
 			}
-		default: // "" / "auto" — preserve the legacy precedence
-			keys := append(append([]string{}, m.OAuthEnv...), m.APIKeyEnv...)
-			if v := o.firstEnv(keys, o.APIKeyEnv); v != "" {
-				o.APIKey = v
+		default: // "" / "auto" — OAuth env outranks API-key env
+			if o.APIKeyEnv != "" {
+				resolved.Auth.APIKey = o.lookup(o.APIKeyEnv)
+				break
+			}
+			if v := o.firstEnv(m.OAuthEnv, ""); v != "" {
+				resolved.Auth.Bearer = v
+			} else if v := o.firstEnv(m.APIKeyEnv, ""); v != "" {
+				resolved.Auth.APIKey = v
 			}
 		}
 	}
-	if o.BaseURL == "" {
-		o.BaseURL = o.lookup(m.BaseURLEnv)
+	if resolved.BaseURL == "" {
+		resolved.BaseURL = o.lookup(m.BaseURLEnv)
 	}
-	return o, nil
+	return resolved, nil
 }

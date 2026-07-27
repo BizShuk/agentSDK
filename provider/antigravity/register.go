@@ -11,23 +11,14 @@ func init() {
 	provider.Register(provider.Entry{
 		Name: "antigravity",
 		Metadata: provider.Metadata{
-			Label:      "Antigravity",
-			Note:       "Antigravity gateway; OAuth via constructor, ANTIGRAVITY_API_KEY for the direct path",
-			APIKeyEnv:  []string{APIKeyEnvVar},
-			BaseURLEnv: BaseURLEnvVar,
+			Label:              "Antigravity",
+			Note:               "Antigravity gateway",
+			APIKeyEnv:          []string{APIKeyEnvVar},
+			BaseURLEnv:         BaseURLEnvVar,
+			CredentialRequired: true,
 		},
-		New: func(o provider.Options) (provider.Adapter, error) {
-			var opts []Option
-			if o.Model != "" {
-				opts = append(opts, WithModel(o.Model))
-			}
-			if o.APIKey != "" {
-				opts = append(opts, WithAPIKey(o.APIKey))
-			}
-			if o.BaseURL != "" {
-				opts = append(opts, WithBaseURL(o.BaseURL))
-			}
-			return New(opts...)
+		New: func(cfg provider.ResolvedConfig) (provider.Adapter, error) {
+			return New(cfg)
 		},
 		Catalog: DefaultCatalog,
 	})

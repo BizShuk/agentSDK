@@ -1,7 +1,7 @@
 # TODO
 
 - [ ] credential key should be just placeholder, and replace by env and .env
-  - 部分前進（2026-07-22）：`spec.Model.APIKeyEnv` 讓設定檔指名`環境變數名稱`而非密鑰本身；`provider.Options.APIKey` 的字面值只走程式注入（`WithProvider`），設定檔無此欄位。完整方案（憑證儲存改 placeholder）仍待開 plan
+  - 部分前進（2026-07-22）：`spec.Model.APIKeyEnv` 讓設定檔指名`環境變數名稱`而非密鑰本身；`provider.Options.APIKey` 的字面值只走程式注入，設定檔無此欄位。完整方案（憑證儲存改 placeholder）仍待開 plan
   - 與下方「Provider 認證解耦」同一條線：placeholder 方案的落腳處就是 `provider/credential`
 - [x] DefaultEnvironmentNames add ollama and llmbox
 
@@ -19,17 +19,16 @@
   `auth`，「adapter 自我包含」這個性質就沒了，而那正是當初複製 `967` 行 OAuth 的理由
 - 注入的必須是 `func(ctx) (core.Auth, error)` 而非 `core.Auth` 值 —— OAuth token 會在 run
   中途過期，建構時定案的 header 撐不過一小時；改在 request boundary 解析順帶涵蓋
-  `Generate` retry 與 SSE 重連，且不需要重建 adapter（現行 `RefreshingProvider` 會重建）
+  `Generate` retry 與 SSE 重連，且不需要重建 adapter；舊 rebuild-provider wrapper 已移除
 - `1:N` 維持成`軸`，不要被 `auth/provider.ROUTES` 的扁平 id 汙染上層：`anthropic_oauth`
   這種 id 只存在於 `provider/credential` 的對照表內，不冒到 `spec.Model.Provider`。
   對照表無論如何都需要，因為名稱本來就不同（`codex`→`openai`、`grok`→`xai`）
 
 已查證的前提：
 
-- [x] credential kind 只影響 header，不影響 base URL 或 body —— 四家 OAuth-capable adapter
-      （`anthropic`/`codex`/`antigravity`/`grok`）全部成立，`ResolveBaseURL` 不看 credential
-- [x] `core.Auth`（`core/port.go:119`）已是所需的 union（`APIKey`/`Bearer`/`Headers`/`BaseURL`），
-      但 `7` 個 adapter 只有 `anthropic` 在用，其餘 6 個手刻同形狀欄位
+- [x] credential kind 只影響 header，不影響 base URL 或 body；2026-07-27 起 endpoint
+      統一只在 `ResolvedConfig.BaseURL`，不再放進 request-time `core.Auth`
+- [x] `core.Auth` 是 `APIKey`/`Bearer`/`Headers` union；7 個 adapter 皆直接消費同一型別
 
 待辦（依執行順序）：
 
@@ -39,7 +38,10 @@
 - [x] `Phase B` `config/` 解體（見計畫；`agent.Host` + `middleware/preset`）
 - [x] `Phase C1` `7` 個 adapter 統一到 `core.Auth` + 接上 per-request `provider.Decorator`。
       `不`吃 auth 依賴，純 in-repo；做完就已經是目標架構，`Phase C2` 只是換 decorator 的來源
-- [x] `Phase C2` decorator 指向 `auth`，in-tree OAuth `967` → `194` 行（只留 request-time token DTO 與 vendor header）
+- [x] `Phase C2` decorator 指向 `auth`；2026-07-27 再移除零 caller 的 OAuth token DTO /
+      `NewWithOAuth` 與 rebuild wrapper，只留 canonical `core.Auth` + vendor header
+- [x] `Phase 5` 單一 provider config pipeline：`Options.Resolve` → `ResolvedConfig` →
+      `Entry.New`；七份 private config / functional options / env resolver / register converter 已移除
 
 落地後仍未關閉的兩件事：
 
@@ -107,7 +109,8 @@
 - [x] `main.go` 改為掛載 `cmd.NewProviderCommand()`,長敘述列出 `provider` 為唯一 subcommand
 - [x] `CLAUDE.md`：project tree 加 `cmd/`、module mapping 加 `root CLI subcommands` 列、`Development and Verification` 加 provider smoke-test 區塊
 - [x] registry 抽成共用 `provider/registry` package（2026-07-22）：`minimax`/`anthropic`/`google`/`grok`/`ollama` 五個 adapter，env 查詢改為 `LookupEnv` 注入；`cmd/provider.go` 與 `agent` 共用同一份，`--list-providers` 與設定檔不會漂移
-- [x] `codex` / `antigravity`（OAuth-only adapter）已進 registry（2026-07-24）—— `provider/codex` / `provider/antigravity` 各自 `register.go` 走 `init()` 註冊，OAuth 構造走 `NewWithOAuth` 不走 `New`；2026-07-27 起 discovery 資料只留在 `Entry.Metadata`
+- [x] `codex` / `antigravity` 已進 registry（2026-07-24）；2026-07-27 起 discovery
+      資料只留在 `Entry.Metadata`，API key / OAuth 均由單一 `ResolvedConfig.Auth` 或 decorator 表達
 
 ## Harness/UX（2026-07-19 skeleton 落地，細節待補）
 
@@ -149,7 +152,8 @@
 - [x] `cmd/auth/`:單一 `login --provider <id>` + list / verify / refresh / logout
 - [x] e2e:假 provider(models 端點 + 驗簽的 Google STS)跑通 login → list → verify → refresh → logout
 - [x] e2e:xAI device flow 對真實 `auth.x.ai` 跑通 OIDC discovery + device code 發放
-- [x] 到期自動 refresh:`config.NewRefreshingProvider` 於每次呼叫前經 `auth.Resolver` 檢查到期並自動換發(token rotation 時重建 inner provider)
+- [x] 到期自動 refresh：`provider/credential.Source.Decorator()` 每次 request 經
+      `auth.Resolver` 解析/換發，不重建 inner provider；舊 rebuild path 已移除
 
 ## M5 — sample wiring 收尾 (完成)
 

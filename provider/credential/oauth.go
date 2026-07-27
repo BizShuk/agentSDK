@@ -15,12 +15,10 @@ import (
 // local callback server, opening a browser, refreshing — lives in the auth
 // module and is NOT reimplemented here.
 //
-// It used to be reimplemented, four times: provider/{anthropic,codex,grok,
-// antigravity}/auth_oauth.go each carried its own copy, ~240 lines apiece,
-// with a comment explaining that the duplication kept the adapter free of
-// a cross-module import. The comment was right about the goal and wrong
-// about the method: the goal is met by keeping auth behind THIS package,
-// which the adapters do not import.
+// It used to be reimplemented four times under the concrete adapters, with a
+// comment explaining that the duplication kept them free of a cross-module
+// import. The goal is instead met by keeping auth behind THIS package, which
+// the adapters do not import.
 //
 // The copies had already drifted from the auth module by the time they
 // were removed — different token endpoints, different redirect URIs,
@@ -103,16 +101,16 @@ func (s *Source) Decorator() provider.Decorator {
 
 // toAuth projects an auth credential onto the wire-level shape adapters
 // consume. The projection is deliberately narrow: an adapter is handed a
-// token and an endpoint, never a refresh token, an expiry, or an account
-// identity it has no business persisting.
+// token and provider-specific headers, never a refresh token, an expiry, an
+// endpoint, or an account identity it has no business persisting. Endpoints are
+// construction config and cannot rotate through a request credential.
 func toAuth(cred *model.Credential) core.Auth {
 	if cred == nil {
 		return core.Auth{}
 	}
 	a := core.Auth{
-		APIKey:  cred.APIKey,
-		Bearer:  cred.AccessToken,
-		BaseURL: cred.BaseURL,
+		APIKey: cred.APIKey,
+		Bearer: cred.AccessToken,
 	}
 	// Codex identifies the paying account with a header rather than with
 	// the token, so it has to ride along or the request 401s on an

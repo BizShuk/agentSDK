@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/provider/codex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,31 +17,25 @@ import (
 
 func TestNewRequiresAPIKey(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
-	_, err := codex.New()
+	_, err := provider.New("codex", provider.Options{})
 	assert.Error(t, err)
 }
 
 func TestNewAcceptsExplicitAPIKey(t *testing.T) {
-	p, err := codex.New(codex.WithAPIKey("sk-test"))
+	p, err := codex.New(provider.ResolvedConfig{Auth: core.Auth{APIKey: "sk-test"}})
 	require.NoError(t, err)
 	assert.NotNil(t, p)
 }
 
-func TestNewWithOAuthRequiresAccessToken(t *testing.T) {
-	_, err := codex.NewWithOAuth(codex.OAuthCredentials{})
-	assert.Error(t, err)
-}
-
-func TestNewWithOAuthSetsBearerOverAPIKey(t *testing.T) {
-	creds := codex.OAuthCredentials{
-		AccessToken: "oauth-access",
-		AccountID:   "acc-123",
-		ExpiresAt:   time.Now().Add(time.Hour),
-	}
-	p, err := codex.NewWithOAuth(creds, codex.WithAPIKey("sk-fallback"))
+func TestNewAcceptsResolvedOAuth(t *testing.T) {
+	p, err := codex.New(provider.ResolvedConfig{Auth: core.Auth{
+		Bearer: "oauth-access",
+		Headers: map[string]string{
+			"ChatGPT-Account-ID": "acc-123",
+		},
+	}})
 	require.NoError(t, err)
 	assert.NotNil(t, p)
-	// Bearer wins. We exercise this further in TestBearerHeaderFromOAuth.
 }
 
 func TestBearerHeaderFromOAuth(t *testing.T) {
@@ -53,8 +47,16 @@ func TestBearerHeaderFromOAuth(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	creds := codex.OAuthCredentials{AccessToken: "oauth-abc", AccountID: "acc-1"}
-	p, err := codex.NewWithOAuth(creds, codex.WithBaseURL(srv.URL), codex.WithModel("gpt-5-mini"))
+	p, err := codex.New(provider.ResolvedConfig{
+		Model:   "gpt-5-mini",
+		BaseURL: srv.URL,
+		Auth: core.Auth{
+			Bearer: "oauth-abc",
+			Headers: map[string]string{
+				"ChatGPT-Account-ID": "acc-1",
+			},
+		},
+	})
 	require.NoError(t, err)
 
 	_, err = p.Generate(context.Background(), core.ModelRequest{
@@ -71,7 +73,10 @@ func TestGenerateRejectsStreamReadFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := codex.New(codex.WithAPIKey("k"), codex.WithBaseURL(srv.URL))
+	p, err := codex.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "k"},
+	})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{
@@ -95,8 +100,15 @@ func TestCodexHeaders(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	creds := codex.OAuthCredentials{AccessToken: "tok", AccountID: "acc-xyz"}
-	p, err := codex.NewWithOAuth(creds, codex.WithBaseURL(srv.URL))
+	p, err := codex.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth: core.Auth{
+			Bearer: "tok",
+			Headers: map[string]string{
+				"ChatGPT-Account-ID": "acc-xyz",
+			},
+		},
+	})
 	require.NoError(t, err)
 
 	_, err = p.Generate(context.Background(), core.ModelRequest{
@@ -134,7 +146,10 @@ func TestLiftInstructions(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := codex.New(codex.WithAPIKey("k"), codex.WithBaseURL(srv.URL))
+	p, err := codex.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "k"},
+	})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{
@@ -160,7 +175,10 @@ func TestMaxOutputTokensStripped(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := codex.New(codex.WithAPIKey("k"), codex.WithBaseURL(srv.URL))
+	p, err := codex.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "k"},
+	})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages:  []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
@@ -194,7 +212,11 @@ func TestLiteModelForcesParallelFalse(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			p, err := codex.New(codex.WithAPIKey("k"), codex.WithBaseURL(srv.URL), codex.WithModel(tc.model))
+			p, err := codex.New(provider.ResolvedConfig{
+				Model:   tc.model,
+				BaseURL: srv.URL,
+				Auth:    core.Auth{APIKey: "k"},
+			})
 			require.NoError(t, err)
 			_, err = p.Generate(context.Background(), core.ModelRequest{
 				Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
@@ -247,20 +269,6 @@ func TestRequestBodyValidate(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestOAuthCredentialsIsExpired(t *testing.T) {
-	// Future expiry → not expired.
-	c := codex.OAuthCredentials{ExpiresAt: time.Now().Add(time.Hour)}
-	assert.False(t, c.IsExpired())
-
-	// Past expiry → expired.
-	c = codex.OAuthCredentials{ExpiresAt: time.Now().Add(-time.Hour)}
-	assert.True(t, c.IsExpired())
-
-	// Zero expiry → "not expired" (we can't tell).
-	c = codex.OAuthCredentials{}
-	assert.False(t, c.IsExpired())
-}
-
 func TestCodexUserAgentFormat(t *testing.T) {
 	ua := codex.CodexUserAgent()
 	assert.True(t, strings.HasPrefix(ua, "codex_cli_rs/0.125.0"))
@@ -275,7 +283,10 @@ func TestGeneratePropagatesHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := codex.New(codex.WithAPIKey("k-bad"), codex.WithBaseURL(srv.URL))
+	p, err := codex.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "k-bad"},
+	})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},

@@ -373,7 +373,7 @@ func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
 
 // nativeBaseURL converts the configured OpenAI-compat base URL into the
 // native one by dropping the trailing "/openai" segment. A caller who
-// already pointed WithBaseURL at a native endpoint is left untouched.
+// already supplied a native endpoint in ResolvedConfig is left untouched.
 func (p *Provider) nativeBaseURL() string {
 	return strings.TrimSuffix(p.baseURL, "/openai")
 }

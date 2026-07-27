@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/provider/grok"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,25 +49,25 @@ func newFakeGrok(t *testing.T) (*httptest.Server, *string) {
 
 func TestNewRequiresAPIKey(t *testing.T) {
 	t.Setenv("XAI_API_KEY", "")
-	_, err := grok.New()
+	_, err := provider.New("grok", provider.Options{})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "API key")
+	assert.Contains(t, err.Error(), "credential")
 }
 
 func TestNewFromEnv(t *testing.T) {
 	t.Setenv("XAI_API_KEY", "xai-from-env")
-	p, err := grok.New()
+	p, err := provider.New("grok", provider.Options{})
 	require.NoError(t, err)
 	assert.NotNil(t, p)
 }
 
 func TestGenerateAgainstFakeServer(t *testing.T) {
 	srv, gotModel := newFakeGrok(t)
-	p, err := grok.New(
-		grok.WithBaseURL(srv.URL),
-		grok.WithAPIKey("xai-test"),
-		grok.WithModel("grok-4"),
-	)
+	p, err := grok.New(provider.ResolvedConfig{
+		Model:   "grok-4",
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "xai-test"},
+	})
 	require.NoError(t, err)
 
 	req := core.ModelRequest{Messages: []core.Message{
@@ -90,14 +90,16 @@ func TestBearerHeaderFromAPIKey(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := grok.New(grok.WithBaseURL(srv.URL), grok.WithAPIKey("xai-key"))
+	p, err := grok.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "xai-key"},
+	})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
 	})
 	require.NoError(t, err)
-	assert.True(t, strings.Contains(sawAuth, "Bearer xai-key"),
-		"expected Authorization: Bearer xai-key, got %q", sawAuth)
+	assert.Equal(t, "Bearer xai-key", sawAuth)
 }
 
 func TestBearerHeaderFromOAuth(t *testing.T) {
@@ -109,32 +111,22 @@ func TestBearerHeaderFromOAuth(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// OAuth path: even if an API key is configured, the bearer wins.
-	creds := grok.OAuthCredentials{
-		AccessToken:  "oauth-access-token",
-		RefreshToken: "oauth-refresh",
-		ExpiresAt:    time.Now().Add(1 * time.Hour),
-	}
-	p, err := grok.NewWithOAuth(
-		creds,
-		grok.WithBaseURL(srv.URL),
-		grok.WithAPIKey("xai-should-be-ignored"),
-	)
+	// Both values may exist while a caller transitions credentials; Bearer wins.
+	p, err := grok.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth: core.Auth{
+			APIKey: "xai-should-be-ignored",
+			Bearer: "oauth-access-token",
+		},
+	})
 	require.NoError(t, err)
 	_, err = p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
 	})
 	require.NoError(t, err)
-	assert.True(t, strings.Contains(sawAuth, "Bearer oauth-access-token"),
-		"expected Authorization: Bearer oauth-access-token, got %q", sawAuth)
+	assert.Equal(t, "Bearer oauth-access-token", sawAuth)
 	assert.NotContains(t, sawAuth, "xai-should-be-ignored",
 		"apiKey should not leak into Authorization header when OAuth bearer is set")
-}
-
-func TestNewWithOAuthRejectsEmptyToken(t *testing.T) {
-	_, err := grok.NewWithOAuth(grok.OAuthCredentials{})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "OAuth")
 }
 
 func TestRequestBodyValidate(t *testing.T) {
@@ -191,20 +183,6 @@ func TestRequestBodyValidate(t *testing.T) {
 	}
 }
 
-func TestOAuthCredentialsIsExpired(t *testing.T) {
-	future := grok.OAuthCredentials{ExpiresAt: time.Now().Add(1 * time.Hour)}
-	past := grok.OAuthCredentials{ExpiresAt: time.Now().Add(-1 * time.Hour)}
-	zero := grok.OAuthCredentials{}
-
-	assert.False(t, future.IsExpired(), "1h in the future should not be expired")
-	assert.True(t, past.IsExpired(), "1h in the past should be expired")
-	assert.False(t, zero.IsExpired(), "zero time means unknown / not expired yet")
-
-	// 60s grace window: a token expiring in 30s is considered expired.
-	withinGrace := grok.OAuthCredentials{ExpiresAt: time.Now().Add(30 * time.Second)}
-	assert.True(t, withinGrace.IsExpired(), "within 60s grace window should be expired")
-}
-
 func TestProviderModelsContainsExpectedIDs(t *testing.T) {
 	models := grok.DefaultCatalog()
 	ids := make([]string, 0, len(models))
@@ -216,22 +194,6 @@ func TestProviderModelsContainsExpectedIDs(t *testing.T) {
 	}
 }
 
-func TestResolveAPIKeyPrecedence(t *testing.T) {
-	t.Setenv("XAI_API_KEY", "from-env")
-	assert.Equal(t, "explicit", grok.ResolveAPIKey("explicit"))
-	assert.Equal(t, "from-env", grok.ResolveAPIKey(""))
-}
-
-func TestResolveBaseURLPrecedence(t *testing.T) {
-	t.Setenv("XAI_BASE_URL", "https://env.example/v1")
-	assert.Equal(t, "https://explicit.example/v1", grok.ResolveBaseURL("https://explicit.example/v1"))
-	assert.Equal(t, "https://env.example/v1", grok.ResolveBaseURL(""))
-
-	// Clear env so the next assertion exercises the default-fallback branch.
-	t.Setenv("XAI_BASE_URL", "")
-	assert.Equal(t, grok.DefaultBaseURL, grok.ResolveBaseURL(""))
-}
-
 func TestStreamAgainstFakeServer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -241,7 +203,10 @@ func TestStreamAgainstFakeServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := grok.New(grok.WithBaseURL(srv.URL), grok.WithAPIKey("xai-test"))
+	p, err := grok.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "xai-test"},
+	})
 	require.NoError(t, err)
 
 	ch, err := p.Stream(context.Background(), core.ModelRequest{

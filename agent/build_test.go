@@ -614,7 +614,7 @@ func TestRunBuildsRegistryProviderOnce(t *testing.T) {
 	provider.Register(provider.Entry{
 		Name:     name,
 		Metadata: metadata,
-		New: func(provider.Options) (provider.Adapter, error) {
+		New: func(provider.ResolvedConfig) (provider.Adapter, error) {
 			calls++
 			scripted := testutil.NewScriptedProvider()
 			scripted.EnqueueEndTurn("done")

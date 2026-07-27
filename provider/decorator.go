@@ -27,10 +27,9 @@ type Decorator func(ctx context.Context) (core.Auth, error)
 // decorated wraps an Adapter so every call resolves the credential first
 // and hands it down through core.ModelRequest.Auth.
 //
-// Delegating through the existing per-request Auth override — rather than
-// rebuilding the adapter on token rotation, which is what the older
-// RefreshingProvider did — means rotation costs one struct copy instead of
-// a new HTTP client, and an in-flight stream is unaffected.
+// Delegating through the existing per-request Auth override means token
+// rotation costs one struct copy instead of rebuilding an HTTP client, and an
+// in-flight stream is unaffected.
 type decorated struct {
 	Adapter
 	name     string

@@ -44,7 +44,7 @@ const DEFAULT_NAME = "minimax"
 // Factory builds an adapter from resolved options. The provider.Factory
 // signature is the source of truth for the generate + stream capability
 // required of registered adapters.
-type Factory func(Options) (Adapter, error)
+type Factory func(ResolvedConfig) (Adapter, error)
 
 // Entry is everything callers need to know about one adapter: how to
 // build it, the static metadata a CLI listing or wizard menu renders,
@@ -140,9 +140,12 @@ func New(name string, o Options) (Adapter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: %w", e.Name, err)
 	}
+	if e.Metadata.CredentialRequired && resolved.Auth.Token() == "" && o.Decorator == nil {
+		return nil, fmt.Errorf("provider %s: credential is required", e.Name)
+	}
 	p, err := e.New(resolved)
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: %w", e.Name, err)
 	}
-	return WithDecorator(e.Name, p, resolved.Decorator), nil
+	return WithDecorator(e.Name, p, o.Decorator), nil
 }

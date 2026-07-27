@@ -20,6 +20,11 @@ Go Agentic Loop SDK：以`宣告式設定`組裝目標導向控制迴圈 (Goal-d
 `core.StreamProvider`，live model catalog 是 optional `core.ModelLister`。provider 名稱、認證 metadata
 與 static catalog 由 `provider.Entry` 統一持有，不塞回 runtime client。
 
+provider 建構只有一條 pipeline：`provider.Options`（尚未解析的 live input）經
+`Options.Resolve(Entry.Metadata)` 變成 `provider.ResolvedConfig{Model, BaseURL, Auth}`，
+再交給 adapter `New`。env / viper lookup 不進 adapter；`core.Auth` 只承載 credential 與
+provider-specific headers，endpoint 固定是 construction config。
+
 ## 怎麼用 (Getting Started)
 
 engagement 是四階`階梯`，不是一堆獨立開關。每一階都是下一階的子集，往上爬只改設定不改 API。
@@ -130,7 +135,8 @@ agentsdk/
 ├── runtime/                   # Loop: dispatch + checkpoint + WAL
 ├── skill/                     # SKILL.md skills + slash commands + prompt templates (progressive disclosure) + SubAgent/Spawner ("task" tool)
 ├── provider/                  # 7 個 adapter（Generate + Stream capability；已併回 root module）
-│   └── registry.go            # Entry 是 name / metadata / static catalog / factory 的唯一真相
+│   ├── registry.go            # Entry 是 name / metadata / static catalog / factory 的唯一真相
+│   └── registry_options.go    # Options → ResolvedConfig 的唯一 env / credential resolution pipeline
 ├── auth / proxy               # 外部獨立 repo，本 repo 無此目錄（auth 為 go.mod require，proxy 已完全脫離）
 ├── utils/                     # 根層共用 utilities umbrella：utils/frontmatter/ + utils/testutil/（FakeProvider / MemStore / CapturingNotifier）
 ├── sample/code-agent/         # 全 harness 組合 CLI（tui 互動 / -p / --json、session flags、.agentsdk 探索）

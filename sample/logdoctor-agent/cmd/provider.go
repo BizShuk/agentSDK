@@ -4,9 +4,10 @@ import (
 	"fmt"
 
 	"github.com/bizshuk/agentsdk/core"
-	anthropicprovider "github.com/bizshuk/agentsdk/provider/anthropic"
-	googleprovider "github.com/bizshuk/agentsdk/provider/google"
-	ollamaprovider "github.com/bizshuk/agentsdk/provider/ollama"
+	"github.com/bizshuk/agentsdk/provider"
+	_ "github.com/bizshuk/agentsdk/provider/anthropic"
+	_ "github.com/bizshuk/agentsdk/provider/google"
+	_ "github.com/bizshuk/agentsdk/provider/ollama"
 	"github.com/spf13/cobra"
 )
 
@@ -29,22 +30,10 @@ const (
 // plan's "CI uses if [ -n "$KEY" ]" convention.
 func selectProvider(name providerName) (core.Provider, error) {
 	switch name {
-	case providerAnthropic:
-		p, err := anthropicprovider.New()
+	case providerAnthropic, providerOllama, providerGoogle:
+		p, err := provider.New(string(name), provider.Options{})
 		if err != nil {
-			return nil, fmt.Errorf("anthropic provider: %w", err)
-		}
-		return p, nil
-	case providerOllama:
-		p, err := ollamaprovider.New()
-		if err != nil {
-			return nil, fmt.Errorf("ollama provider: %w", err)
-		}
-		return p, nil
-	case providerGoogle:
-		p, err := googleprovider.New()
-		if err != nil {
-			return nil, fmt.Errorf("google provider: %w", err)
+			return nil, fmt.Errorf("%s provider: %w", name, err)
 		}
 		return p, nil
 	default:

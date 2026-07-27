@@ -3,6 +3,8 @@ package anthropic_test
 import (
 	"testing"
 
+	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/provider/anthropic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -10,7 +12,7 @@ import (
 
 func TestNewRequiresAPIKey(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "")
-	_, err := anthropic.New()
+	_, err := provider.New("anthropic", provider.Options{})
 	assert.Error(t, err)
 }
 
@@ -23,13 +25,13 @@ func TestNewFromEnv(t *testing.T) {
 		t.Skip("skipping anthropic adapter construction check under -short")
 	}
 
-	p, err := anthropic.New()
+	p, err := provider.New("anthropic", provider.Options{})
 	require.NoError(t, err)
 	assert.NotNil(t, p)
 }
 
-func TestGenerateWithOption(t *testing.T) {
-	p, err := anthropic.New(anthropic.WithAPIKey("sk-direct"))
+func TestNewWithResolvedConfig(t *testing.T) {
+	p, err := anthropic.New(provider.ResolvedConfig{Auth: core.Auth{APIKey: "sk-direct"}})
 	require.NoError(t, err)
 	assert.NotNil(t, p)
 }

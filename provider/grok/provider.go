@@ -4,19 +4,14 @@
 // File layout:
 //
 //   - provider.go    — entry point, Provider struct, interface methods
-//   - options.go     — functional options for New / NewWithOAuth
 //   - dto.go         — wire-format types (RequestBody, Response, ...)
 //   - validate.go    — RequestBody.Validate()
-//   - auth_api.go    — ResolveAPIKey / ResolveBaseURL
-//   - auth_oauth.go  — PKCE helpers, OAuthCredentials, OpenBrowser
+//   - auth_api.go    — endpoint and environment names
 //   - stream.go      — SSE parser -> core.ModelChunk
 //   - models.go      — DefaultCatalog
 //
-// xAI supports two auth flavors. The API-key path goes through New(); the
-// OAuth path (SuperGrok / X Premium subscription) goes through
-// NewWithOAuth(). Both honor Bearer Authorization on the wire — the
-// difference is whether the credential came from a long-lived key or a
-// freshly exchanged access token.
+// xAI supports API-key and OAuth credentials. Both enter through
+// provider.ResolvedConfig.Auth and use Bearer Authorization on the wire.
 package grok
 
 import (
@@ -30,7 +25,10 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 )
+
+const defaultModel = "grok-3"
 
 // Provider implements core.Provider against the xAI Grok API.
 type Provider struct {
@@ -43,44 +41,18 @@ type Provider struct {
 	client *http.Client
 }
 
-// New returns a Provider using an API key (or XAI_API_KEY env fallback).
-// model defaults to "grok-3".
-func New(opts ...Option) (*Provider, error) {
-	cfg := defaultConfig()
-	for _, o := range opts {
-		o(&cfg)
+// New returns a Provider from registry-resolved construction config.
+func New(cfg provider.ResolvedConfig) (*Provider, error) {
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = DefaultBaseURL
 	}
-	key := ResolveAPIKey(cfg.apiKey)
-	if key == "" {
-		return nil, fmt.Errorf("grok: API key not set (use WithAPIKey or XAI_API_KEY)")
+	if cfg.Model == "" {
+		cfg.Model = defaultModel
 	}
 	return &Provider{
-		baseURL: strings.TrimRight(ResolveBaseURL(cfg.baseURL), "/"),
-		auth:    core.Auth{APIKey: key},
-		model:   cfg.model,
-		client:  &http.Client{Timeout: 120 * time.Second},
-	}, nil
-}
-
-// NewWithOAuth constructs a provider from an OAuth credential. The OAuth
-// bearer takes precedence over any baked-in apiKey for every request —
-// callers do not need to pass both.
-//
-// If the supplied credentials are expired, NewWithOAuth still returns a
-// usable provider; callers are expected to call RefreshToken separately
-// before issuing requests.
-func NewWithOAuth(creds OAuthCredentials, opts ...Option) (*Provider, error) {
-	cfg := defaultConfig()
-	for _, o := range opts {
-		o(&cfg)
-	}
-	if creds.AccessToken == "" {
-		return nil, fmt.Errorf("grok: OAuth access token is empty")
-	}
-	return &Provider{
-		baseURL: strings.TrimRight(ResolveBaseURL(cfg.baseURL), "/"),
-		auth:    core.Auth{Bearer: creds.AccessToken},
-		model:   cfg.model,
+		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
+		auth:    cfg.Auth,
+		model:   cfg.Model,
 		client:  &http.Client{Timeout: 120 * time.Second},
 	}, nil
 }

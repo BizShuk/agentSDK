@@ -10,8 +10,8 @@ import (
 
 // DefaultCatalog lists common Ollama / OpenAI-compatible model ids.
 //
-// Most users override this via WithModel or a viper-loaded config; this
-// is the fallback set the picker UI sees when nothing else is supplied.
+// Most users override this through provider.Options.Model; this is the
+// fallback set the picker UI sees when nothing else is supplied.
 //
 // Reasoning = true flags the "thinking" family (gpt-oss / deepseek-r1);
 // picker UIs can use that to expose reasoning budget controls.

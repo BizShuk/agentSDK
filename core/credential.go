@@ -25,8 +25,9 @@ const (
 // populate this before calling Provider.Generate or StreamProvider.Stream;
 // the provider itself does not reach out to fetch credentials.
 //
-// At most one of APIKey or Bearer should be set. Headers and BaseURL are
-// optional overrides.
+// At most one of APIKey or Bearer should be set. Headers carries optional
+// provider-specific request headers. Endpoint configuration is deliberately
+// absent: a base URL belongs to provider construction, not request credentials.
 type Auth struct {
 	// APIKey is sent as `x-api-key: <value>` (Anthropic-style) or
 	// `Authorization: Bearer <value>` (OpenAI-style) depending on the
@@ -39,16 +40,11 @@ type Auth struct {
 	// Headers carries provider-specific overrides (e.g. anthropic-beta,
 	// ChatGPT-Account-ID). Merged on top of provider defaults.
 	Headers map[string]string `json:"headers,omitempty"`
-
-	// BaseURL overrides the provider's default base URL. Empty means use the
-	// provider default.
-	BaseURL string `json:"base_url,omitempty"`
 }
 
-// IsZero reports whether the Auth carries no credential, header override, or
-// endpoint override.
+// IsZero reports whether the Auth carries no credential or header override.
 func (a Auth) IsZero() bool {
-	return a.APIKey == "" && a.Bearer == "" && a.BaseURL == "" && len(a.Headers) == 0
+	return a.APIKey == "" && a.Bearer == "" && len(a.Headers) == 0
 }
 
 // Merge returns a copy of a with every non-zero field of override applied on
@@ -61,9 +57,6 @@ func (a Auth) Merge(override Auth) Auth {
 	}
 	if override.Bearer != "" {
 		out.Bearer = override.Bearer
-	}
-	if override.BaseURL != "" {
-		out.BaseURL = override.BaseURL
 	}
 	if len(override.Headers) > 0 {
 		merged := make(map[string]string, len(out.Headers)+len(override.Headers))

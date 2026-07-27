@@ -491,13 +491,21 @@ model:
 // 正確：API key 走程式注入（env 或密鑰管理），spec 只指名變數名
 // yaml：model: {provider: anthropic, api_key_env: ANTHROPIC_API_KEY}
 // 程式碼：
-agent.Main(agent.MustNew(cfg,
-    agent.WithProvider(anthropicprovider.New(anthropicprovider.WithAPIKey(os.Getenv("ANTHROPIC_API_KEY")))),
-))
+p, err := provider.New("anthropic", provider.Options{
+    APIKey: os.Getenv("ANTHROPIC_API_KEY"),
+})
+if err != nil {
+    return err
+}
+a, err := agent.New(cfg, agent.WithProvider(p))
+if err != nil {
+    return err
+}
+cli.Main(a)
 // 或更乾淨：寫 env 到 process env，registry.LookupEnv 直接撈
 ```
 
-`registry.Options.APIKey` 是 `Options` 欄位，刻意不暴露成 `spec.Model` 欄位——這條邊界守住了才能讓設定檔安全丟 git。
+`provider.Options.APIKey` 是 live input，刻意不暴露成 `spec.Model` 欄位——這條邊界守住了才能讓設定檔安全丟 git。
 
 ### 2. 把冗餘 block 一起打開
 
