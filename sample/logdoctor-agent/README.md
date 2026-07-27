@@ -1,47 +1,19 @@
 # logdoctor
 
-Watches a log file, diagnoses errors, and queues fixes. Five subcommands
-cover the operational lifecycle:
+Continuously reads new bytes from direct files under
+`~/.config/*/logs/*`, asks MiniMax for a read-only diagnosis, and prints
+safe fix suggestions.
 
-```text
-logdoctor run        # single pass against a log file
-logdoctor watch      # continuous tail with auto-dispatch
-logdoctor resume     # resume a paused run from StateStore + WAL
-logdoctor list       # list persisted runs (StateStore metadata)
-logdoctor approve    # out-of-band decision on a PendingApproval
+The sample has one operation, `watch`. It uses MiniMax through
+`MINIMAX_API_KEY`; there is no provider selector, fake mode, tool registry,
+approval flow, or agent session lifecycle.
+
+```bash
+export MINIMAX_API_KEY=...
+go run . watch --interval 1m
 ```
 
-## Why no `agent.yaml`
-
-logdoctor is intentionally NOT in the `agent.LoadFile` + `agent.Main`
-shape that skeleton-agent, code-agent, file-agent, and greet-agent use.
-
-Two reasons:
-
-1. **Multi-subcommand UX, not single-shot CLI.** `run` / `watch` /
-   `resume` / `list` / `approve` are five distinct entry points with
-   different state and flag surfaces. The skeleton-agent pattern (one
-   `main`, one YAML, one `agent.Main`) collapses this into a single
-   invocation, which loses the operational UX.
-
-2. **Direct core.State lifecycle.** The sample demonstrates
-   `StateStore` + `WriteAheadLog` resume, paused-run recovery, and
-   out-of-band approval — the same surfaces agent.Runner hides behind
-   `agent.Main`. Pulling those into spec.Config would require expanding
-   the schema with operational knobs (`resume.runID`, `watch.path`,
-   `approve.decision`), which is a different problem from "agent runs
-   on stdin".
-
-The split is intentional:
-
-| Sample | agent.Config? | Pattern |
-| --- | --- | --- |
-| skeleton-agent | yes | single-file, agent.Main, YAML |
-| code-agent | yes (built from flags) | cobra, agent.Runner, 4 modes |
-| file-agent | yes (loaded from YAML) | single-file, agent.Main, YAML |
-| greet-agent | yes (loaded from YAML) | single-file, agent.Main, YAML |
-| logdoctor | **no** | cobra subcommands, direct core.State |
-
-If a future change moves logdoctor onto the agent skeleton (e.g. via
-`agent.Runner.RunOnce` + `agent.Runner.Resume(runID)`), this README and
-the operational-knob design question are the first things to revisit.
+Each cycle reads at most `1 MiB` of raw log bytes. The first cycle runs
+immediately; later cycles run after the configured interval. Markdown
+diagnoses go to stdout and canonical `core.StreamEvent` JSONL goes to
+stderr. Stop the foreground process with `Ctrl-C`.

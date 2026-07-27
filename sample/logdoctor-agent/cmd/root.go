@@ -1,36 +1,35 @@
-// Package cmd hosts the logdoctor CLI verbs (root + run + watch + resume + approve + list).
-//
-// M1 provides only root + run. The other verbs land in M2-M4 alongside
-// the feature surface they govern.
-//
-// Convention: each verb lives in its own file under cmd/<verb>.go,
-// matching the gosdk / playground CLI convention.
+// Package cmd hosts the logdoctor CLI.
 package cmd
 
 import (
+	"fmt"
+
+	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
+	_ "github.com/bizshuk/agentsdk/provider/minimax"
 	"github.com/spf13/cobra"
 )
 
-// Version / build info — populated via -ldflags in later milestones.
-const Version = "0.1.0-m1"
-
-// RootCmd constructs the root command. Subcommands register themselves
-// on it via AddCommand.
-var RootCmd = &cobra.Command{
-	Use:     "logdoctor",
-	Short:   "Watch a log, diagnose errors, queue fixes",
-	Version: Version,
+// New returns a fresh logdoctor command.
+func New() *cobra.Command {
+	root := &cobra.Command{
+		Use:               "logdoctor",
+		Short:             "Continuously analyze application logs and suggest fixes",
+		Version:           "0.1.0-m1",
+		SilenceErrors:     true,
+		SilenceUsage:      true,
+		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
+	}
+	root.SetVersionTemplate("logdoctor {{.Version}}\n")
+	root.AddCommand(newWatchCommand())
+	return root
 }
 
-func init() {
-	RootCmd.SetVersionTemplate("logdoctor {{.Version}}\n")
-	RootCmd.PersistentFlags().Bool("fake", false,
-		"Use the deterministic FakeProvider for offline E2E testing. "+
-			"No network or API key required. Mutually exclusive with --provider.")
-	RootCmd.PersistentFlags().String("provider", "",
-		"LLM provider: anthropic | ollama | google. "+
-			"Mutually exclusive with --fake. Credentials are read from the "+
-			"provider's env var (ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY).")
-	RootCmd.PersistentFlags().Int("max-turns", 5,
-		"Maximum steps the agent can take before being killed.")
+// newMiniMaxProvider constructs logdoctor's only model provider.
+func newMiniMaxProvider() (core.Provider, error) {
+	selected, err := provider.New(provider.DEFAULT_NAME, provider.Options{})
+	if err != nil {
+		return nil, fmt.Errorf("create MiniMax provider: %w", err)
+	}
+	return selected, nil
 }

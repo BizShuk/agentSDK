@@ -1,5 +1,4 @@
-// Command logdoctor is the sample CLI that demonstrates agentsdk by
-// watching a log file, diagnosing errors, and queueing fixes.
+// Command logdoctor watches application logs and prints read-only diagnoses.
 package main
 
 import (
@@ -10,7 +9,7 @@ import (
 )
 
 func main() {
-	if err := cmd.RootCmd.Execute(); err != nil {
+	if err := cmd.New().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
