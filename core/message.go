@@ -17,24 +17,38 @@ type PartKind string
 
 const (
 	PART_KIND_PLAIN_TEXT  PartKind = "plain_text"
+	PART_KIND_REASONING   PartKind = "reasoning"
 	PART_KIND_AUDIO       PartKind = "audio"
 	PART_KIND_IMAGE       PartKind = "image"
 	PART_KIND_TOOL_USE    PartKind = "tool_use"
 	PART_KIND_TOOL_RESULT PartKind = "tool_result"
 )
 
-// Part is one fragment of a Message — text, audio, image, tool_use, or tool_result.
+// ReasoningState carries opaque continuation metadata for a reasoning Part.
+// Textual reasoning stays in Part.Text so plain-text and reasoning stream
+// chunks share the same content field. Signature preserves Anthropic thinking
+// continuity; ID and EncryptedContent preserve an OpenAI Responses reasoning
+// item across a tool loop.
+type ReasoningState struct {
+	ID               string `json:"id,omitempty"`
+	Signature        string `json:"signature,omitempty"`
+	EncryptedContent string `json:"encrypted_content,omitempty"`
+}
+
+// Part is one fragment of a Message — text, reasoning, audio, image, tool_use,
+// or tool_result.
 // Decide does not inspect Parts directly; the LLM provider deals with conversion.
 // runtime passes Parts through unchanged so providers see a faithful transcript.
 type Part struct {
-	Kind       PartKind    `json:"kind"`
-	Text       string      `json:"text,omitempty"`
-	Audio      []byte      `json:"audio,omitempty"`
-	AudioMIME  string      `json:"audio_mime,omitempty"`
-	Image      []byte      `json:"image,omitempty"`
-	ImageMIME  string      `json:"image_mime,omitempty"`
-	ToolUse    *ToolCall   `json:"tool_use,omitempty"`
-	ToolResult *ToolResult `json:"tool_result,omitempty"`
+	Kind       PartKind        `json:"kind"`
+	Text       string          `json:"text,omitempty"`
+	Reasoning  *ReasoningState `json:"reasoning,omitempty"`
+	Audio      []byte          `json:"audio,omitempty"`
+	AudioMIME  string          `json:"audio_mime,omitempty"`
+	Image      []byte          `json:"image,omitempty"`
+	ImageMIME  string          `json:"image_mime,omitempty"`
+	ToolUse    *ToolCall       `json:"tool_use,omitempty"`
+	ToolResult *ToolResult     `json:"tool_result,omitempty"`
 }
 
 // Message is a turn of the conversation — one role, many parts.

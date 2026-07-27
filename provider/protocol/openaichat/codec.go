@@ -13,9 +13,13 @@ import (
 // invalid raw tool schema produces an empty payload for upstream validation
 // instead of introducing a new local error.
 func EncodeRequest(req core.ModelRequest, model string, stream bool) ([]byte, error) {
+	messages, err := toChatMessages(req.Messages)
+	if err != nil {
+		return nil, err
+	}
 	body := requestBody{
 		Model:     model,
-		Messages:  toChatMessages(req.Messages),
+		Messages:  messages,
 		MaxTokens: maxTokensOrDefault(req),
 		Stream:    stream,
 	}
@@ -48,15 +52,34 @@ func DecodeResponse(raw []byte) (core.ModelResult, error) {
 		},
 	}
 	for _, choice := range body.Choices {
+		if choice.Message.ReasoningContent != "" {
+			out.Parts = append(out.Parts, core.Part{
+				Kind: core.PART_KIND_REASONING,
+				Text: choice.Message.ReasoningContent,
+			})
+		}
+		if len(out.Parts) > 0 && choice.Message.Content != "" {
+			out.Parts = append(out.Parts, core.Part{
+				Kind: core.PART_KIND_PLAIN_TEXT,
+				Text: choice.Message.Content,
+			})
+		}
 		out.Text += choice.Message.Content
 		out.StopReason = choice.FinishReason
 		for _, call := range choice.Message.ToolCalls {
-			out.ToolCalls = append(out.ToolCalls, core.ToolCall{
+			toolCall := core.ToolCall{
 				ID:   call.ID,
 				Name: call.Function.Name,
 				Args: parseArgs(call.Function.Arguments),
-			})
+			}
+			out.ToolCalls = append(out.ToolCalls, toolCall)
+			if len(out.Parts) > 0 {
+				out.Parts = append(out.Parts, core.Part{Kind: core.PART_KIND_TOOL_USE, ToolUse: &toolCall})
+			}
 		}
+	}
+	if len(out.Parts) > 0 {
+		out = out.NormalizeContent()
 	}
 	return out, nil
 }
@@ -78,7 +101,7 @@ func (r requestBody) validate() error {
 	return nil
 }
 
-func toChatMessages(messages []core.Message) []chatMessage {
+func toChatMessages(messages []core.Message) ([]chatMessage, error) {
 	out := make([]chatMessage, 0, len(messages))
 	for _, message := range messages {
 		role := "user"
@@ -90,7 +113,10 @@ func toChatMessages(messages []core.Message) []chatMessage {
 		case core.ROLE_TOOL:
 			role = "tool"
 		}
-		text, toolCalls, toolResults := flattenMessage(message)
+		text, toolCalls, toolResults, err := flattenMessage(message)
+		if err != nil {
+			return nil, err
+		}
 		item := chatMessage{Role: role, Content: text, ToolCalls: toolCalls}
 		if len(toolResults) > 0 {
 			item.ToolCallID = toolResults[0].callID
@@ -99,7 +125,7 @@ func toChatMessages(messages []core.Message) []chatMessage {
 		}
 		out = append(out, item)
 	}
-	return out
+	return out, nil
 }
 
 type flatToolResult struct {
@@ -115,7 +141,7 @@ func (r flatToolResult) outputString() string {
 	return marshalString(r.output)
 }
 
-func flattenMessage(message core.Message) (string, []toolCall, []flatToolResult) {
+func flattenMessage(message core.Message) (string, []toolCall, []flatToolResult, error) {
 	var text strings.Builder
 	var toolCalls []toolCall
 	var toolResults []flatToolResult
@@ -123,6 +149,8 @@ func flattenMessage(message core.Message) (string, []toolCall, []flatToolResult)
 		switch part.Kind {
 		case core.PART_KIND_PLAIN_TEXT:
 			text.WriteString(part.Text)
+		case core.PART_KIND_REASONING:
+			return "", nil, nil, fmt.Errorf("OpenAI Chat cannot preserve reasoning continuation metadata")
 		case core.PART_KIND_TOOL_USE:
 			if part.ToolUse != nil {
 				call := toolCall{ID: part.ToolUse.ID, Type: "function"}
@@ -140,7 +168,7 @@ func flattenMessage(message core.Message) (string, []toolCall, []flatToolResult)
 			}
 		}
 	}
-	return text.String(), toolCalls, toolResults
+	return text.String(), toolCalls, toolResults, nil
 }
 
 func toToolDefs(specs []core.ToolSpec) []toolDef {

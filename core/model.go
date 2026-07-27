@@ -36,18 +36,57 @@ type ModelRequest struct {
 // ModelChunk is a single streamed chunk from the model provider.
 // Stream is read by runtime; Decide only sees the folded ModelResult.
 type ModelChunk struct {
-	Kind    PartKind  `json:"kind"`
-	Text    string    `json:"text,omitempty"`
-	ToolUse *ToolCall `json:"tool_use,omitempty"`
-	Done    bool      `json:"done"`
+	Kind      PartKind        `json:"kind"`
+	Text      string          `json:"text,omitempty"`
+	Reasoning *ReasoningState `json:"reasoning,omitempty"`
+	ToolUse   *ToolCall       `json:"tool_use,omitempty"`
+	Done      bool            `json:"done"`
 }
 
 // ModelResult is the final, folded result of one model call.
 type ModelResult struct {
+	// Parts is the canonical ordered assistant content. Text and ToolCalls are
+	// compatibility projections for callers written before Parts existed.
+	Parts      []Part     `json:"parts,omitempty"`
 	Text       string     `json:"text,omitempty"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	StopReason string     `json:"stop_reason"`
 	Usage      TokenUsage `json:"usage"`
+}
+
+// NormalizeContent makes Parts and the legacy Text/ToolCalls projections
+// consistent. When Parts is present it is authoritative; otherwise Parts is
+// synthesized from the legacy fields. The returned value owns its Parts slice.
+func (r ModelResult) NormalizeContent() ModelResult {
+	out := r
+	if len(r.Parts) == 0 {
+		parts := make([]Part, 0, 1+len(r.ToolCalls))
+		if r.Text != "" {
+			parts = append(parts, Part{Kind: PART_KIND_PLAIN_TEXT, Text: r.Text})
+		}
+		for i := range r.ToolCalls {
+			call := r.ToolCalls[i]
+			parts = append(parts, Part{Kind: PART_KIND_TOOL_USE, ToolUse: &call})
+		}
+		out.Parts = parts
+		return out
+	}
+
+	out.Parts = append([]Part(nil), r.Parts...)
+	out.Text = ""
+	out.ToolCalls = nil
+	for i := range out.Parts {
+		part := out.Parts[i]
+		switch part.Kind {
+		case PART_KIND_PLAIN_TEXT:
+			out.Text += part.Text
+		case PART_KIND_TOOL_USE:
+			if part.ToolUse != nil {
+				out.ToolCalls = append(out.ToolCalls, *part.ToolUse)
+			}
+		}
+	}
+	return out
 }
 
 // TokenUsage tracks token accounting. Providers report approximate counts.

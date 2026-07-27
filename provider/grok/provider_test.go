@@ -38,7 +38,7 @@ func newFakeGrok(t *testing.T) (*httptest.Server, *string) {
 		_, _ = w.Write([]byte(`{
 		  "id": "test-id",
 		  "choices": [
-		    {"message": {"role": "assistant", "content": "hello from grok"}, "finish_reason": "stop"}
+		    {"message": {"role": "assistant", "reasoning_content":"inspect", "content": "hello from grok"}, "finish_reason": "stop"}
 		  ],
 		  "usage": {"prompt_tokens": 7, "completion_tokens": 5, "total_tokens": 12}
 		}`))
@@ -76,6 +76,9 @@ func TestGenerateAgainstFakeServer(t *testing.T) {
 	mr, err := p.Generate(context.Background(), req)
 	require.NoError(t, err)
 	assert.Equal(t, "hello from grok", mr.Text)
+	require.Len(t, mr.Parts, 2)
+	assert.Equal(t, core.PART_KIND_REASONING, mr.Parts[0].Kind)
+	assert.Equal(t, "inspect", mr.Parts[0].Text)
 	assert.Equal(t, "stop", mr.StopReason)
 	assert.Equal(t, 12, mr.Usage.TotalTokens)
 	assert.Equal(t, "grok-4", *gotModel)
@@ -183,6 +186,39 @@ func TestRequestBodyValidate(t *testing.T) {
 	}
 }
 
+func TestReasoningRequestAndOpaqueMetadataBoundary(t *testing.T) {
+	var reasoningContent string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Messages []grok.ChatMessage `json:"messages"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		reasoningContent = body.Messages[0].ReasoningContent
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}`))
+	}))
+	defer srv.Close()
+	p, err := grok.New(provider.ResolvedConfig{BaseURL: srv.URL, Auth: core.Auth{APIKey: "k"}})
+	require.NoError(t, err)
+
+	_, err = p.Generate(context.Background(), core.ModelRequest{Messages: []core.Message{{
+		Role:  core.ROLE_ASSISTANT,
+		Parts: []core.Part{{Kind: core.PART_KIND_REASONING, Text: "previous"}},
+	}}})
+	require.NoError(t, err)
+	assert.Equal(t, "previous", reasoningContent)
+
+	_, err = p.Generate(context.Background(), core.ModelRequest{Messages: []core.Message{{
+		Role: core.ROLE_ASSISTANT,
+		Parts: []core.Part{{
+			Kind:      core.PART_KIND_REASONING,
+			Text:      "previous",
+			Reasoning: &core.ReasoningState{EncryptedContent: "encrypted"},
+		}},
+	}}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot preserve reasoning continuation metadata")
+}
+
 func TestProviderModelsContainsExpectedIDs(t *testing.T) {
 	models := grok.DefaultCatalog()
 	ids := make([]string, 0, len(models))
@@ -197,6 +233,7 @@ func TestProviderModelsContainsExpectedIDs(t *testing.T) {
 func TestStreamAgainstFakeServer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"inspect\"}}]}\n\n"))
 		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"hello \"}}]}\n\n"))
 		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"world\"}}]}\n\n"))
 		_, _ = w.Write([]byte("data: [DONE]\n\n"))
@@ -215,11 +252,17 @@ func TestStreamAgainstFakeServer(t *testing.T) {
 	require.NoError(t, err)
 
 	var assembled strings.Builder
+	var reasoning strings.Builder
 	for c := range ch {
 		if c.Done {
 			break
 		}
-		assembled.WriteString(c.Text)
+		if c.Kind == core.PART_KIND_REASONING {
+			reasoning.WriteString(c.Text)
+		} else {
+			assembled.WriteString(c.Text)
+		}
 	}
 	assert.Equal(t, "hello world", assembled.String())
+	assert.Equal(t, "inspect", reasoning.String())
 }

@@ -7,6 +7,7 @@ package anthropic
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/bizshuk/agentsdk/core"
@@ -14,7 +15,7 @@ import (
 
 // toMessageParams converts core messages into the wire-format MessageParam.
 // The role mapping strips ROLE_SYSTEM (it goes to RequestBody.System).
-func toMessageParams(msgs []core.Message) []MessageParam {
+func toMessageParams(msgs []core.Message) ([]MessageParam, error) {
 	out := make([]MessageParam, 0, len(msgs))
 	for _, m := range msgs {
 		role := "user"
@@ -27,6 +28,17 @@ func toMessageParams(msgs []core.Message) []MessageParam {
 			case core.PART_KIND_PLAIN_TEXT:
 				if c.Text != "" {
 					blocks = append(blocks, ContentParam{Type: "text", Text: c.Text})
+				}
+			case core.PART_KIND_REASONING:
+				if c.Text != "" || c.Reasoning != nil {
+					if c.Reasoning != nil && (c.Reasoning.ID != "" || c.Reasoning.EncryptedContent != "") {
+						return nil, fmt.Errorf("anthropic: reasoning part carries Responses continuation metadata; encode it into an Anthropic signature before calling the adapter")
+					}
+					block := ContentParam{Type: "thinking", Thinking: c.Text}
+					if c.Reasoning != nil {
+						block.Signature = c.Reasoning.Signature
+					}
+					blocks = append(blocks, block)
 				}
 			case core.PART_KIND_TOOL_USE:
 				if c.ToolUse != nil {
@@ -52,7 +64,7 @@ func toMessageParams(msgs []core.Message) []MessageParam {
 		}
 		out = append(out, MessageParam{Role: role, Content: blocks})
 	}
-	return out
+	return out, nil
 }
 
 // toToolParams converts core tool specs into wire-format tool params. The
@@ -98,6 +110,8 @@ func toSDKParams(body RequestBody) (anthropic.MessageNewParams, error) {
 				if cp.Text != "" {
 					blocks = append(blocks, anthropic.NewTextBlock(cp.Text))
 				}
+			case "thinking":
+				blocks = append(blocks, anthropic.NewThinkingBlock(cp.Signature, cp.Thinking))
 			case "tool_use":
 				var args map[string]any
 				_ = json.Unmarshal(cp.Input, &args)
@@ -146,20 +160,35 @@ func fromSDKResponse(resp *anthropic.Message) core.ModelResult {
 	for _, block := range resp.Content {
 		switch block.Type {
 		case "text":
-			out.Text += block.Text
+			out.Parts = append(out.Parts, core.Part{
+				Kind: core.PART_KIND_PLAIN_TEXT,
+				Text: block.Text,
+			})
+		case "thinking":
+			out.Parts = append(out.Parts, core.Part{
+				Kind: core.PART_KIND_REASONING,
+				Text: block.Thinking,
+				Reasoning: &core.ReasoningState{
+					Signature: block.Signature,
+				},
+			})
 		case "tool_use":
 			if block.ID != "" {
 				var argsMap map[string]any
 				_ = json.Unmarshal(block.Input, &argsMap)
-				out.ToolCalls = append(out.ToolCalls, core.ToolCall{
+				call := core.ToolCall{
 					ID:   block.ID,
 					Name: block.Name,
 					Args: argsMap,
+				}
+				out.Parts = append(out.Parts, core.Part{
+					Kind:    core.PART_KIND_TOOL_USE,
+					ToolUse: &call,
 				})
 			}
 		}
 	}
-	return out
+	return out.NormalizeContent()
 }
 
 // stringifyJSON best-effort converts a JSON payload to the string form

@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/bizshuk/agentsdk/core"
-	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/bizshuk/agentsdk/memory"
 	"github.com/bizshuk/agentsdk/memory/checkpoint"
 	"github.com/bizshuk/agentsdk/memory/compaction"
 	"github.com/bizshuk/agentsdk/memory/filestore"
+	"github.com/bizshuk/agentsdk/utils/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +21,7 @@ func TestCharHeuristicCounter(t *testing.T) {
 	c := memory.CharHeuristicCounter{}
 	got := c.Count([]core.Message{
 		{Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hello"}}}, // 5/4+1=2
-		{Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "world"}}}, // 2
+		{Parts: []core.Part{{Kind: core.PART_KIND_REASONING, Text: "world"}}},  // 2
 	})
 	assert.Equal(t, 4, got)
 }
@@ -81,7 +81,7 @@ func TestJSONFileStateStoreRoundTrip(t *testing.T) {
 		Messages: []core.Message{
 			{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}},
 		},
-		Budget:   core.Budget{MaxTurns: 10, UsedTurns: 3},
+		Budget:    core.Budget{MaxTurns: 10, UsedTurns: 3},
 		UpdatedAt: time.Unix(1700000000, 0).UTC(),
 	}
 	require.NoError(t, s.Save(context.Background(), in))

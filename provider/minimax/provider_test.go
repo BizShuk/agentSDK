@@ -93,6 +93,63 @@ func TestGenerateAgainstFakeServer(t *testing.T) {
 	assert.Equal(t, 11, mr.Usage.TotalTokens)
 }
 
+func TestThinkingRoundTrip(t *testing.T) {
+	var requestBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&requestBody))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_1","type":"message","role":"assistant","model":"MiniMax-M3",
+			"stop_reason":"end_turn",
+			"content":[{"type":"thinking","thinking":"inspect","signature":"sig-out"},{"type":"text","text":"done"}],
+			"usage":{"input_tokens":1,"output_tokens":2}
+		}`))
+	}))
+	defer srv.Close()
+
+	p, err := minimax.New(minimaxConfig(srv.URL, "k"))
+	require.NoError(t, err)
+	result, err := p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{
+			Role: core.ROLE_ASSISTANT,
+			Parts: []core.Part{{
+				Kind:      core.PART_KIND_REASONING,
+				Text:      "previous",
+				Reasoning: &core.ReasoningState{Signature: "sig-in"},
+			}},
+		}},
+	})
+	require.NoError(t, err)
+
+	messages := requestBody["messages"].([]any)
+	content := messages[0].(map[string]any)["content"].([]any)
+	assert.Equal(t, "thinking", content[0].(map[string]any)["type"])
+	assert.Equal(t, "sig-in", content[0].(map[string]any)["signature"])
+	require.Len(t, result.Parts, 2)
+	assert.Equal(t, core.PART_KIND_REASONING, result.Parts[0].Kind)
+	require.NotNil(t, result.Parts[0].Reasoning)
+	assert.Equal(t, "sig-out", result.Parts[0].Reasoning.Signature)
+	assert.Equal(t, "done", result.Text)
+}
+
+func TestGenerateRejectsResponsesReasoningMetadata(t *testing.T) {
+	p, err := minimax.New(minimaxConfig("", "k"))
+	require.NoError(t, err)
+
+	_, err = p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{
+			Role: core.ROLE_ASSISTANT,
+			Parts: []core.Part{{
+				Kind:      core.PART_KIND_REASONING,
+				Text:      "inspect",
+				Reasoning: &core.ReasoningState{EncryptedContent: "encrypted"},
+			}},
+		}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Responses continuation metadata")
+}
+
 func TestRequestBodyValidate(t *testing.T) {
 	// Missing model.
 	err := minimax.RequestBody{}.Validate()
@@ -200,6 +257,8 @@ func TestDefaultCatalog(t *testing.T) {
 func TestStreamAgainstFakeServer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"inspect\"}}\n\n")
+		_, _ = io.WriteString(w, "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"signature_delta\",\"signature\":\"sig\"}}\n\n")
 		_, _ = io.WriteString(w, "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"}}\n\n")
 		_, _ = io.WriteString(w, "data: {\"type\":\"message_stop\"}\n\n")
 		_, _ = io.WriteString(w, "data: [DONE]\n\n")
@@ -215,14 +274,26 @@ func TestStreamAgainstFakeServer(t *testing.T) {
 	require.NoError(t, err)
 
 	var saw string
+	var thinking string
+	var signature string
 	var done bool
 	for c := range ch {
 		if c.Done {
 			done = true
 			continue
 		}
-		saw += c.Text
+		switch c.Kind {
+		case core.PART_KIND_REASONING:
+			thinking += c.Text
+			if c.Reasoning != nil {
+				signature += c.Reasoning.Signature
+			}
+		case core.PART_KIND_PLAIN_TEXT:
+			saw += c.Text
+		}
 	}
 	assert.True(t, done)
 	assert.True(t, strings.Contains(saw, "hi"))
+	assert.Equal(t, "inspect", thinking)
+	assert.Equal(t, "sig", signature)
 }

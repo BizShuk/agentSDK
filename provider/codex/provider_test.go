@@ -164,6 +164,85 @@ func TestLiftInstructions(t *testing.T) {
 	assert.Equal(t, "user", sawInput[0]["role"])
 }
 
+func TestResponsesReasoningRoundTrip(t *testing.T) {
+	var requestInput []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Input []map[string]any `json:"input"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		requestInput = body.Input
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(strings.Join([]string{
+			`data: {"type":"response.output_item.done","item":{"id":"reasoning_out","type":"reasoning","summary":[{"type":"summary_text","text":"inspect first"}],"encrypted_content":"encrypted-out"}}`,
+			``,
+			`data: {"type":"response.output_text.delta","delta":"done"}`,
+			``,
+			`data: {"type":"response.completed"}`,
+			``,
+		}, "\n")))
+	}))
+	defer srv.Close()
+
+	p, err := codex.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "k"},
+	})
+	require.NoError(t, err)
+	mr, err := p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{
+			Role: core.ROLE_ASSISTANT,
+			Parts: []core.Part{
+				{
+					Kind: core.PART_KIND_REASONING,
+					Text: "previous reasoning",
+					Reasoning: &core.ReasoningState{
+						ID:               "reasoning_in",
+						EncryptedContent: "encrypted-in",
+					},
+				},
+				{Kind: core.PART_KIND_PLAIN_TEXT, Text: "previous answer"},
+			},
+		}},
+	})
+	require.NoError(t, err)
+
+	require.Len(t, requestInput, 2)
+	assert.Equal(t, "reasoning", requestInput[0]["type"])
+	assert.Equal(t, "reasoning_in", requestInput[0]["id"])
+	assert.Equal(t, "encrypted-in", requestInput[0]["encrypted_content"])
+	summary := requestInput[0]["summary"].([]any)
+	assert.Equal(t, "previous reasoning", summary[0].(map[string]any)["text"])
+	assert.Equal(t, "message", requestInput[1]["type"])
+
+	require.Len(t, mr.Parts, 2)
+	reasoningPart := mr.Parts[0]
+	assert.Equal(t, core.PART_KIND_REASONING, reasoningPart.Kind)
+	assert.Equal(t, "inspect first", reasoningPart.Text)
+	require.NotNil(t, reasoningPart.Reasoning)
+	assert.Equal(t, "reasoning_out", reasoningPart.Reasoning.ID)
+	assert.Equal(t, "encrypted-out", reasoningPart.Reasoning.EncryptedContent)
+	assert.Equal(t, "done", mr.Text)
+}
+
+func TestResponsesRejectsUnrepresentableAnthropicSignature(t *testing.T) {
+	p, err := codex.New(provider.ResolvedConfig{Auth: core.Auth{APIKey: "k"}})
+	require.NoError(t, err)
+
+	_, err = p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{
+			Role: core.ROLE_ASSISTANT,
+			Parts: []core.Part{{
+				Kind:      core.PART_KIND_REASONING,
+				Text:      "thinking",
+				Reasoning: &core.ReasoningState{Signature: "anthropic-signature"},
+			}},
+		}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Anthropic signature")
+}
+
 func TestMaxOutputTokensStripped(t *testing.T) {
 	// Even when the caller sets MaxTokens, the wire body MUST NOT
 	// carry max_output_tokens (Codex rejects it).
@@ -190,6 +269,7 @@ func TestMaxOutputTokensStripped(t *testing.T) {
 	// Stream/Store are always-on contract checks.
 	assert.Equal(t, true, sawBody["stream"])
 	assert.Equal(t, false, sawBody["store"])
+	assert.Equal(t, []any{"reasoning.encrypted_content"}, sawBody["include"])
 }
 
 func TestLiteModelForcesParallelFalse(t *testing.T) {

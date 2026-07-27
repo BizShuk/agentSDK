@@ -48,6 +48,13 @@ func ParseStream(ctx context.Context, reader io.Reader) (<-chan core.ModelChunk,
 				continue
 			}
 			for _, choice := range chunk.Choices {
+				if choice.Delta.ReasoningContent != "" &&
+					!emit(ctx, out, core.ModelChunk{
+						Kind: core.PART_KIND_REASONING,
+						Text: choice.Delta.ReasoningContent,
+					}) {
+					return
+				}
 				if choice.Delta.Content != "" &&
 					!emit(ctx, out, core.ModelChunk{
 						Kind: core.PART_KIND_PLAIN_TEXT,

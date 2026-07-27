@@ -22,7 +22,7 @@ func (r RequestBody) Validate() error {
 		default:
 			return fmt.Errorf("grok: message[%d] role %q must be system|user|assistant|tool", i, m.Role)
 		}
-		if m.Content == "" && len(m.ToolCalls) == 0 && m.ToolCallID == "" {
+		if m.Content == "" && m.ReasoningContent == "" && len(m.ToolCalls) == 0 && m.ToolCallID == "" {
 			return fmt.Errorf("grok: message[%d] has empty content", i)
 		}
 	}

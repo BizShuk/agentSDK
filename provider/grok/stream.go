@@ -52,6 +52,13 @@ func ParseStream(ctx context.Context, r io.Reader) <-chan core.ModelChunk {
 				continue
 			}
 			delta := chunk.Choices[0].Delta
+			if delta.ReasoningContent != "" {
+				select {
+				case out <- core.ModelChunk{Kind: core.PART_KIND_REASONING, Text: delta.ReasoningContent}:
+				case <-ctx.Done():
+					return
+				}
+			}
 			if delta.Content != "" {
 				select {
 				case out <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: delta.Content}:

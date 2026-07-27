@@ -14,11 +14,12 @@ type requestBody struct {
 }
 
 type chatMessage struct {
-	Role       string     `json:"role"`
-	Content    string     `json:"content,omitempty"`
-	ToolCalls  []toolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
-	Name       string     `json:"name,omitempty"`
+	Role             string     `json:"role"`
+	Content          string     `json:"content,omitempty"`
+	ReasoningContent string     `json:"reasoning_content,omitempty"`
+	ToolCalls        []toolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string     `json:"tool_call_id,omitempty"`
+	Name             string     `json:"name,omitempty"`
 }
 
 type toolCall struct {
@@ -62,9 +63,10 @@ type streamChunk struct {
 	Choices []struct {
 		Index int `json:"index"`
 		Delta struct {
-			Role      string     `json:"role,omitempty"`
-			Content   string     `json:"content,omitempty"`
-			ToolCalls []toolCall `json:"tool_calls,omitempty"`
+			Role             string     `json:"role,omitempty"`
+			Content          string     `json:"content,omitempty"`
+			ReasoningContent string     `json:"reasoning_content,omitempty"`
+			ToolCalls        []toolCall `json:"tool_calls,omitempty"`
 		} `json:"delta"`
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`

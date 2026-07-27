@@ -65,10 +65,14 @@ func New(cfg provider.ResolvedConfig) (*Provider, error) {
 
 // Generate implements core.Provider.
 func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
+	messages, err := toChatMessages(req.Messages)
+	if err != nil {
+		return core.ModelResult{}, err
+	}
 	body := RequestBody{
 		Model:     p.model,
 		MaxTokens: maxTokensOrDefault(req),
-		Messages:  toChatMessages(req.Messages),
+		Messages:  messages,
 		Stream:    false,
 	}
 	if len(req.Tools) > 0 {
@@ -108,9 +112,13 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 // Stream implements core.StreamProvider. Streams SSE chunks and forwards them
 // as core.ModelChunk.
 func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
+	messages, err := toChatMessages(req.Messages)
+	if err != nil {
+		return nil, err
+	}
 	body := RequestBody{
 		Model:    p.model,
-		Messages: toChatMessages(req.Messages),
+		Messages: messages,
 		Stream:   true,
 	}
 	if len(req.Tools) > 0 {
@@ -166,7 +174,7 @@ func (p *Provider) applyHeaders(req *http.Request, override core.Auth, stream bo
 // internal — DTO translation
 // ---------------------------------------------------------------------------
 
-func toChatMessages(msgs []core.Message) []ChatMessage {
+func toChatMessages(msgs []core.Message) ([]ChatMessage, error) {
 	out := make([]ChatMessage, 0, len(msgs))
 	for _, m := range msgs {
 		role := "user"
@@ -178,8 +186,11 @@ func toChatMessages(msgs []core.Message) []ChatMessage {
 		case core.ROLE_TOOL:
 			role = "tool"
 		}
-		text, toolCalls, toolResults := flattenMessage(m)
-		cm := ChatMessage{Role: role, Content: text, ToolCalls: toolCalls}
+		text, reasoningText, toolCalls, toolResults, err := flattenMessage(m)
+		if err != nil {
+			return nil, err
+		}
+		cm := ChatMessage{Role: role, Content: text, ReasoningContent: reasoningText, ToolCalls: toolCalls}
 		if len(toolResults) > 0 {
 			cm.ToolCallID = toolResults[0].CallID
 			cm.Content = toolResults[0].OutputAsString()
@@ -187,7 +198,7 @@ func toChatMessages(msgs []core.Message) []ChatMessage {
 		}
 		out = append(out, cm)
 	}
-	return out
+	return out, nil
 }
 
 type flatToolResult struct {
@@ -204,14 +215,20 @@ func (r flatToolResult) OutputAsString() string {
 	return string(raw)
 }
 
-func flattenMessage(m core.Message) (string, []ToolCall, []flatToolResult) {
+func flattenMessage(m core.Message) (string, string, []ToolCall, []flatToolResult, error) {
 	var sb strings.Builder
+	var reasoning strings.Builder
 	var tcs []ToolCall
 	var trs []flatToolResult
 	for _, c := range m.Parts {
 		switch c.Kind {
 		case core.PART_KIND_PLAIN_TEXT:
 			sb.WriteString(c.Text)
+		case core.PART_KIND_REASONING:
+			if c.Reasoning != nil && (c.Reasoning.ID != "" || c.Reasoning.Signature != "" || c.Reasoning.EncryptedContent != "") {
+				return "", "", nil, nil, fmt.Errorf("grok: Chat reasoning_content cannot preserve reasoning continuation metadata")
+			}
+			reasoning.WriteString(c.Text)
 		case core.PART_KIND_TOOL_USE:
 			if c.ToolUse != nil {
 				args, _ := json.Marshal(c.ToolUse.Args)
@@ -233,7 +250,7 @@ func flattenMessage(m core.Message) (string, []ToolCall, []flatToolResult) {
 			}
 		}
 	}
-	return sb.String(), tcs, trs
+	return sb.String(), reasoning.String(), tcs, trs, nil
 }
 
 func toToolDefs(schemas []core.ToolSpec) []ToolDef {
@@ -260,17 +277,29 @@ func fromResponse(cr Response) core.ModelResult {
 		},
 	}
 	for _, c := range cr.Choices {
-		out.Text += c.Message.Content
+		if c.Message.ReasoningContent != "" {
+			out.Parts = append(out.Parts, core.Part{
+				Kind: core.PART_KIND_REASONING,
+				Text: c.Message.ReasoningContent,
+			})
+		}
+		if c.Message.Content != "" {
+			out.Parts = append(out.Parts, core.Part{
+				Kind: core.PART_KIND_PLAIN_TEXT,
+				Text: c.Message.Content,
+			})
+		}
 		out.StopReason = c.FinishReason
 		for _, tc := range c.Message.ToolCalls {
 			var args map[string]any
 			_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
-			out.ToolCalls = append(out.ToolCalls, core.ToolCall{
+			call := core.ToolCall{
 				ID: tc.ID, Name: tc.Function.Name, Args: args,
-			})
+			}
+			out.Parts = append(out.Parts, core.Part{Kind: core.PART_KIND_TOOL_USE, ToolUse: &call})
 		}
 	}
-	return out
+	return out.NormalizeContent()
 }
 
 func maxTokensOrDefault(req core.ModelRequest) int {

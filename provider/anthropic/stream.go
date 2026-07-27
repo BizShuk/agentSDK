@@ -54,10 +54,12 @@ type StreamEvent struct {
 }
 
 // StreamDelta is the per-event delta payload. Its `type` distinguishes
-// text_delta from input_json_delta (the latter carries partial tool args).
+// text, thinking, signature, and partial tool-argument deltas.
 type StreamDelta struct {
 	Type       string `json:"type,omitempty"`
 	Text       string `json:"text,omitempty"`
+	Thinking   string `json:"thinking,omitempty"`
+	Signature  string `json:"signature,omitempty"`
 	StopReason string `json:"stop_reason,omitempty"`
 }
 
@@ -106,12 +108,36 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 			}
 			switch ev.Type {
 			case "content_block_delta":
-				if ev.Delta != nil && ev.Delta.Text != "" {
-					select {
-					case out <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: ev.Delta.Text}:
-					case <-ctx.Done():
-						return
+				if ev.Delta == nil {
+					continue
+				}
+				var chunk core.ModelChunk
+				switch ev.Delta.Type {
+				case "text_delta":
+					if ev.Delta.Text == "" {
+						continue
 					}
+					chunk = core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: ev.Delta.Text}
+				case "thinking_delta":
+					if ev.Delta.Thinking == "" {
+						continue
+					}
+					chunk = core.ModelChunk{Kind: core.PART_KIND_REASONING, Text: ev.Delta.Thinking}
+				case "signature_delta":
+					if ev.Delta.Signature == "" {
+						continue
+					}
+					chunk = core.ModelChunk{
+						Kind:      core.PART_KIND_REASONING,
+						Reasoning: &core.ReasoningState{Signature: ev.Delta.Signature},
+					}
+				default:
+					continue
+				}
+				select {
+				case out <- chunk:
+				case <-ctx.Done():
+					return
 				}
 			case "content_block_stop":
 				if ev.ContentBlock != nil && ev.ContentBlock.Type == "tool_use" {

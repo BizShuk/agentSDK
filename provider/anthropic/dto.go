@@ -37,11 +37,13 @@ type Response struct {
 
 // ContentBlock is one element of response.content (text / tool_use / thinking).
 type ContentBlock struct {
-	Type  string          `json:"type"` // "text" | "tool_use" | "thinking"
-	Text  string          `json:"text,omitempty"`
-	ID    string          `json:"id,omitempty"`    // tool_use id
-	Name  string          `json:"name,omitempty"`  // tool_use name
-	Input json.RawMessage `json:"input,omitempty"` // tool_use args
+	Type      string          `json:"type"` // "text" | "tool_use" | "thinking"
+	Text      string          `json:"text,omitempty"`
+	Thinking  string          `json:"thinking,omitempty"`
+	Signature string          `json:"signature,omitempty"`
+	ID        string          `json:"id,omitempty"`    // tool_use id
+	Name      string          `json:"name,omitempty"`  // tool_use name
+	Input     json.RawMessage `json:"input,omitempty"` // tool_use args
 }
 
 // MessageParam is one element of request.messages.
@@ -50,11 +52,13 @@ type MessageParam struct {
 	Content []ContentParam `json:"content"`
 }
 
-// ContentParam is one block of a message (text / tool_use / tool_result).
+// ContentParam is one block of a message (text / thinking / tool_use / tool_result).
 // We keep the wire shape Anthropic expects.
 type ContentParam struct {
-	Type      string          `json:"type"` // "text" | "tool_use" | "tool_result"
+	Type      string          `json:"type"` // "text" | "thinking" | "tool_use" | "tool_result"
 	Text      string          `json:"text,omitempty"`
+	Thinking  string          `json:"thinking,omitempty"`
+	Signature string          `json:"signature,omitempty"`
 	ID        string          `json:"id,omitempty"`
 	Name      string          `json:"name,omitempty"`
 	Input     json.RawMessage `json:"input,omitempty"`

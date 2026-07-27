@@ -181,6 +181,17 @@ func toRequestBody(req core.ModelRequest, model string) (RequestBody, error) {
 				if c.Text != "" {
 					blocks = append(blocks, ContentParam{Type: "text", Text: c.Text})
 				}
+			case core.PART_KIND_REASONING:
+				if c.Text != "" || c.Reasoning != nil {
+					if c.Reasoning != nil && (c.Reasoning.ID != "" || c.Reasoning.EncryptedContent != "") {
+						return RequestBody{}, fmt.Errorf("minimax: reasoning part carries Responses continuation metadata; encode it into an Anthropic signature before calling the adapter")
+					}
+					block := ContentParam{Type: "thinking", Thinking: c.Text}
+					if c.Reasoning != nil {
+						block.Signature = c.Reasoning.Signature
+					}
+					blocks = append(blocks, block)
+				}
 			case core.PART_KIND_TOOL_USE:
 				if c.ToolUse != nil {
 					raw, _ := json.Marshal(c.ToolUse.Args)
@@ -237,20 +248,27 @@ func fromResponse(r Response) core.ModelResult {
 	for _, block := range r.Content {
 		switch block.Type {
 		case "text":
-			out.Text += block.Text
+			out.Parts = append(out.Parts, core.Part{Kind: core.PART_KIND_PLAIN_TEXT, Text: block.Text})
+		case "thinking":
+			out.Parts = append(out.Parts, core.Part{
+				Kind:      core.PART_KIND_REASONING,
+				Text:      block.Thinking,
+				Reasoning: &core.ReasoningState{Signature: block.Signature},
+			})
 		case "tool_use":
 			if block.ID != "" {
 				var argsMap map[string]any
 				_ = json.Unmarshal(block.Input, &argsMap)
-				out.ToolCalls = append(out.ToolCalls, core.ToolCall{
+				call := core.ToolCall{
 					ID:   block.ID,
 					Name: block.Name,
 					Args: argsMap,
-				})
+				}
+				out.Parts = append(out.Parts, core.Part{Kind: core.PART_KIND_TOOL_USE, ToolUse: &call})
 			}
 		}
 	}
-	return out
+	return out.NormalizeContent()
 }
 
 // maxTokensOrDefault returns req.MaxTokens or 4096 when unset. The

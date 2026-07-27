@@ -20,6 +20,13 @@ Go Agentic Loop SDK：以`宣告式設定`組裝目標導向控制迴圈 (Goal-d
 `core.StreamProvider`，live model catalog 是 optional `core.ModelLister`。provider 名稱、認證 metadata
 與 static catalog 由 `provider.Entry` 統一持有，不塞回 runtime client。
 
+模型輸出的 reasoning content 與 agent 的 reasoning strategy 是兩條不同軸：前者使用
+`core.Part{Kind: PART_KIND_REASONING}`，文字放在 `Part.Text`，Anthropic `thinking.signature`
+與 Responses reasoning `id` / `encrypted_content` 放在 `ReasoningState`；後者仍由
+`State.ReasoningStyle` 選擇 `reasoning.DecisionRule`。`ModelResult.Parts` 保存原始順序並是
+canonical content，`Text` / `ToolCalls` 只保留為相容投影；runtime 寫 transcript 時不會把
+reasoning part 當成一般可見文字，也不會在 tool loop 的下一輪丟失 continuation metadata。
+
 provider 建構只有一條 pipeline：`provider.Options`（尚未解析的 live input）經
 `Options.Resolve(Entry.Metadata)` 變成 `provider.ResolvedConfig{Model, BaseURL, Auth}`，
 再交給 adapter `New`。env / viper lookup 不進 adapter；`core.Auth` 只承載 credential 與
@@ -204,6 +211,9 @@ client response ← reverse directed pair transform ← provider response
 - 支援 `Anthropic Messages`、`OpenAI Chat Completions`、`OpenAI Responses` 的完整 `3×3` request、non-stream response 與 SSE stream matrix。
 - concrete profiles 包含 `anthropic`、`minimax`、`openai-api`、`openai-codex-oauth`、`xai`。
 - xAI 預設走 `OpenAI Responses`；qualified model `xai-chat/<model>` 可明確選擇 `OpenAI Chat Completions`。
+- 若後續讓 proxy transform 以 `core.Part` 作 canonical message IR，Anthropic `thinking` 與
+  Responses `reasoning` 必須映射為 `PART_KIND_REASONING`；opaque continuation state 不可降格成
+  plain text。外部 proxy 仍負責解碼其版本化 signature envelope。
 - provider selection 由 qualified model、credential kind 與 profile capability 決定，不以 client protocol 綁定 provider。
 - 四個參考來源的 `37` 個 directed wire-format entity 與雙向 payload 範例見外部 repo `bizshuk/proxy` 的 `docs/specs/format/README.md`。
 

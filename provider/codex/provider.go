@@ -89,15 +89,18 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 		}
 		switch chunk.Kind {
 		case core.PART_KIND_PLAIN_TEXT:
-			out.Text += chunk.Text
+			appendModelPart(&out, core.Part{Kind: core.PART_KIND_PLAIN_TEXT, Text: chunk.Text})
 			out.StopReason = "stop"
+		case core.PART_KIND_REASONING:
+			appendModelPart(&out, core.Part{
+				Kind:      core.PART_KIND_REASONING,
+				Text:      chunk.Text,
+				Reasoning: chunk.Reasoning,
+			})
 		case core.PART_KIND_TOOL_USE:
 			if chunk.ToolUse != nil {
-				out.ToolCalls = append(out.ToolCalls, core.ToolCall{
-					ID:   chunk.ToolUse.ID,
-					Name: chunk.ToolUse.Name,
-					Args: chunk.ToolUse.Args,
-				})
+				call := *chunk.ToolUse
+				appendModelPart(&out, core.Part{Kind: core.PART_KIND_TOOL_USE, ToolUse: &call})
 				out.StopReason = "tool_use"
 			}
 		}
@@ -108,7 +111,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 		}
 		return core.ModelResult{}, fmt.Errorf("codex: stream closed before terminal chunk")
 	}
-	return out, nil
+	return out.NormalizeContent(), nil
 }
 
 // Stream implements core.StreamProvider. It returns a channel of
@@ -154,15 +157,19 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 //     drop req.MaxTokens — see buildRequestBody)
 //   - for lite models (IsLiteModel), force parallel_tool_calls=false
 //
-// The function never returns an error today; it returns one for the
-// future case where a stricter Codex requirement surfaces.
+// The function rejects provider-specific reasoning metadata that the
+// Responses wire format cannot preserve.
 func (p *Provider) buildRequestBody(req core.ModelRequest) (RequestBody, error) {
 	body := RequestBody{
-		Model:  p.model,
-		Stream: true,
-		Store:  false,
+		Model:   p.model,
+		Stream:  true,
+		Store:   false,
+		Include: []string{"reasoning.encrypted_content"},
 	}
-	instructions, input := liftInstructions(req.Messages)
+	instructions, input, err := liftInstructions(req.Messages)
+	if err != nil {
+		return RequestBody{}, err
+	}
 	body.Instructions = instructions
 	body.Input = input
 	body.Tools = translateTools(req.Tools)
@@ -182,7 +189,7 @@ func (p *Provider) buildRequestBody(req core.ModelRequest) (RequestBody, error) 
 //
 // Each text part is joined with "\n\n" so multi-part system
 // prompts render as separate paragraphs in Codex's view.
-func liftInstructions(msgs []core.Message) (string, []InputItem) {
+func liftInstructions(msgs []core.Message) (string, []InputItem, error) {
 	var instructions []string
 	input := make([]InputItem, 0, len(msgs))
 	for _, m := range msgs {
@@ -202,12 +209,26 @@ func liftInstructions(msgs []core.Message) (string, []InputItem) {
 			role = "tool"
 		}
 		item := InputItem{Type: "message", Role: role}
+		flushMessage := func() {
+			if len(item.Content) == 0 {
+				return
+			}
+			input = append(input, item)
+			item = InputItem{Type: "message", Role: role}
+		}
 		for _, c := range m.Parts {
 			switch c.Kind {
 			case core.PART_KIND_PLAIN_TEXT:
 				if c.Text != "" {
 					item.Content = append(item.Content, ContentBlock{Type: "input_text", Text: c.Text})
 				}
+			case core.PART_KIND_REASONING:
+				flushMessage()
+				reasoningItem, err := toReasoningInput(c)
+				if err != nil {
+					return "", nil, err
+				}
+				input = append(input, reasoningItem)
 			case core.PART_KIND_IMAGE:
 				if len(c.Image) > 0 {
 					mime := c.ImageMIME
@@ -223,6 +244,7 @@ func liftInstructions(msgs []core.Message) (string, []InputItem) {
 				}
 			case core.PART_KIND_TOOL_USE:
 				if c.ToolUse != nil {
+					flushMessage()
 					input = append(input, InputItem{
 						Type: "message",
 						Role: "assistant",
@@ -242,9 +264,36 @@ func liftInstructions(msgs []core.Message) (string, []InputItem) {
 				}
 			}
 		}
-		input = append(input, item)
+		flushMessage()
 	}
-	return strings.Join(instructions, "\n\n"), input
+	return strings.Join(instructions, "\n\n"), input, nil
+}
+
+func toReasoningInput(part core.Part) (InputItem, error) {
+	item := InputItem{Type: "reasoning"}
+	if part.Text != "" {
+		item.Summary = []ContentBlock{{Type: "summary_text", Text: part.Text}}
+	}
+	if part.Reasoning == nil {
+		return item, nil
+	}
+	if part.Reasoning.Signature != "" {
+		return InputItem{}, fmt.Errorf("codex: reasoning part carries an Anthropic signature that Responses cannot represent")
+	}
+	item.ID = part.Reasoning.ID
+	item.EncryptedContent = part.Reasoning.EncryptedContent
+	return item, nil
+}
+
+func appendModelPart(result *core.ModelResult, part core.Part) {
+	if part.Kind == core.PART_KIND_PLAIN_TEXT && len(result.Parts) > 0 {
+		last := &result.Parts[len(result.Parts)-1]
+		if last.Kind == core.PART_KIND_PLAIN_TEXT {
+			last.Text += part.Text
+			return
+		}
+	}
+	result.Parts = append(result.Parts, part)
 }
 
 // translateTools converts core.ToolSpec → codex.Tool, copying the

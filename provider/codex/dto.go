@@ -39,6 +39,7 @@ type RequestBody struct {
 	Input        []InputItem `json:"input"`        // non-instruction messages
 	Stream       bool        `json:"stream"`       // always true
 	Store        bool        `json:"store"`        // always false
+	Include      []string    `json:"include"`      // always requests opaque reasoning continuation state
 	Tools        []Tool      `json:"tools,omitempty"`
 
 	// The following two fields are intentionally NOT serialized by
@@ -54,9 +55,12 @@ type RequestBody struct {
 
 // InputItem is one element of request.input.
 type InputItem struct {
-	Type    string         `json:"type"` // "message"
-	Role    string         `json:"role"` // "user" | "assistant" | "tool"
-	Content []ContentBlock `json:"content"`
+	Type             string         `json:"type"` // "message" | "reasoning"
+	ID               string         `json:"id,omitempty"`
+	Role             string         `json:"role,omitempty"` // "user" | "assistant" | "tool"
+	Content          []ContentBlock `json:"content,omitempty"`
+	Summary          []ContentBlock `json:"summary,omitempty"`
+	EncryptedContent string         `json:"encrypted_content,omitempty"`
 }
 
 // ContentBlock is one block of an InputItem.Content or an
@@ -96,11 +100,14 @@ type Response struct {
 }
 
 // OutputItem is one element of response.output. The `type`
-// discriminator distinguishes a message (text reply) from a tool call.
+// discriminator distinguishes a message, reasoning item, or tool call.
 type OutputItem struct {
-	Type    string         `json:"type"`              // "message" | "tool_call"
+	Type    string         `json:"type"`              // "message" | "reasoning" | "tool_call"
 	Role    string         `json:"role,omitempty"`    // "assistant" when type=message
 	Content []ContentBlock `json:"content,omitempty"` // populated when type=message
+	Summary []ContentBlock `json:"summary,omitempty"` // populated when type=reasoning
+
+	EncryptedContent string `json:"encrypted_content,omitempty"`
 	// tool_call fields:
 	ID        string `json:"id,omitempty"`        // tool call id
 	Name      string `json:"name,omitempty"`      // tool name

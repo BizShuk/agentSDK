@@ -86,19 +86,36 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, erro
 					}
 				}
 			case "response.output_item.done":
-				if chunk.Item != nil && chunk.Item.Type == "tool_call" {
-					select {
-					case out <- core.ModelChunk{
+				if chunk.Item == nil {
+					continue
+				}
+				var modelChunk core.ModelChunk
+				switch chunk.Item.Type {
+				case "reasoning":
+					modelChunk = core.ModelChunk{
+						Kind: core.PART_KIND_REASONING,
+						Text: reasoningSummaryText(chunk.Item.Summary),
+						Reasoning: &core.ReasoningState{
+							ID:               chunk.Item.ID,
+							EncryptedContent: chunk.Item.EncryptedContent,
+						},
+					}
+				case "tool_call", "function_call":
+					modelChunk = core.ModelChunk{
 						Kind: core.PART_KIND_TOOL_USE,
 						ToolUse: &core.ToolCall{
 							ID:   chunk.Item.ID,
 							Name: chunk.Item.Name,
 							Args: decodeArgs(chunk.Item.Arguments),
 						},
-					}:
-					case <-ctx.Done():
-						return
 					}
+				default:
+					continue
+				}
+				select {
+				case out <- modelChunk:
+				case <-ctx.Done():
+					return
 				}
 			case "response.completed":
 				emitDone(ctx, out)
@@ -122,6 +139,16 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, erro
 		emitDone(ctx, out)
 	}()
 	return out, nil
+}
+
+func reasoningSummaryText(summary []ContentBlock) string {
+	var out strings.Builder
+	for _, part := range summary {
+		if part.Type == "summary_text" {
+			out.WriteString(part.Text)
+		}
+	}
+	return out.String()
 }
 
 // emitDone sends the terminal sentinel chunk. It uses a non-blocking

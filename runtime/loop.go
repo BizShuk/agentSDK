@@ -98,26 +98,15 @@ func (e *Engine) runInstruction(ctx context.Context, s core.State, inst core.Ins
 		if err != nil {
 			return s, nil, false, fmt.Errorf("model generate: %w", err)
 		}
+		mr = mr.NormalizeContent()
 		// Append assistant message with tool_use parts so the next
 		// CALL_MODEL sees the full Anthropic-style turn pairing
-		// (assistant tool_use → tool result).
-		if len(mr.ToolCalls) > 0 || mr.Text != "" {
-			var parts []core.Part
-			if mr.Text != "" {
-				parts = append(parts, core.Part{
-					Kind: core.PART_KIND_PLAIN_TEXT,
-					Text: mr.Text,
-				})
-			}
-			for _, tc := range mr.ToolCalls {
-				parts = append(parts, core.Part{
-					Kind:    core.PART_KIND_TOOL_USE,
-					ToolUse: &tc,
-				})
-			}
+		// (assistant tool_use → tool result). Parts also retains ordered
+		// reasoning content and its opaque continuation metadata.
+		if len(mr.Parts) > 0 {
 			s.Messages = append(s.Messages, core.Message{
 				Role:  core.ROLE_ASSISTANT,
-				Parts: parts,
+				Parts: append([]core.Part(nil), mr.Parts...),
 				Ts:    time.Now().UTC(),
 			})
 		}

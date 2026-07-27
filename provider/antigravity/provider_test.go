@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/bizshuk/agentsdk/core"
@@ -127,6 +128,88 @@ func TestBearerHeaderFromOAuth(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer ya29.fake-bearer-token", gotAuth)
 	assert.Empty(t, gotAPIKey, "OAuth mode must not send x-api-key")
+}
+
+func TestThinkingRoundTrip(t *testing.T) {
+	var requestBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&requestBody))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-5",
+			"stop_reason":"end_turn",
+			"content":[{"type":"thinking","thinking":"inspect","signature":"sig-out"},{"type":"text","text":"done"}],
+			"usage":{"input_tokens":1,"output_tokens":2}
+		}`))
+	}))
+	defer srv.Close()
+
+	p, err := antigravity.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "k"},
+	})
+	require.NoError(t, err)
+	result, err := p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{
+			Role: core.ROLE_ASSISTANT,
+			Parts: []core.Part{{
+				Kind:      core.PART_KIND_REASONING,
+				Text:      "previous",
+				Reasoning: &core.ReasoningState{Signature: "sig-in"},
+			}},
+		}},
+	})
+	require.NoError(t, err)
+
+	messages := requestBody["messages"].([]any)
+	content := messages[0].(map[string]any)["content"].([]any)
+	assert.Equal(t, "thinking", content[0].(map[string]any)["type"])
+	assert.Equal(t, "sig-in", content[0].(map[string]any)["signature"])
+	require.Len(t, result.Parts, 2)
+	assert.Equal(t, core.PART_KIND_REASONING, result.Parts[0].Kind)
+	require.NotNil(t, result.Parts[0].Reasoning)
+	assert.Equal(t, "sig-out", result.Parts[0].Reasoning.Signature)
+	assert.Equal(t, "done", result.Text)
+}
+
+func TestStreamPreservesThinkingAndSignature(t *testing.T) {
+	stream := strings.NewReader(strings.Join([]string{
+		`data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"inspect"}}`,
+		``,
+		`data: {"type":"content_block_delta","delta":{"type":"signature_delta","signature":"sig"}}`,
+		``,
+		`data: {"type":"message_stop"}`,
+		``,
+	}, "\n"))
+	chunks, _ := antigravity.ParseStream(context.Background(), stream)
+	var got []core.ModelChunk
+	for chunk := range chunks {
+		got = append(got, chunk)
+	}
+	require.Len(t, got, 3)
+	assert.Equal(t, core.PART_KIND_REASONING, got[0].Kind)
+	assert.Equal(t, "inspect", got[0].Text)
+	require.NotNil(t, got[1].Reasoning)
+	assert.Equal(t, "sig", got[1].Reasoning.Signature)
+	assert.True(t, got[2].Done)
+}
+
+func TestGenerateRejectsResponsesReasoningMetadata(t *testing.T) {
+	p, err := antigravity.New(provider.ResolvedConfig{Auth: core.Auth{APIKey: "k"}})
+	require.NoError(t, err)
+
+	_, err = p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{
+			Role: core.ROLE_ASSISTANT,
+			Parts: []core.Part{{
+				Kind:      core.PART_KIND_REASONING,
+				Text:      "inspect",
+				Reasoning: &core.ReasoningState{ID: "reasoning_1"},
+			}},
+		}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Responses continuation metadata")
 }
 
 // TestRequestBodyValidate — covers the four Validate() failure modes.

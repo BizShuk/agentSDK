@@ -27,7 +27,8 @@ func (CharHeuristicCounter) Count(msgs []core.Message) int {
 	n := 0
 	for _, m := range msgs {
 		for _, c := range m.Parts {
-			if c.Kind == core.PART_KIND_PLAIN_TEXT {
+			switch c.Kind {
+			case core.PART_KIND_PLAIN_TEXT, core.PART_KIND_REASONING:
 				// +1 so an empty message still registers 1 token.
 				n += len(c.Text)/4 + 1
 			}

@@ -71,6 +71,90 @@ func TestGenerateParsesTextAndToolUse(t *testing.T) {
 	assert.Equal(t, 18, mr.Usage.TotalTokens, "input+output")
 }
 
+func TestGenerateRoundTripsThinking(t *testing.T) {
+	var gotThinking map[string]any
+	body := `{
+	  "id":"msg_1",
+	  "type":"message",
+	  "role":"assistant",
+	  "model":"claude-opus-4-8",
+	  "stop_reason":"tool_use",
+	  "content":[
+	    {"type":"thinking","thinking":"inspect first","signature":"sig-response"},
+	    {"type":"tool_use","id":"call-1","name":"read","input":{}}
+	  ],
+	  "usage":{"input_tokens":2,"output_tokens":3}
+	}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Messages []struct {
+				Content []map[string]any `json:"content"`
+			} `json:"messages"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+		for _, block := range request.Messages[0].Content {
+			if block["type"] == "thinking" {
+				gotThinking = block
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	p, err := anthropic.New(provider.ResolvedConfig{
+		BaseURL: srv.URL,
+		Auth:    core.Auth{APIKey: "sk-test"},
+	})
+	require.NoError(t, err)
+
+	mr, err := p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{
+			Role: core.ROLE_ASSISTANT,
+			Parts: []core.Part{{
+				Kind:      core.PART_KIND_REASONING,
+				Text:      "inspect previous turn",
+				Reasoning: &core.ReasoningState{Signature: "sig-request"},
+			}},
+		}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "thinking", gotThinking["type"])
+	assert.Equal(t, "inspect previous turn", gotThinking["thinking"])
+	assert.Equal(t, "sig-request", gotThinking["signature"])
+
+	require.Len(t, mr.Parts, 2)
+	reasoningPart := mr.Parts[0]
+	assert.Equal(t, core.PART_KIND_REASONING, reasoningPart.Kind)
+	assert.Equal(t, "inspect first", reasoningPart.Text)
+	require.NotNil(t, reasoningPart.Reasoning)
+	assert.Equal(t, "sig-response", reasoningPart.Reasoning.Signature)
+	assert.Empty(t, mr.Text, "reasoning must not be folded into visible assistant text")
+	require.Len(t, mr.ToolCalls, 1)
+	assert.Equal(t, "call-1", mr.ToolCalls[0].ID)
+}
+
+func TestGenerateRejectsResponsesReasoningMetadata(t *testing.T) {
+	p, err := anthropic.New(provider.ResolvedConfig{Auth: core.Auth{APIKey: "sk-test"}})
+	require.NoError(t, err)
+
+	_, err = p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{
+			Role: core.ROLE_ASSISTANT,
+			Parts: []core.Part{{
+				Kind: core.PART_KIND_REASONING,
+				Text: "inspect",
+				Reasoning: &core.ReasoningState{
+					ID:               "reasoning_1",
+					EncryptedContent: "encrypted",
+				},
+			}},
+		}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Responses continuation metadata")
+}
+
 func TestGenerateAuthHeaders(t *testing.T) {
 	cases := []struct {
 		name              string

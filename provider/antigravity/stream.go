@@ -57,6 +57,8 @@ type StreamEvent struct {
 type StreamDelta struct {
 	Type       string `json:"type,omitempty"`
 	Text       string `json:"text,omitempty"`
+	Thinking   string `json:"thinking,omitempty"`
+	Signature  string `json:"signature,omitempty"`
 	StopReason string `json:"stop_reason,omitempty"`
 }
 
@@ -103,12 +105,14 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 			}
 			switch ev.Type {
 			case "content_block_delta":
-				if ev.Delta != nil && ev.Delta.Text != "" {
-					select {
-					case out <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: ev.Delta.Text}:
-					case <-ctx.Done():
-						return
-					}
+				chunk, ok := reasoningAwareChunk(ev.Delta)
+				if !ok {
+					continue
+				}
+				select {
+				case out <- chunk:
+				case <-ctx.Done():
+					return
 				}
 			case "content_block_stop":
 				if ev.ContentBlock != nil && ev.ContentBlock.Type == "tool_use" {
@@ -162,6 +166,25 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 	}()
 
 	return out, stop
+}
+
+func reasoningAwareChunk(delta *StreamDelta) (core.ModelChunk, bool) {
+	if delta == nil {
+		return core.ModelChunk{}, false
+	}
+	switch delta.Type {
+	case "text_delta":
+		return core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: delta.Text}, delta.Text != ""
+	case "thinking_delta":
+		return core.ModelChunk{Kind: core.PART_KIND_REASONING, Text: delta.Thinking}, delta.Thinking != ""
+	case "signature_delta":
+		return core.ModelChunk{
+			Kind:      core.PART_KIND_REASONING,
+			Reasoning: &core.ReasoningState{Signature: delta.Signature},
+		}, delta.Signature != ""
+	default:
+		return core.ModelChunk{}, false
+	}
 }
 
 func decodeArgs(raw json.RawMessage) map[string]any {

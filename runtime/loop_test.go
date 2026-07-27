@@ -69,6 +69,43 @@ func TestReActEndTurnExitsLoop(t *testing.T) {
 	assert.Equal(t, 1, prov.calls)
 }
 
+func TestModelReasoningPartIsRetainedInTranscript(t *testing.T) {
+	prov := testutil.NewScriptedProvider()
+	prov.Enqueue(core.ModelResult{
+		Parts: []core.Part{
+			{
+				Kind: core.PART_KIND_REASONING,
+				Text: "inspect first",
+				Reasoning: &core.ReasoningState{
+					ID:               "reasoning_1",
+					EncryptedContent: "encrypted-reasoning",
+				},
+			},
+			{Kind: core.PART_KIND_PLAIN_TEXT, Text: "done"},
+		},
+		StopReason: "end_turn",
+	})
+
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
+	})
+	loop := runtime.NewEngine(step, prov, tool.NewRegistry())
+	final, err := loop.Run(context.Background(), core.State{
+		ReasoningStyle: core.REASON_REACT,
+		Budget:         core.Budget{MaxTurns: 5},
+	})
+	require.NoError(t, err)
+
+	require.Len(t, final.Messages, 1)
+	require.Len(t, final.Messages[0].Parts, 2)
+	reasoningPart := final.Messages[0].Parts[0]
+	assert.Equal(t, core.PART_KIND_REASONING, reasoningPart.Kind)
+	assert.Equal(t, "inspect first", reasoningPart.Text)
+	require.NotNil(t, reasoningPart.Reasoning)
+	assert.Equal(t, "reasoning_1", reasoningPart.Reasoning.ID)
+	assert.Equal(t, "encrypted-reasoning", reasoningPart.Reasoning.EncryptedContent)
+}
+
 // TestReActOneToolCall exercises CALL_TOOL → CALL_MODEL → DONE:
 //  1. ReAct starts in THINK → emits CALL_MODEL
 //  2. FakeProvider returns tool_use (add 2+3) → loop dispatches tool, gets result 5

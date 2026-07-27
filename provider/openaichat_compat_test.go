@@ -254,6 +254,52 @@ func TestOpenAIChatErrorSemantics(t *testing.T) {
 	}
 }
 
+func TestOpenAIChatRejectsReasoningParts(t *testing.T) {
+	req := core.ModelRequest{Messages: []core.Message{{
+		Role: core.ROLE_ASSISTANT,
+		Parts: []core.Part{{
+			Kind:      core.PART_KIND_REASONING,
+			Text:      "inspect",
+			Reasoning: &core.ReasoningState{EncryptedContent: "encrypted"},
+		}},
+	}}}
+
+	for _, tc := range openAIChatAdapterCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.new(t, "http://127.0.0.1:1").Generate(context.Background(), req)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "cannot preserve reasoning continuation metadata")
+		})
+	}
+}
+
+func TestOpenAIChatResponsePreservesReasoningContent(t *testing.T) {
+	response := []byte(`{
+		"choices":[{
+			"message":{"reasoning_content":"inspect","content":"done"},
+			"finish_reason":"stop"
+		}],
+		"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}
+	}`)
+
+	for _, tc := range openAIChatAdapterCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, err := w.Write(response)
+				assert.NoError(t, err)
+			}))
+			t.Cleanup(srv.Close)
+
+			got, err := tc.new(t, srv.URL).Generate(context.Background(), openAIChatRequest())
+			require.NoError(t, err)
+			require.Len(t, got.Parts, 2)
+			assert.Equal(t, core.PART_KIND_REASONING, got.Parts[0].Kind)
+			assert.Equal(t, "inspect", got.Parts[0].Text)
+			assert.Equal(t, "done", got.Text)
+		})
+	}
+}
+
 func TestOpenAIChatInvalidRawSchemaKeepsLegacyEmptyPayload(t *testing.T) {
 	response := readOpenAIChatGolden(t, "response.json")
 	req := openAIChatRequest()

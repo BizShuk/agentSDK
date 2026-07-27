@@ -37,7 +37,13 @@ func (s State) Clone() State {
 			msgs[i] = m
 			if m.Parts != nil {
 				ps := make([]Part, len(m.Parts))
-				copy(ps, m.Parts)
+				for j, part := range m.Parts {
+					ps[j] = part
+					if part.Reasoning != nil {
+						reasoning := *part.Reasoning
+						ps[j].Reasoning = &reasoning
+					}
+				}
 				msgs[i].Parts = ps
 			}
 		}

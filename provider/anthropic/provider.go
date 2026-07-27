@@ -62,7 +62,10 @@ func New(cfg provider.ResolvedConfig) (*Provider, error) {
 
 // Generate implements core.Provider.
 func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
-	body := p.buildRequestBody(req)
+	body, err := p.buildRequestBody(req)
+	if err != nil {
+		return core.ModelResult{}, err
+	}
 	if err := body.Validate(); err != nil {
 		return core.ModelResult{}, err
 	}
@@ -82,7 +85,10 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 // (rather than the SDK's NewStreaming) so the SSE parser in stream.go
 // owns the wire format and stays independently testable.
 func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
-	body := p.buildRequestBody(req)
+	body, err := p.buildRequestBody(req)
+	if err != nil {
+		return nil, err
+	}
 	if err := body.Validate(); err != nil {
 		return nil, err
 	}
@@ -107,16 +113,20 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 // buildRequestBody assembles a wire-format body from a core request and
 // the provider's configured model. The model field is filled here so
 // callers don't have to thread it through every call.
-func (p *Provider) buildRequestBody(req core.ModelRequest) RequestBody {
+func (p *Provider) buildRequestBody(req core.ModelRequest) (RequestBody, error) {
+	messages, err := toMessageParams(req.Messages)
+	if err != nil {
+		return RequestBody{}, err
+	}
 	out := RequestBody{
 		Model:     string(p.model),
 		MaxTokens: maxTokensOrDefault(req),
-		Messages:  toMessageParams(req.Messages),
+		Messages:  messages,
 	}
 	if len(req.Tools) > 0 {
 		out.Tools = toToolParams(req.Tools)
 	}
-	return out
+	return out, nil
 }
 
 // buildHTTPRequest marshals the wire body and stamps auth headers on the

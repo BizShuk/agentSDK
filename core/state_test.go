@@ -14,7 +14,14 @@ func TestStateClone(t *testing.T) {
 	s := core.State{
 		RunID: "run-1",
 		Messages: []core.Message{
-			{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"}}},
+			{Role: core.ROLE_USER, Parts: []core.Part{
+				{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"},
+				{
+					Kind:      core.PART_KIND_REASONING,
+					Text:      "inspect",
+					Reasoning: &core.ReasoningState{Signature: "sig"},
+				},
+			}},
 		},
 		WorkingMemory:    map[string]any{"k": "v"},
 		PendingApprovals: []core.PendingApproval{{ID: "a1"}},
@@ -27,8 +34,10 @@ func TestStateClone(t *testing.T) {
 
 	// mutate clone, original must remain
 	clone.Messages[0].Parts[0].Text = "bye"
+	clone.Messages[0].Parts[1].Reasoning.Signature = "changed"
 	clone.WorkingMemory["k"] = "modified"
 	assert.Equal(t, "hi", s.Messages[0].Parts[0].Text)
+	assert.Equal(t, "sig", s.Messages[0].Parts[1].Reasoning.Signature)
 	assert.Equal(t, "v", s.WorkingMemory["k"])
 }
 
