@@ -28,18 +28,20 @@ package minimax
 //	event: error
 //	data: {"type":"error","error":{"type":"...","message":"..."}}
 //
-// We ignore `event:` lines — `data:` carries everything we need via JSON's
-// `type` field. Unknown events are skipped, not failed.
+// provider/protocol/sse owns frame boundaries. We read the complete `data`
+// payload and keep MiniMax terminal and JSON semantics local to this package.
+// Unknown events are skipped, not failed.
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider/protocol/sse"
 )
 
 // StreamEvent is one SSE event from the minimax stream. The fields are
@@ -81,17 +83,20 @@ func ParseStream(ctx context.Context, r io.Reader) <-chan core.ModelChunk {
 
 	go func() {
 		defer close(out)
-		scanner := bufio.NewScanner(r)
-		// minimax delta lines are small, but tool input_json_delta can
-		// grow large for complex schemas. 1 MiB is a safe upper bound.
-		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+		decoder := sse.NewDecoder(r)
 
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data:") {
-				continue
+		for {
+			if ctx.Err() != nil {
+				return
 			}
-			payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			frame, err := decoder.Next()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return
+			}
+			payload := strings.TrimSpace(string(frame.Data))
 			if payload == "" || payload == "[DONE]" {
 				continue
 			}
@@ -139,12 +144,6 @@ func ParseStream(ctx context.Context, r io.Reader) <-chan core.ModelChunk {
 					return
 				}
 			}
-		}
-
-		// A transport read failure closes the channel without Done so
-		// consumers can distinguish an incomplete stream from clean EOF.
-		if scanner.Err() != nil {
-			return
 		}
 
 		// Terminal sentinel.

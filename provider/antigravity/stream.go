@@ -27,18 +27,20 @@ package antigravity
 //	event: error
 //	data: {"type":"error","error":{"type":"...","message":"..."}}
 //
-// We ignore `event:` lines — `data:` carries everything we need via JSON's
-// `type` field. Unknown events are skipped, not failed.
+// provider/protocol/sse owns frame boundaries. We read the complete `data`
+// payload and keep Antigravity terminal and JSON semantics local to this
+// package. Unknown events are skipped, not failed.
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider/protocol/sse"
 )
 
 // StreamEvent is one SSE event from the Antigravity stream. The fields are
@@ -86,16 +88,20 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 
 	go func() {
 		defer close(out)
-		scanner := bufio.NewScanner(r)
-		// 1 MiB upper bound covers large tool input_json_delta payloads.
-		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+		decoder := sse.NewDecoder(r)
 
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data:") {
-				continue
+		for {
+			if ctx.Err() != nil {
+				return
 			}
-			payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			frame, err := decoder.Next()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return
+			}
+			payload := strings.TrimSpace(string(frame.Data))
 			if payload == "" || payload == "[DONE]" {
 				continue
 			}
@@ -150,12 +156,6 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 					return
 				}
 			}
-		}
-
-		// A transport read failure closes the channel without Done so
-		// consumers can distinguish an incomplete stream from clean EOF.
-		if scanner.Err() != nil {
-			return
 		}
 
 		// Terminal sentinel.

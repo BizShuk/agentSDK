@@ -21,7 +21,7 @@ func TestParseStreamPreservesThinkingAndSignature(t *testing.T) {
 		``,
 		`data: {"type":"message_stop"}`,
 		``,
-	}, "\n"))
+	}, "\n") + "\n")
 
 	chunks, _ := anthropic.ParseStream(context.Background(), stream)
 	var got []core.ModelChunk

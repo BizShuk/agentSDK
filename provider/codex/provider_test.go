@@ -180,7 +180,7 @@ func TestResponsesReasoningRoundTrip(t *testing.T) {
 			``,
 			`data: {"type":"response.completed"}`,
 			``,
-		}, "\n")))
+		}, "\n") + "\n"))
 	}))
 	defer srv.Close()
 

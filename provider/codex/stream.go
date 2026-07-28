@@ -32,13 +32,14 @@ package codex
 //                                   as a normal end-of-stream.
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider/protocol/sse"
 )
 
 // ParseStream reads SSE from r and feeds core.ModelChunk events into
@@ -54,17 +55,21 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, erro
 	out := make(chan core.ModelChunk, 16)
 	go func() {
 		defer close(out)
-		scanner := bufio.NewScanner(r)
-		// Tool call arguments can be large for complex JSON schemas.
-		// 1 MiB is a safe upper bound for one SSE event line.
-		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+		decoder := sse.NewDecoder(r)
 
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data:") {
-				continue
+		for {
+			if ctx.Err() != nil {
+				return
 			}
-			payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			frame, err := decoder.Next()
+			if errors.Is(err, io.EOF) {
+				emitDone(ctx, out)
+				return
+			}
+			if err != nil {
+				return
+			}
+			payload := strings.TrimSpace(string(frame.Data))
 			if payload == "" {
 				continue
 			}
@@ -127,16 +132,6 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, erro
 				return
 			}
 		}
-
-		// A transport read failure closes the channel without Done so
-		// consumers can distinguish an incomplete stream from clean EOF.
-		if scanner.Err() != nil {
-			return
-		}
-
-		// EOF without an explicit terminal event — make sure the
-		// caller sees Done=true so they fold the stream.
-		emitDone(ctx, out)
 	}()
 	return out, nil
 }

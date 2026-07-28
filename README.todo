@@ -53,8 +53,12 @@
       `Options.APIKey` 不再可能被 ambient decorator 覆蓋；七個誤名 `auth_api.go` 統一改為
       `config.go`
 
-落地後仍未關閉的兩件事：
+落地後追蹤事項：
 
+- [x] 將 Anthropic、Antigravity、Codex、Grok、MiniMax 五份 `stream.go` 從逐行
+      `bufio.Scanner` 遷移到 `provider/protocol/sse.Decoder`；各 provider 先鎖定
+      terminal / transport error / cancellation contract，Grok 必須覆蓋 UTF-8 BOM，
+      並共同覆蓋 multiline data、partial frame 與 size limit（2026-07-29）
 - [ ] OAuth 登入流程`未經實跑驗證`。C2 一律以 `auth` 的常數為準（in-tree 版本零呼叫者，
       故不構成行為回歸），但兩份曾在 `TOKEN_URL`（`console.` vs `api.`）、
       `REDIRECT_URI`（貼回碼 vs `localhost:54545`）、`SCOPES`（是否含 `org:create_api_key`）

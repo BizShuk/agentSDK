@@ -180,7 +180,7 @@ func TestStreamPreservesThinkingAndSignature(t *testing.T) {
 		``,
 		`data: {"type":"message_stop"}`,
 		``,
-	}, "\n"))
+	}, "\n") + "\n")
 	chunks, _ := antigravity.ParseStream(context.Background(), stream)
 	var got []core.ModelChunk
 	for chunk := range chunks {

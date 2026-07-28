@@ -5,13 +5,14 @@
 package grok
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider/protocol/sse"
 )
 
 // ParseStream reads SSE from r and feeds core.ModelChunk events into the
@@ -26,18 +27,20 @@ func ParseStream(ctx context.Context, r io.Reader) <-chan core.ModelChunk {
 
 	go func() {
 		defer close(out)
-		scanner := bufio.NewScanner(r)
-		// Tool-call argument deltas can grow large for complex schemas;
-		// 1 MiB is a safe upper bound that matches the ollama
-		// adapter's buffer strategy.
-		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+		decoder := sse.NewDecoder(r)
 
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data:") {
-				continue
+		for {
+			if ctx.Err() != nil {
+				return
 			}
-			payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			frame, err := decoder.Next()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return
+			}
+			payload := strings.TrimSpace(string(frame.Data))
 			if payload == "" || payload == "[DONE]" {
 				if payload == "[DONE]" {
 					break
@@ -66,12 +69,6 @@ func ParseStream(ctx context.Context, r io.Reader) <-chan core.ModelChunk {
 					return
 				}
 			}
-		}
-
-		// A transport read failure closes the channel without Done so
-		// consumers can distinguish an incomplete stream from clean EOF.
-		if scanner.Err() != nil {
-			return
 		}
 
 		// Terminal sentinel.
