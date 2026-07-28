@@ -283,12 +283,13 @@ go run . watch
 | Harness   | hooks / agent/permission / agent/session / skill（內含 subagent）/ agent/wire + steering queue（`contextfile` 已併入 `prompt.LoadContextFiles`；tui 已下沉 code-agent） | 🚧 skeleton |
 | Agent     | 宣告式組裝：`agent/spec` + `agent` 7 stage pipeline + `prompt` + `provider`（registry）+ `wizard` 子指令 | ✅ 完成     |
 
-詳細規格見 `docs/specs/` 與 `plans/`（proxy 規格已隨 repo 移出）,root milestone 實作完成後會轉為 `docs/specs/YYYY-MM-DD-<feature>.md`:
+詳細規格見 `docs/specs/` 與 `plans/`（proxy 規格已隨 repo 移出）。兩週以前的歷史已整併，
+現行入口如下：
 
-- `2026-07-04-core-paradigm-and-sample-skeleton.md` (M1)
-- `2026-07-04-system-resilience-and-loop-defense.md` (M2)
-- `2026-07-04-tool-ecosystem-and-runtime-security.md` (M3)
-- `2026-07-04-architecture-decoupling-hitl-and-providers.md` (M4)
+- [`2026-07-29-Summary.md`](docs/specs/2026-07-29-Summary.md)（M1–M5 歷史摘要）
+- [`2026-07-18-continuous-logdoctor-minimax.md`](docs/specs/2026-07-18-continuous-logdoctor-minimax.md)
+- [`2026-07-27-agent-sdk-contract-alignment.md`](docs/specs/2026-07-27-agent-sdk-contract-alignment.md)
+- [`2026-07-27-provider-auth-image-capabilities.md`](docs/specs/2026-07-27-provider-auth-image-capabilities.md)
 
 ## 慣例衝突 (Naming Collision)
 
@@ -302,3 +303,10 @@ go run . watch
 - 依賴分析工具已移至獨立 repo `~/projects/go-dependency-analysis`：`go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work --format text`
 - 測試:table-driven + `t.Run` + `testify`
 - 中文註解 + 英文關鍵字,遵循 `playground/CLAUDE.md` 慣例
+
+## 已淘汰功能 (Deprecated Features)
+
+| 淘汰日期 | 功能 | 原始文件 | 說明 |
+| -------- | ---- | -------- | ---- |
+| 2026-07-29 | `mcp.Client` | `2026-07-07-mcp-client.md` | `mcp/` 已於 `f1eecd0` 移除；目前只保留未接 production consumer 的 `tool.ToolSource` 介面。 |
+| 2026-07-29 | `perception.Multi` / `perception.Normalizer` | `2026-07-07-perception-input-pillar.md` | `perception/` 已於 `a23f41e` 移除；觀察輸入只保留最小的 `core.ObservationSource` port。 |
