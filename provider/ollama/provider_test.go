@@ -59,7 +59,7 @@ func TestProviderRoundTripAgainstFakeOllama(t *testing.T) {
 	assert.Equal(t, "hello from ollama", mr.Text)
 	assert.Equal(t, "stop", mr.StopReason)
 	assert.Equal(t, 9, mr.Usage.TotalTokens)
-	assert.Equal(t, "llama3.2", *gotModel)
+	assert.Equal(t, "qwen2.5vl:3b", *gotModel)
 }
 
 func TestProviderIncludesBearerHeader(t *testing.T) {
@@ -119,10 +119,10 @@ func TestProviderSkipsBearerForLocalHost(t *testing.T) {
 func TestProviderModelsCatalog(t *testing.T) {
 	catalog := ollama.DefaultCatalog()
 	require.NotEmpty(t, catalog)
-	// We always ship llama3.2 — it's our default model id.
+	// We ship qwen2.5vl:3b as default model id in the catalog.
 	ids := make([]string, 0, len(catalog))
 	for _, m := range catalog {
 		ids = append(ids, m.ID)
 	}
-	assert.Contains(t, ids, "llama3.2")
+	assert.Contains(t, ids, "qwen2.5vl:3b")
 }

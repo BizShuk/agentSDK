@@ -1,6 +1,7 @@
 package openaichat
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -97,6 +98,11 @@ func (r requestBody) validate() error {
 		default:
 			return fmt.Errorf("message[%d] role %q must be system|user|assistant|tool", i, message.Role)
 		}
+		switch message.Content.(type) {
+		case nil, string, []contentPart:
+		default:
+			return fmt.Errorf("message[%d] content must be string or []contentPart, got %T", i, message.Content)
+		}
 	}
 	return nil
 }
@@ -113,14 +119,17 @@ func toChatMessages(messages []core.Message) ([]chatMessage, error) {
 		case core.ROLE_TOOL:
 			role = "tool"
 		}
-		text, toolCalls, toolResults, err := flattenMessage(message)
+		text, images, toolCalls, toolResults, err := flattenMessage(message)
 		if err != nil {
 			return nil, err
 		}
-		item := chatMessage{Role: role, Content: text, ToolCalls: toolCalls}
+		item := chatMessage{Role: role, Content: textContent(text), ToolCalls: toolCalls}
+		if len(images) > 0 {
+			item.Content = multimodalContent(text, images)
+		}
 		if len(toolResults) > 0 {
 			item.ToolCallID = toolResults[0].callID
-			item.Content = toolResults[0].outputString()
+			item.Content = textContent(toolResults[0].outputString())
 			item.Name = toolResults[0].name
 		}
 		out = append(out, item)
@@ -141,8 +150,16 @@ func (r flatToolResult) outputString() string {
 	return marshalString(r.output)
 }
 
-func flattenMessage(message core.Message) (string, []toolCall, []flatToolResult, error) {
+// flattenMessage pulls the bits the wire shape carries out of one message:
+// concatenated text, inline images as data URIs, assistant-side tool calls,
+// and tool results.
+//
+// core.Part.Image holds raw decoded bytes, so they are base64-encoded here.
+// An empty ImageMIME falls back to image/jpeg, the format every local
+// vision model accepts.
+func flattenMessage(message core.Message) (string, []imageURL, []toolCall, []flatToolResult, error) {
 	var text strings.Builder
+	var images []imageURL
 	var toolCalls []toolCall
 	var toolResults []flatToolResult
 	for _, part := range message.Parts {
@@ -150,7 +167,17 @@ func flattenMessage(message core.Message) (string, []toolCall, []flatToolResult,
 		case core.PART_KIND_PLAIN_TEXT:
 			text.WriteString(part.Text)
 		case core.PART_KIND_REASONING:
-			return "", nil, nil, fmt.Errorf("OpenAI Chat cannot preserve reasoning continuation metadata")
+			return "", nil, nil, nil, fmt.Errorf("OpenAI Chat cannot preserve reasoning continuation metadata")
+		case core.PART_KIND_IMAGE:
+			if len(part.Image) > 0 {
+				mime := part.ImageMIME
+				if mime == "" {
+					mime = "image/jpeg"
+				}
+				images = append(images, imageURL{
+					URL: "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(part.Image),
+				})
+			}
 		case core.PART_KIND_TOOL_USE:
 			if part.ToolUse != nil {
 				call := toolCall{ID: part.ToolUse.ID, Type: "function"}
@@ -168,7 +195,7 @@ func flattenMessage(message core.Message) (string, []toolCall, []flatToolResult,
 			}
 		}
 	}
-	return text.String(), toolCalls, toolResults, nil
+	return text.String(), images, toolCalls, toolResults, nil
 }
 
 func toToolDefs(specs []core.ToolSpec) []toolDef {

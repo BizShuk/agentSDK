@@ -17,24 +17,26 @@ import (
 // picker UIs can use that to expose reasoning budget controls.
 func DefaultCatalog() []core.ModelSpec {
 	return []core.ModelSpec{
-		{ID: "llama3.2", Family: "llama", Reasoning: false,
-			Input:         []core.Modality{core.MODALITY_TEXT},
-			ContextWindow: 128000, MaxTokens: 8192},
-		{ID: "qwen2.5", Family: "qwen", Reasoning: false,
-			Input:         []core.Modality{core.MODALITY_TEXT},
-			ContextWindow: 128000, MaxTokens: 8192},
-		{ID: "mistral", Family: "mistral", Reasoning: false,
-			Input:         []core.Modality{core.MODALITY_TEXT},
-			ContextWindow: 32000, MaxTokens: 8192},
-		{ID: "gpt-oss:20b", Family: "gpt-oss", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT},
-			ContextWindow: 128000, MaxTokens: 8192},
-		{ID: "deepseek-r1", Family: "deepseek", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT},
-			ContextWindow: 128000, MaxTokens: 8192},
-		{ID: "llava", Family: "llava", Reasoning: false,
+		{
+			ID: "qwen2.5vl:3b", Family: "qwen", Reasoning: false,
 			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE},
-			ContextWindow: 32000, MaxTokens: 4096},
+			ContextWindow: 128000, MaxTokens: 8192,
+		},
+		{
+			ID: "z-uo/qwen2.5vl_tools:7b", Family: "qwen", Reasoning: false,
+			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE},
+			ContextWindow: 128000, MaxTokens: 8192,
+		},
+		{
+			ID: "gemma4:e2b", Family: "gemma", Reasoning: false,
+			Input:         []core.Modality{core.MODALITY_TEXT},
+			ContextWindow: 128000, MaxTokens: 8192,
+		},
+		{
+			ID: "bge-m3:latest", Family: "bge", Reasoning: false,
+			Input:         []core.Modality{core.MODALITY_TEXT},
+			ContextWindow: 8192, MaxTokens: 2048,
+		},
 	}
 }
 

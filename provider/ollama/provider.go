@@ -16,7 +16,12 @@ import (
 	"github.com/bizshuk/agentsdk/provider/protocol/openaichat"
 )
 
-const defaultModel = "llama3.2"
+const defaultModel = "qwen2.5vl:3b"
+
+// defaultTimeout bounds a single blocking request when the caller does not
+// set ResolvedConfig.Timeout. Local vision models reading a phone photo
+// routinely need far more — those callers must raise it explicitly.
+const defaultTimeout = 300 * time.Second
 
 // Provider implements the generate and stream capabilities against an
 // OpenAI-compatible endpoint.
@@ -35,11 +40,14 @@ func New(cfg provider.ResolvedConfig) (*Provider, error) {
 	if cfg.Model == "" {
 		cfg.Model = defaultModel
 	}
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = defaultTimeout
+	}
 	return &Provider{
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
 		auth:    cfg.Auth,
 		model:   cfg.Model,
-		client:  &http.Client{Timeout: 120 * time.Second},
+		client:  &http.Client{Timeout: cfg.Timeout},
 	}, nil
 }
 

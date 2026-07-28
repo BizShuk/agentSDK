@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/bizshuk/agentsdk/core"
 )
@@ -14,6 +15,14 @@ type Options struct {
 	Model   string
 	APIKey  string
 	BaseURL string
+
+	// Timeout overrides the adapter's per-request HTTP client timeout.
+	// Zero keeps the adapter's own default.
+	//
+	// It exists because the client timeout is a hard cap that no context
+	// deadline can extend: a local vision model reading a multi-megabyte
+	// photo routinely needs minutes, far past any adapter default.
+	Timeout time.Duration
 
 	// APIKeyEnv overrides which environment variable supplies the
 	// credential, for deployments that do not use the adapter's
@@ -51,6 +60,10 @@ type ResolvedConfig struct {
 	Model   string
 	BaseURL string
 	Auth    core.Auth
+
+	// Timeout is the caller's per-request HTTP timeout. Zero means the
+	// adapter keeps its own default — see Options.Timeout.
+	Timeout time.Duration
 }
 
 func (o Options) lookup(key string) string {
@@ -95,6 +108,7 @@ func (o Options) Resolve(m Metadata) (ResolvedConfig, error) {
 	resolved := ResolvedConfig{
 		Model:   o.Model,
 		BaseURL: o.BaseURL,
+		Timeout: o.Timeout,
 	}
 	if o.APIKey != "" {
 		resolved.Auth.APIKey = o.APIKey
