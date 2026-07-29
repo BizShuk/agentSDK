@@ -55,4 +55,11 @@
 - [ ] `contextfile`：auto-memory 寫回（MEMORY.md 索引式）
 - [ ] streaming delta：provider 原生 SSE 接進 `core.StreamEvent`（目前只有 folded events；`STREAM_MESSAGE_DELTA` 保留位）
 
+## 跨 repo 約束 (Cross-repo Constraints)
+
+- [ ] 若外部 `bizshuk/proxy` 之後改用 `core.Part` 作 canonical message IR：Anthropic
+      `thinking` 與 Responses `reasoning` 必須映射為 `PART_KIND_REASONING`，opaque
+      continuation state 不可降格成 plain text。該 repo 負責解碼其版本化 signature
+      envelope；本 repo 負責維持 `core.Part` / `ReasoningState` 契約不變。
+
 ## Archive

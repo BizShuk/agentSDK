@@ -6,9 +6,8 @@
 
 ## 技術基準 (Current Baseline)
 
-- 語言與 workspace：Go `1.26.0`、`go.work`，共 `10` 個 module entries（root + `9` 個
-  sample modules）。`auth` 與 `proxy` 是外部 modules，不列入本 workspace。
-  Standalone dependency analyzer 位於 `~/projects/go-dependency-analysis`。
+- 語言與 workspace：Go `1.26.0`、`go.work` 納入 root 與 `sample/` 下各 module。
+  `auth` 與 `proxy` 是外部 repo，不列入本 workspace；dependency analyzer 亦然。
 - root module：`github.com/bizshuk/agentsdk`，內容為 SDK 核心群（core/reasoning/tool/memory/middleware/runtime）、harness 群（middleware/hook、agent/permission、agent/session、agent/wire、skill、prompt）、組合層 `agent`、process host `agent/cli` 與 root CLI 子指令。`agent/spec` 是只 import `core` 的宣告層；`agent` 才組裝 reasoning/provider/harness。`core/` 保持 stdlib only。`auth` 只被 `provider/credential` import；`proxy` 不在 root module。
 - `core/` 依 domain 分檔但維持單一 package：run state、transition、model boundary、
   tool/HITL 與 runtime ports。`core.Decide` 是純 transition contract；
@@ -24,17 +23,15 @@
   `openaiimage`，其餘 vendor payload DTO 保持 local。
 - Provider image capability：`provider.ImageGenerator` 留在 provider layer；
   `Entry.NewImage` / `provider.NewImage` 是一致建構路徑，unsupported adapter 回 typed
-  `ErrUnsupportedCapability`。成功 response 上限 `128 MiB`，error body 上限 `1 MiB`，
-  details 上限 `16 KiB`。
+  `ErrUnsupportedCapability`。成功 response、error body 與 details 各有大小上限，
+  數值由 provider layer 的常數擁有。
 - Reasoning content boundary：`core.Part` 以 `PART_KIND_REASONING` 表示可攜 reasoning
   文字，`ReasoningState` 保存 opaque continuation metadata。`ModelResult.Parts` 是有序
   canonical assistant content；無法表示 metadata 的 wire path 必須明確報錯。
 - `provider/sample` 是 root module 內的 package-local executable；`--list` 產生
   provider × chat/image/audio × auth-env matrix。Chat/image 分別走 `provider.New` /
   `NewImage`；audio 在沒有 production contract 時回 typed unsupported error。
-- 目前 proxy 架構：`protocol → route → transform → upstream`，三種 client wire format 的 `3×3` directed pair 已接上 handler。
-- 來源與規格：現行 pairwise 決策見 `proxy/docs/specs/2026-07-16-pairwise-agent-provider-transform.md`（外部 repo）；四個來源的 wire-format 盤點見 `proxy/docs/specs/format/README.md`（外部 repo）。
-- 外部依賴：`auth` 是外部 module（`github.com/bizshuk/auth`，go.mod require，非 submodule），只被 `provider/credential`（`model`/`svc`/`provider`）使用——這是全 repo 唯一允許 import 它的 package，由 `go list -deps` 驗收；`proxy` 已無任何殘留（無目錄、無 require、無 import）。`tmp/auth2api` 與 `tmp/cliproxyapi` 僅供格式研究，不是 runtime dependency。
+- 外部依賴：`auth` 是 go.mod require 的外部 module，只被 `provider/credential` 使用；`proxy` 完全在外部 repo。`tmp/auth2api` 與 `tmp/cliproxyapi` 僅供格式研究，不是 runtime dependency。
 
 ## 專案結構 (Project Structure)
 
@@ -43,7 +40,7 @@ agentsdk/
 ├── README.md                         # 業務範疇與使用者導覽
 ├── CLAUDE.md                         # 技術脈絡與架構決策（本檔）
 ├── README.todo                       # 尚未完成的工作
-├── go.work                           # root + 9 sample modules（tui/provider 皆無獨立 go.mod）
+├── go.work                           # root + sample/ 下各 module
 ├── go.mod                            # github.com/bizshuk/agentsdk
 ├── main.go                           # cobra root binary；掛載 `provider` 與 `wizard` 兩個子指令
 ├── cmd/                              # root cobra subcommands
@@ -68,7 +65,11 @@ agentsdk/
 ├── tool/                             # core.Tool alias、RawMessage converter、Registry/RegisterFunc、sandbox
 │   └── builtin/                      # allowlist-aware Register + Read/Write/Edit/Bash/Glob/Grep
 ├── skill/                            # SKILL.md/commands/subagents registry（progressive disclosure + SubAgent/Spawner "task" tool）
-├── utils/                            # 根層共用 utilities umbrella：utils/frontmatter/（adrg/frontmatter YAML/TOML/JSON wrapper,key:value 攤平為 string map）+ utils/configfile/（副檔名決定編碼、一律以 JSON 呈現給 caller,故 `json` tag 是唯一真相）+ utils/testutil/（in-process fake provider/state store/notifier）
+├── utils/                            # 根層共用 utilities umbrella
+│   ├── agentconfig/                  # agent 設定檔 I/O：Decode/Encode/LoadFile/SaveFile（re-export utils/configfile）
+│   ├── configfile/                   # 副檔名決定編碼、一律以 JSON 呈現給 caller,故 `json` tag 是唯一真相
+│   ├── frontmatter/                  # adrg/frontmatter YAML/TOML/JSON wrapper,key:value 攤平為 string map
+│   └── testutil/                     # in-process fake provider / state store / notifier（僅測試可用）
 ├── middleware/                       # chain、retry/timeout/budget/loopguard、安全與 OTel tracing；preset/ 與 hook/ 子包
 ├── memory/                           # context window、compactor、checkpoint、JSON state/WAL
 ├── runtime/                          # Engine：dispatch Instruction、fold Event、Run/Resume/HITL
@@ -81,7 +82,7 @@ agentsdk/
 │   ├── decorator.go                  # Decorator = func(ctx) (core.Auth, error)：model/image 每次 request 共用解析規則
 │   ├── credential/                   # 全 repo 唯一 import bizshuk/auth 之處：(name, kind) → auth route id 對照、Decorator 實作、Login 委派
 │   ├── all/                          # meta-package：blank-import 全部 adapter 的便利入口
-│   ├── sample/                       # provider/auth/chat-image-audio capability matrix + direct access CLI
+│   ├── sample/                       # provider/auth/chat-image-audio capability matrix + direct access CLI（含 config/、svc/）
 │   ├── protocol/
 │   │   ├── sse/                      # stdlib-only 完整 SSE frame decoder / writer；不含 provider terminal semantics
 │   │   ├── openaichat/               # Google/Ollama 共用 request/response codec + Frame → ModelChunk
@@ -95,7 +96,7 @@ agentsdk/
 │   ├── minimax/                      # adapter：MiniMax stdlib HTTP/SSE
 │   └── ollama/                       # adapter：本地 Ollama endpoint
 ├── sample/                           # demo-* 是單一元件展示，*-agent 是完整 agent
-│   ├── code-agent/                   # 全 harness 組合 CLI：tui 互動 / -p print / --json（wire）+ session flags；compose.go 用 agent 宣告（333→101 行）
+│   ├── code-agent/                   # 全 harness 組合 CLI：tui 互動 / -p print / --json（wire）+ session flags；composition 位於 cmd/
 │   │   └── tui/                      # zero-dep differential renderer、ANSI 工具、Component/Terminal 抽象
 │   ├── file-agent/                   # 6 內建工具的檔案操作 agent
 │   ├── greet-agent/                  # 內建工具 + greet tool
@@ -118,7 +119,7 @@ agentsdk/
 
 | 類別                      | 技術                                                | 現況                                                                                                                                   |
 | ------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Language                  | Go `1.26.0`                                         | `go.work` 管理 10 個 module entries                                                                                                    |
+| Language                  | Go `1.26.0`                                         | `go.work` 納入 root 與 `sample/` 下各 module                                                                                                    |
 | Root runtime              | Go stdlib、`github.com/bizshuk/gosdk v1.2.1`        | config/log/notify 等組合點在 root 或 sample                                                                                            |
 | External auth module      | `github.com/bizshuk/auth`                           | `go.mod` dependency；只由 `provider/credential` import                                                                                 |
 | External HTTP proxy       | `gin-gonic/gin`、`gosdk/mw`、`gosdk/router`         | `github.com/bizshuk/proxy` 獨立 repo；不在本 workspace                                                                                 |
@@ -141,16 +142,16 @@ agentsdk/
 - `core` 是純狀態與 transition contract。`core.Decide(state, event)` 不做 I/O，只回傳下一個 `State` 與 `[]Instruction`；runtime 才執行 model、tool、approval、notify，並經 StateStore/WAL 自動持久化。
 - `core` 不拆成 domain 子套件：`State`、`Event`、`Instruction`、model/tool contracts 會彼此交叉引用，硬拆只會製造 import cycle 或 root alias facade。domain 邊界改由一檔一職責表達；檔名直接對應公開詞彙，不再用 `input`、`effect`、`step`、`thinking`、`port` 等需先讀內容才能理解的名稱。
 - `State` 的對話模型是 `Message{Role, Parts}`；`Part` 支援 text、reasoning、audio、image、tool use、tool result。reasoning 文字沿用 `Part.Text`，opaque continuation metadata 放 `ReasoningState`，不與 agent strategy 的 `ReasoningStyle` 混用。JSON tags `scratch` 與 `thinking_kind` 保留以相容舊 state。
-- `Instruction` 是 tagged union，只保留有 production producer/consumer 的 `call_model`、`call_tool`、`request_approval`、`notify`、`done`；持久化由 runtime 的 StateStore/WAL lifecycle 負責，presentation 由 `core.EventSink` / `Engine.Emitter` 負責，不另立 `checkpoint` / `emit` command。
-- 宣告式 `agent/spec` 只暴露 composition root 真正消費的設定；未接線的 `limits.max_wall_time`、`memory.compaction` 與只讓 JSON 生效的 `output.format` 已移除。Process deadline 以 `agent.WithTimeout` 注入，`memory/compaction` mechanism 由需要它的 caller 明確組裝，presentation 則由 frontend 以 `agent.WithSink` 或 `Engine.Sink` 接管。
+- `Instruction` 是 tagged union，只保留有 production producer/consumer 的 `call_model`、`call_tool`、`request_approval`、`notify`、`done`；持久化由 runtime 的 StateStore/WAL lifecycle 負責，presentation 由 `core.EventSink` / `Engine.Emitter` 負責。
+- 宣告式 `agent/spec` 只暴露 composition root 真正消費的設定。Process deadline 以 `agent.WithTimeout` 注入，`memory/compaction` mechanism 由需要它的 caller 明確組裝，presentation 則由 frontend 以 `agent.WithSink` 或 `Engine.Sink` 接管。
 - `runtime.Engine` 是 shell，維護 `core.Provider`、`ToolRegistry`、`StateStore`、`WriteAheadLog`、`Notifier` 與 middleware。`Middleware == nil` 代表 no-op；`preset.Default()` 與 `preset.Secure()` 由 composition root 明確選用。
 - `preset.Default()` 順序為 `retry → timeout → budget → loopguard`；
   `preset.Secure()` 再加入 `sandbox → approval → spotlight → sanitizer`。工具輸出會被
   spotlight 標為 untrusted，prompt injection 命中會被 sanitizer 改寫。
 - WAL recovery 先載入 snapshot，再依 `LastInputSeq` replay Event；replay 不重新呼叫模型，避免 crash recovery 產生重複副作用。`memory/filestore` 使用 atomic state write + JSONL append。
 - `reasoning/` 擁有 `DecisionRule`、built-in factory `NewRule` 與 registry-backed `NewDecide`，因為 rule construction 與 dispatcher 都是 strategy 詞彙的 consumer；`DecisionRule.Kind()` 與 registry key 直接用 `string`。六個 strategy（ThinkThenAct、PlanThenRun、RunThenReview、OneShotReasoning、LearnFromFailure、ChooseAgent）都是 phase FSM。`core` 只保留 `Decide` function type，所以 `runtime` 不必反向依賴具體 reasoning package；working memory 是 rule 與 runtime/middleware 的通訊介面。
-- `core.Tool` 是唯一可執行工具契約（`Name`/`Spec`/`Call(json.RawMessage)`），`tool.Tool` 只是 alias，不另立平行介面。`ToolCall`/`ToolResult` 同時是 model chunk、transcript part、instruction/event 的 canonical payload，不再另立串流或訊息專用衍生 struct。`tool.CallWithRawMessage` 在每個 concrete tool 的 `Call` 內把 raw JSON 轉成 typed args、驗證 required fields、執行 typed business function，再把輸出轉回 `ToolResult`；`RegisterFunc` 沿用同一 converter。`builtin.Register` 接受 allowlist（空 = 全部）並以 all-or-nothing 語意註冊 Read/Write/Edit/Bash/Glob/Grep；`RegisterDefaults` 是全選 convenience wrapper。
-- `core.ModelRequest` 同時是 provider request 與 `Instruction.CallModel` 的 canonical payload；`RequestID` 供 middleware/tracing 辨識，runtime 只在 request 未帶 tools 時補 registry list，其餘 `MaxTokens`/`StopReasons`/`Auth` 原樣轉送。`agent/spec.Subagents.MaxDepth` 直接注入 `skill.Spawner.MaxDepth`；未接 composition 的 telemetry config block 已移除，OTel 仍是可組合的 `middleware/observability`。
+- `core.Tool` 是唯一可執行工具契約（`Name`/`Spec`/`Call(json.RawMessage)`），`tool.Tool` 只是 alias，不另立平行介面。`ToolCall`/`ToolResult` 同時是 model chunk、transcript part、instruction/event 的 canonical payload，不另立串流或訊息專用衍生 struct。`tool.CallWithRawMessage` 在每個 concrete tool 的 `Call` 內把 raw JSON 轉成 typed args、驗證 required fields、執行 typed business function，再把輸出轉回 `ToolResult`；`RegisterFunc` 沿用同一 converter。`builtin.Register` 接受 allowlist（空 = 全部）並以 all-or-nothing 語意註冊 Read/Write/Edit/Bash/Glob/Grep；`RegisterDefaults` 是全選 convenience wrapper。
+- `core.ModelRequest` 同時是 provider request 與 `Instruction.CallModel` 的 canonical payload；`RequestID` 供 middleware/tracing 辨識，runtime 只在 request 未帶 tools 時補 registry list，其餘 `MaxTokens`/`StopReasons`/`Auth` 原樣轉送。`agent/spec.Subagents.MaxDepth` 直接注入 `skill.Spawner.MaxDepth`；OTel 是可組合的 `middleware/observability`，不走 config block。
 - `core.ModelResult.Parts` 是 provider 回應與 transcript 之間的 canonical ordered content；`NormalizeContent` 讓舊 provider 的 `Text` / `ToolCalls` 可合成 Parts，也讓新 provider 的 Parts 回填相容投影。reasoning 不併進 `Text`，避免 frontend 無意顯示 chain-of-thought；runtime 仍保留它供下一輪 provider continuation 使用。
 - Provider capability boundary：`core.Provider` 是 runtime 消費端定義的最小 port，只含
   blocking `Generate`；stream、live catalog、image generation 分別是 optional
@@ -219,80 +220,24 @@ agentsdk/
   `Options.CredentialKind` 的 `auto` / `api_key` / `oauth` 使用
   `core.CREDENTIAL_KIND_*`，`Resolve` 產生 canonical `ResolvedConfig`。
 
-## 認證與 provider 決策 (Auth and Providers)
+- 外部 `bizshuk/auth` 的消費邊界：只有 `provider/credential` 可 import 它（由
+  `TestAuthImportedOnlyByProviderCredential` 把關），並擁有
+  `(provider name, credential kind) → auth route id` 對照；auth 的扁平 route ID 不進
+  `spec.Model.Provider`。endpoint 不進 `core.Auth`，一律由 `provider.Options.BaseURL`
+  在 construction time 指定。credential 優先序固定為
+  `單次 request Auth → 明示 Options.APIKey → Decorator → env`。auth 自身的 credential
+  storage、OAuth / device-code flow 與 CLI 屬該 repo 的契約，見
+  [`bizshuk/auth`](https://github.com/BizShuk/auth)。
+- LLM protocol proxy 是外部 repo [`bizshuk/proxy`](https://github.com/BizShuk/proxy)：
+  本 repo 無 `proxy/` 目錄、無 go.mod require、無任何 import，其架構與 HTTP surface
+  由該 repo 自行記錄。
 
-> 範圍：本節描述`外部 repo` [`github.com/bizshuk/auth`](https://github.com/BizShuk/auth) 的設計，不是本 repo 的目錄。本 repo 只透過 `provider/credential` 消費它的 `model`/`svc`/`provider`。
+- `core.Notifier` 的介面方法集與 `gosdk/notify.Notifier` 完全相同（結構性相容），
+  gosdk 的 Multi / Stdout / Slack 可直接傳入，不需 adapter。
+- Presets, not walls：設定挑 preset 而非組合細節（middleware 鏈的順序是正確性，
+  不是偏好）；`WithCustomize` 在全部 stage 之後拿到組好的 `*runtime.Engine`，
+  設定詞彙沒覆蓋的都還做得到。
 
-`auth` 只提供 mechanism：`Credential`、API key、OAuth authorization-code（PKCE 或 client secret）、device code（RFC 8628 + OIDC discovery）、service-account JWT → Google STS、callback、refresh、FileStore。`auth/provider/<name>/` 封裝單一家 provider，依賴 `auth` 與必要的 provider-specific config 套件；`auth/provider` registry 再統一掛載實作。
-
-`auth/provider.ROUTES` 是 provider id、credential kind、constructor 與 CLI 說明的唯一真相來源，目前 9 個 id：
-
-```text
-anthropic          anthropic_oauth
-openai             openai_oauth
-google             xai                  xai_oauth
-antigravity_oauth  vertex
-```
-
-重要規則：
-
-- 憑證目錄與 JSON 檔案權限固定 `0700` / `0600`，寫入使用 temp + rename。
-- login 在存檔前先 Verify；OAuth/service-account verify 可能輪替 token，呼叫端必須把 `VerifyResult.Credential` 存回。
-- `Credential.BaseURL` 可供 auth verify / proxy 使用；agentsdk adapter runtime 不把 endpoint 放進 `core.Auth`，必須由 `provider.Options.BaseURL` 在 construction time 明確指定。
-- `auth.Resolver` 是共用的 credential 解析機制：active.json 選取 → 同 provider 字母序 fallback → 環境變數 fallback（`DefaultEnvironmentNames`，含 ollama/llmbox）→ 過期自動 refresh 並持久化。active.json 讀寫慣例由 `auth.LoadActiveNames`/`SaveActiveName` 統一。
-- Proxy 的 `upstream.CredentialResolver` 是 `auth.Resolver` 的 thin adapter，只把
-  `auth.UnavailableError` 映射為 `credential_unavailable` ProxyError。Agentsdk 的
-  request-time seam 是 `provider.Decorator`；`credential.Source.Decorator()` 已提供
-  resolver implementation，但 production composition caller 尚未接線。
-- auth CLI 的預設 namespace 是 `~/.config/agentsdk/data/auth`；proxy config 目前以 `agentSDK` namespace 載入（`proxy.APP_NAME`），若兩者要共用憑證，使用 `auth-dir` 明確指定同一目錄。
-
-## Proxy pairwise 決策 (Current Proxy Architecture)
-
-> 範圍：本節描述`外部 repo` `bizshuk/proxy` 的設計。本 repo 已無 `proxy/` 目錄、無 go.mod require、無任何 import；下列路徑與指令需在該 repo 內執行。
-
-Proxy 不使用 canonical request/response IR，也不保留 legacy `proxy/adaptor`。client protocol 與 concrete provider profile 分離：
-
-```text
-HTTP route/source format
-  → route.Router（qualified、exact、anchored prefix）
-  → transform.Registry（source → target directed pair）
-  → upstream.Profile.NormalizeRequest（provider-specific mutation）
-  → CredentialResolver + safe upstream.Client
-  → reverse response/stream transform
-```
-
-支援的 protocol format：
-
-```text
-anthropic-messages
-openai-chat
-openai-responses
-```
-
-`transform.NewDefaultRegistry()` 強制驗證完整 `3×3 = 9` 組 `(from, to)`，每組必須有 request transform、non-stream response transform 與 stream factory；identity pair 仍會 decode/normalize，不是 raw passthrough。每個 request 的 stream transformer 都是獨立 state，禁止跨 request 污染。
-
-目前 concrete profile：
-
-| Profile              | Provider family | Target formats     | 特殊規則                                                                                          |
-| -------------------- | --------------- | ------------------ | ------------------------------------------------------------------------------------------------- |
-| `anthropic`          | `anthropic`     | Anthropic Messages | `/v1/messages`、`anthropic-version`、`/v1/messages/count_tokens`                                  |
-| `minimax`            | `minimax`       | Anthropic Messages | Anthropic-compatible `/v1/messages`                                                               |
-| `openai-api`         | `openai`        | Responses、Chat    | preferred Responses；`openai-chat/<model>` 強制 Chat                                              |
-| `openai-codex-oauth` | `openai`        | Codex Responses    | `/codex/responses`；normalizer 強制 `stream=true`、`store=false`，non-stream client 用 SSE bridge |
-| `xai`                | `xai`           | Responses、Chat    | preferred Responses；`xai-chat/<model>` 強制 Chat；只允許 function tools                          |
-
-路由無法唯一解析 model/provider 時回 `400 unknown_model`，不得 fallback 到 Anthropic。credential kind 會參與 profile selection（例如 `openai` API key 與 OAuth 對應不同 profile）。
-
-### Proxy HTTP surface
-
-- 公開 operational endpoints：`/health`、gosdk 提供的 `/healthz` 與 `/ping`。
-- 受 API key + per-IP `60 requests/minute` 保護的 `/v1`：`GET /models`、`POST /chat/completions`、`POST /responses`、`POST /messages`、`POST /messages/count_tokens`。
-- `/admin/accounts`、`/admin/stats`、`/admin/reload` 目前明確回 `501`，不是已完成的管理 API。
-- downstream 只轉送 profile allowlist headers；`Authorization`、`x-api-key`、`Host`、cookie、forwarded headers 等敏感欄位不 passthrough。upstream redirect 被拒絕並映射為 gateway error。
-- body、upstream error、SSE frame/line、stream collector 都有上限；server 設定 read-header/idle timeout，stream 不設固定 write timeout。request context 會一路傳到 refresh、HTTP、stream，client disconnect 時取消 upstream。
-- SSE parser 以空行作完整 frame boundary，保留 `event`、`id`、`retry`、comments 與 multiline `data`；terminal event 前 EOF 是 protocol failure。stream 已開始後依 source format 發出 native error frame。
-- transform warnings/losses 只進 redacted structured log/OTel metrics，不把 prompt、tool output、credential 或 upstream body 寫入一般 log。
-- `/v1/messages/count_tokens` 只走 provider native capability；不以固定常數冒充 token count，profile 不支援時回 `501`。
 
 ## CLI、設定與持久化 (CLI, Config, Persistence)
 
@@ -308,8 +253,6 @@ openai-responses
 ```
 
 `agent.Run` 是可嵌入 lifecycle：input validation → wall-clock deadline → 單次 Bootstrap → panic-safe Engine.Run → optional OnComplete，失敗直接回傳 `error`。`agent/cli.Main` 負責 signal binding，`agent/cli.Run` 才將錯誤轉成 exit code。
-
-Proxy defaults（`proxy/config.go`）：port `8317`、body limit `200 MB`、model timeout `120s`、stream timeout `600s`、count-tokens timeout `30s`、stats enabled、debug off；未設定 API key 時在記憶體產生 `sk-...`，設定持久化由上層 command 負責。
 
 JSONL 對外 envelope 由 `agent/wire` 擁有，經
 `runtime → core.EventSink → agent/wire.Sink` 接到真實 caller。不得把內部 `State`
@@ -342,8 +285,8 @@ JSONL 對外 envelope 由 `agent/wire` 擁有，經
 | credential                | `agentsdk/provider/credential`：`RouteID`/`Kinds`/`Names`、`NewSource`/`NewAutoSource`/`Source.Decorator()`、`Login`；唯一 import `bizshuk/auth` 之處                                                                                                                                                                                                                                                  |
 | provider registry         | `agentsdk/provider`（package `provider`，非 `registry`）：`Entry` 單獨擁有 name / metadata / static catalog / model+image factories；`Names`/`Entries`/`Lookup`/`Catalog`/`Capabilities`/`New`/`NewImage`/`Options.Resolve`/`ResolvedConfig`/`DEFAULT_NAME`；`env` 查詢以 `LookupEnv` 注入                                                                                                             |
 | root CLI subcommands      | `agentsdk/cmd`：`NewWizardCommand`（`wizard`/`w` 設定產生器）、`NewProviderCommand`（root cobra `provider` smoke-test CLI；打 `core.Provider.Generate` / `core.StreamProvider.Stream` 不走 Engine；`--list-models` 優先打 live `core.ModelLister`,失敗 fallback `Entry.Catalog`）                                                                                                                      |
-| authentication            | 外部 module `github.com/bizshuk/auth/{model,svc,utils,provider}`：`Login`、`For`、`FileStore`、`NewResolver`；root 以 `go.mod` require                                                                                                                                                                                                                                                            |
-| proxy                     | 外部 repo `github.com/bizshuk/proxy/{handlers,config,model,svc}`：`handlers.New`、`config.LoadConfig`、`model.Format`、`svc/route.Router`                                                                                                                                                                                                                                                        |
+| authentication            | 外部 module `github.com/bizshuk/auth`：只由 `provider/credential` 消費；API 契約見該 repo                                                                                                                                                                                                                                                            |
+| proxy                     | 外部 repo `github.com/bizshuk/proxy`：本 repo 無目錄、無 require、無 import                                                                                                                                                                                                                                                        |
 | provider adapters         | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity}`：各實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`）；Google/Grok 另實作 `provider.ImageGenerator`（`POST /images/generations`）；除 codex/antigravity 外皆另實作 optional `core.ModelLister`。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal |
 
 ## 開發與驗證 (Development and Verification)
@@ -351,113 +294,83 @@ JSONL 對外 envelope 由 `agent/wire` 擁有，經
 前置需求：Go `1.26+`；使用 provider adapter 時依該 module 的 API key/environment。
 
 ```bash
-cd /Users/shuk/projects/ai/agentSDK
 go work sync
 go mod download
-go build ./...
-go test ./... -count=1 -timeout=120s
-go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work --format text
-go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work --format json --json-indent='  '
-go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work --format mermaid
-go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work \
-  --policy /Users/shuk/projects/go-dependency-analysis/examples/agentsdk.json
+go test ./...                      # root module，含依賴紀律測試
+bash scripts/verify-workspace.sh   # go.work 全部 module 的 build + test
 ```
 
-Analyzer 的 `go-tool-fact` 來自當次 Go toolchain/build context；`policy-heuristic` 才是 layer/heavy dependency 建議。`unused-direct-candidate` 必須先檢查 tests、build tags、platform files、generated code 與 tools，不能直接刪 require。完整 flags 與限制見獨立 repo `/Users/shuk/projects/go-dependency-analysis/README.md`。
+依賴紀律不是文件裡的手動指令，是 `layering_test.go` 的三個測試：
 
-驗證所有 workspace modules：
+| 不變式 | 測試 |
+| --- | --- |
+| `agent/spec`、`prompt`、`prompt/source`、`agent/{permission,session,wire}` 的 agentsdk 依賴閉包只含 `core` 與自身 | `TestDeclarativeLayersOnlySeeCore` |
+| `core` 只依賴 stdlib | `TestCoreImportsStdlibOnly` |
+| 只有 `provider/credential` 可 import `github.com/bizshuk/auth` | `TestAuthImportedOnlyByProviderCredential` |
+
+依賴圖分析（外部 CLI，不在本 workspace）：
 
 ```bash
-# provider/* 已併回 root module；auth/proxy 是獨立 repo，不在 go.work 內。
-for mod in . sample/code-agent sample/file-agent sample/greet-agent sample/log-agent-v2 sample/logdoctor-agent \
-  sample/demo-memory sample/demo-middleware sample/skeleton-agent sample/demo-strategy; do
-  (cd "$mod" && go build ./... && go test ./... -count=1 -timeout=120s)
-done
-
-# 依賴紀律：兩個宣告層 package 只准看到 core
-go list -deps ./agent/spec | grep agentsdk   # 只該有 core 與 agent/spec
-go list -deps ./prompt     | grep agentsdk   # 只該有 core 與 prompt 與 prompt/source
-go list -deps ./prompt/source | grep agentsdk # 只該有 prompt 與 prompt/source（不該出現 skill/agent/core 在 production code）
-
-# agent/ 之下的三個 harness 子套件仍只准看到 core（位置在 agent/ 底下不代表可以往回依賴 agent）
-for p in permission session wire; do go list -deps ./agent/$p | grep agentsdk; done  # 每個只該有 core 與自己
-
-# core 不得知道任何 vendor 名稱（預設 provider 住在 provider.DEFAULT_NAME）
-grep -rn 'minimax\|anthropic\|openai\|google\|ollama\|grok' core/*.go
-
-# auth 只准被 provider/credential 看見
-go list -deps ./agent               | grep bizshuk/auth   # 必須為空
-go list -deps ./provider            | grep bizshuk/auth   # 必須為空
-go list -deps ./provider/anthropic  | grep bizshuk/auth   # 必須為空（任一 adapter 皆同）
-go list -deps ./provider/credential | grep bizshuk/auth   # 必須非空——唯一允許處
-
-# config/ 已解體
-test ! -d config && grep -rn "agentsdk/config" --include=*.go .   # 兩者皆須無輸出
+go-dependency-analysis --workspace ./go.work --format text
 ```
 
-`provider` 子指令 smoke-test（不打 Agent，直接打 core.Provider）：
+`go-tool-fact` 來自當次 Go toolchain/build context，`policy-heuristic` 才是建議。
+`unused-direct-candidate` 必須先檢查 tests、build tags、platform files 與 generated
+code，不能直接刪 require。完整 flags 見該 repo 的 README。
+
+`provider` 子指令 smoke-test（不走 Agent/Engine，直接打 `core.Provider`）：
 
 ```bash
-cd /Users/shuk/projects/ai/agentSDK
 go run . provider --list-providers
 go run . provider --list-models --provider minimax
 go run . provider "ping" --provider minimax
 go run . provider --stream "say hi in one word" --provider minimax
-go run . provider "summarize this repo" --provider anthropic --model claude-sonnet-5
 go run . provider "ping" --provider minimax --json | jq
 ```
 
-`wizard` 子指令（產生 `agent.Config` 設定檔，不打 provider、不驗憑證）：
+`wizard` 子指令（產生 `agent.Config`，不打 provider、不驗憑證）：
 
 ```bash
-cd /Users/shuk/projects/ai/agentSDK
 go run . w                                  # 互動：逐階段問，Enter 收預設，寫 ./agent.yaml
 go run . w -y --tier full -o -              # 非互動：全採預設，輸出 stdout
-go run . w -y --tier oneshot -o agent.json  # 副檔名決定格式（.json → JSON，其餘 → YAML）
-go run . w --edit agent.yaml                # 以既有設定當預設值逐階段確認（round-trip 無損）
+go run . w -y --tier oneshot -o agent.json  # 副檔名決定格式
+go run . w --edit agent.yaml                # 以既有設定當預設值（round-trip 無損）
 go run . w -o - --print-go                  # 額外印出等價的 Go literal
-go run . w --list reasoning.style           # 列出單一欄位的選項（來自 spec/choice.go）
+go run . w --list reasoning.style           # 列出單一欄位的選項
 ```
 
-常用本地流程：
+Sample 執行：
 
 ```bash
-# Root binary (go run .) 掛載 `provider` smoke-test 與 `wizard` 設定產生器
-go run . provider --list-providers                          # 列出已註冊 provider
-go run . provider --list-models --provider minimax          # 列出 provider catalog
-go run . provider "ping" --provider minimax                  # 單輪 prompt,直接打 core.Provider
-go run . provider --stream "stream me a haiku" --provider anthropic
-go run . provider "summarize X" --provider anthropic --model claude-sonnet-5
-
-# auth 與 proxy CLI 已移出本 repo，需在各自的 repo clone 內執行
-#   (bizshuk/auth)  go run . login --provider anthropic / list / verify --all
-#   (bizshuk/proxy) go run .                 # 啟動 LLM protocol proxy server
-
 export MINIMAX_API_KEY=...
-go run ./sample/log-agent-v2 --interval 1m
-
-cd sample/logdoctor-agent
-export MINIMAX_API_KEY=...
-go run . watch
+go run ./sample/log-agent-v2 --interval 1m     # 先等 interval 再掃描
+(cd sample/logdoctor-agent && go run . watch)  # 啟動即掃描
 
 cd sample/code-agent
 go run . --fake -p "看看這個專案"        # print 模式（進度走 stderr）
 go run . --fake --json -p "test"        # stream-json envelope（wire）
-go run . --fake                          # 互動 TUI（sample/code-agent/tui；執行中輸入 = Steer）
+go run . --fake                          # 互動 TUI（執行中輸入 = Steer）
 go run . --fake --sessions               # 列出本目錄 sessions；-c / -r / --fork 續跑
-
-# 真實 provider：--provider 選 adapter，各自讀自己的 env（--fake 拿掉）
-export MINIMAX_API_KEY=...                # minimax adapter 預設就讀這個
-go run . -p "explore this repo"           # 預設 --provider minimax、model=MiniMax-M3
-go run .                                   # 互動 TUI 打真實 model
-go run . --provider anthropic -p "..."    # 改讀 ANTHROPIC_API_KEY（含 minimax gateway：--base-url）
+go run . --provider anthropic -p "..."   # 改讀 ANTHROPIC_API_KEY
 ```
 
-`code-agent` 的 provider 選擇：`--provider minimax`（預設，讀 `MINIMAX_API_KEY`/`MINIMAX_BASE_URL`，`provider/minimax` stdlib adapter）或 `--provider anthropic`（讀 `ANTHROPIC_API_KEY`）；`--model` 留空用 adapter flagship 預設；`--api-key`/`--base-url` 為顯式覆寫。
+auth 與 proxy 的 CLI 在各自的 repo clone 內執行，不在本 repo。
 
-`sample/log-agent-v2` 固定使用 MiniMax（`MINIMAX_API_KEY`），沒有 provider selector、fake mode、tools、approval 或 session UI。它先等待 interval 再掃描，並以 `agent.New` / `agent.Run` / `agent.WithListener` / `agent.WithSink` 展示完整 agent lifecycle；每個 batch 最多 `1 MiB`，cursor 位於 `~/.config/log-agent-v2/data/log-cursor.json`。`sample/logdoctor-agent` 則是比較用的單一 `watch` command，以 `agent.OnceStream` 直接分析 chunk；啟動時立即掃描，之後預設每分鐘執行。兩者皆將 Markdown 寫 stdout、`core.StreamEvent` 寫 stderr。`sample/file-agent` 與 `sample/greet-agent` 使用 Anthropic-compatible adapter 與 `preset.Secure`。
+`code-agent` 的 provider 選擇：`--provider minimax`（預設，讀 `MINIMAX_API_KEY` /
+`MINIMAX_BASE_URL`）或 `--provider anthropic`（讀 `ANTHROPIC_API_KEY`）；`--model`
+留空用 adapter flagship 預設；`--api-key` / `--base-url` 為顯式覆寫。
 
-`sample/skeleton-agent` 是 `cmd/agent/wizard.go::goLiteral` 輸出範本逐字對應的單檔 sample:沒有 cobra、沒有四種 dispatch mode、不需要 `*Parts.Sessions`/`*Parts.Skills`。差別在 main 比 code-agent 少 `~260` 行,只為了展示 wizard `--print-go` 模板可直接落地;唯一的 12 行 `stdinAgent` 包裝是為了把 stdin 內容塞進 Bootstrap 回傳的 opening state。對比 shape 見 `sample/skeleton-agent/README.md`。
+`sample/log-agent-v2` 固定使用 MiniMax，沒有 provider selector、fake mode、tools、
+approval 或 session UI；以 `agent.New` / `Run` / `WithListener` / `WithSink` 展示完整
+lifecycle，cursor 位於 `~/.config/log-agent-v2/data/log-cursor.json`。
+`sample/logdoctor-agent` 是比較用的單一 `watch` command，走 `agent.OnceStream`。
+兩者皆將 Markdown 寫 stdout、`core.StreamEvent` 寫 stderr。`sample/file-agent` 與
+`sample/greet-agent` 使用 Anthropic-compatible adapter 與 `preset.Secure`。
+
+`sample/skeleton-agent` 是 `wizard --print-go` 輸出範本逐字對應的單檔 sample：沒有
+cobra、沒有四種 dispatch mode、不需要 `*Parts.Sessions` / `*Parts.Skills`；`stdinAgent`
+包裝負責把 stdin 內容塞進 Bootstrap 回傳的 opening state。對比 shape 見
+`sample/skeleton-agent/README.md`。
 
 ## 專案追蹤文件 (Project Tracking)
 
