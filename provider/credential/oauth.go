@@ -6,6 +6,7 @@ import (
 
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/provider"
+	"github.com/bizshuk/auth/active"
 	"github.com/bizshuk/auth/model"
 	authprovider "github.com/bizshuk/auth/provider"
 	svc "github.com/bizshuk/auth/svc"
@@ -26,8 +27,9 @@ import (
 // correct. That is the failure mode this file exists to prevent.
 
 // Store is the credential store a Source reads from. It is satisfied by
-// auth/utils.FileStore; the interface exists so a caller can substitute an
-// in-memory or remote store without this package growing an option.
+// gosdk/file.Store[*model.Credential]; the interface exists so a caller can
+// substitute an in-memory or remote store without this package growing an
+// option.
 type Store = svc.ResolverStore
 
 // Source turns stored credentials into a provider.Decorator.
@@ -76,9 +78,11 @@ func newSource(store Store, name, routeID string) (*Source, error) {
 	if err != nil {
 		return nil, fmt.Errorf("credential: provider %q: %w", name, err)
 	}
+	// active.Lookup reads this application's own settings file, so several
+	// agents sharing one credential directory each keep their own choice.
 	resolver := svc.NewResolver(store,
 		func(*model.Credential) (model.Authenticator, error) { return auth, nil },
-		nil)
+		nil, active.Lookup)
 	return &Source{resolver: resolver, name: name, family: auth.Provider()}, nil
 }
 

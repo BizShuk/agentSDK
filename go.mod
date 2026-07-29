@@ -5,8 +5,8 @@ go 1.26.0
 require (
 	github.com/adrg/frontmatter v0.2.0
 	github.com/anthropics/anthropic-sdk-go v1.50.2
-	github.com/bizshuk/auth v0.0.0-20260718180648-a05ed97812a8
-	github.com/bizshuk/gosdk v1.2.1
+	github.com/bizshuk/auth v0.0.0-20260729044245-d09afceca60d
+	github.com/bizshuk/gosdk v1.2.9
 	github.com/invopop/jsonschema v0.14.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
