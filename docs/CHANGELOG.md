@@ -49,6 +49,9 @@
 
 ### Provider contract 與 config pipeline
 
+參考：[`docs/specs/2026-07-27-provider-auth-image-capabilities.md`](specs/2026-07-27-provider-auth-image-capabilities.md)、
+[`docs/specs/2026-07-27-agent-sdk-contract-alignment.md`](specs/2026-07-27-agent-sdk-contract-alignment.md)。
+
 - Credential kind 只決定 request auth，不決定 endpoint 或 body；endpoint 統一由
   `ResolvedConfig.BaseURL` 管理，`core.Auth` 只保留 `APIKey`、`Bearer`、`Headers`。
 - `Phase C2` 將 decorator 接到外部 `auth`，移除零 caller 的 OAuth token DTO、
@@ -109,6 +112,8 @@
 
 ### Provider 認證解耦
 
+計畫：[`plans/2026-07-26-auth-under-provider-and-config-dissolution.md`](../plans/2026-07-26-auth-under-provider-and-config-dissolution.md)。
+
 - `Phase A` 移除 agent 對 auth 的死連線：`RefreshingProvider` 歸入
   `provider/credential`，`Host` 移除零 caller 的 `AuthStore` / `AuthDir`。
 - `Phase B` 解體 `config/`：process host 歸 `agent/cli`，middleware presets 歸
@@ -130,6 +135,8 @@
 
 ### Round、batch 與 interactive seam
 
+計畫：[`plans/2026-07-24-round-batch-and-interactive-seam.md`](../plans/2026-07-24-round-batch-and-interactive-seam.md)。
+
 - `Task 0`：`core.Budget` 新增 `MaxRounds`、`UsedRounds`、`MaxToolCalls`，
   `Exceeded()` 新增 `round_budget`；同步 `spec.Limits`、tier defaults、validation 與
   `build.go` mapping。
@@ -149,6 +156,8 @@
 ## 2026-07-22
 
 ### Agent skeleton `M1`–`M7`
+
+計畫：[`plans/2026-07-22-agent-skeleton-config-opt-in.md`](../plans/2026-07-22-agent-skeleton-config-opt-in.md)。
 
 - `M1`：`agent/spec` 提供 `Config`、八個 feature blocks、`Choice` metadata、
   tier expansion、validation 與 JSON encoding。
@@ -185,6 +194,9 @@
 ## 2026-07-19
 
 ### Harness/UX skeleton
+
+計畫：[`plans/2026-07-19-harness-ux-modularization.md`](../plans/2026-07-19-harness-ux-modularization.md)。
+來源調查：[`docs/memory/2026-07-19-agent-client-feature-catalog.md`](memory/2026-07-19-agent-client-feature-catalog.md)。
 
 - `sample/code-agent` 接上 TUI、wire、hooks、permission、session、skills、commands、
   subagents、steering/follow-up queue；支援互動、`-p`、`--json`、session flags 與

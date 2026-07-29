@@ -2,65 +2,12 @@
 
 - [ ] credential key should be just placeholder, and replace by env and .env
   - 部分前進（2026-07-22）：`spec.Model.APIKeyEnv` 讓設定檔指名`環境變數名稱`而非密鑰本身；`provider.Options.APIKey` 的字面值只走程式注入，設定檔無此欄位。完整方案（憑證儲存改 placeholder）仍待開 plan
-  - 與下方「Provider 認證解耦」同一條線：placeholder 方案的落腳處就是 `provider/credential`
-- [x] DefaultEnvironmentNames add ollama and llmbox
+  - Placeholder 方案的落腳處是 `provider/credential`
 
-## Provider 認證解耦（2026-07-26 全數落地）
+## Provider 認證與能力
 
-計畫見 [`plans/2026-07-26-auth-under-provider-and-config-dissolution.md`](plans/2026-07-26-auth-under-provider-and-config-dissolution.md)。
-
-目標：`provider` : `auth` 是 `1:N`（一個 provider，N 種 credential kind），credential 以
-`per-request decorator` 注入 adapter，上層 `agent` 依使用者設定選 kind 並在
-`provider.New` 時注入，caller 拿到的就是已接好的 provider。
-
-設計結論（2026-07-26 定案並落地）：
-
-- decorator 的型別必須定義在 `provider`，`不`能定義在 `auth` —— 否則每個 adapter 都得 import
-  `auth`，「adapter 自我包含」這個性質就沒了，而那正是當初複製 `967` 行 OAuth 的理由
-- 注入的必須是 `func(ctx) (core.Auth, error)` 而非 `core.Auth` 值 —— OAuth token 會在 run
-  中途過期，建構時定案的 header 撐不過一小時；改在 request boundary 解析順帶涵蓋
-  `Generate` retry 與 SSE 重連，且不需要重建 adapter；舊 rebuild-provider wrapper 已移除
-- `1:N` 維持成`軸`，不要被 `auth/provider.ROUTES` 的扁平 id 汙染上層：`anthropic_oauth`
-  這種 id 只存在於 `provider/credential` 的對照表內，不冒到 `spec.Model.Provider`。
-  對照表無論如何都需要，因為名稱本來就不同（`codex`→`openai`、`grok`→`xai`）
-
-已查證的前提：
-
-- [x] credential kind 只影響 header，不影響 base URL 或 body；2026-07-27 起 endpoint
-      統一只在 `ResolvedConfig.BaseURL`，不再放進 request-time `core.Auth`
-- [x] `core.Auth` 是 `APIKey`/`Bearer`/`Headers` union；7 個 adapter 皆直接消費同一型別
-
-待辦（依執行順序）：
-
-- [x] `Phase A` 切斷死掉的 auth 連線：`config/provider.go`（`RefreshingProvider`，零呼叫者）搬到
-      `provider/credential`；`Host` 移除 `AuthStore`/`AuthDir`（零呼叫者）。
-      驗收 `go list -deps ./agent | grep bizshuk/auth` 為空。獨立可交付、零風險
-- [x] `Phase B` `config/` 解體（見計畫；`agent.Host` + `middleware/preset`）
-- [x] `Phase C1` `7` 個 adapter 統一到 `core.Auth` + 接上 per-request `provider.Decorator`。
-      `不`吃 auth 依賴，純 in-repo；做完就已經是目標架構，`Phase C2` 只是換 decorator 的來源
-- [x] `Phase C2` decorator 指向 `auth`；2026-07-27 再移除零 caller 的 OAuth token DTO /
-      `NewWithOAuth` 與 rebuild wrapper，只留 canonical `core.Auth` + vendor header
-- [x] `Phase 5` 單一 provider config pipeline：`Options.Resolve` → `ResolvedConfig` →
-      `Entry.New`；七份 private config / functional options / env resolver / register converter 已移除
-- [x] `Phase 6` contract-tested wire sharing：Google / Ollama 的 request、response 與 SSE
-      經跨 adapter golden/httptest 證明相容後，收斂到 `provider/protocol/openaichat` codec；其他
-      provider DTO 保持 vendor-local。通用完整 frame codec 已下沉至 stdlib-only
-      `provider/protocol/sse`，provider terminal semantics 不進 generic package
-- [x] `Phase 7` model/image 共用 auth policy + optional image capability：`Entry.NewImage` /
-      `provider.NewImage` / `Entry.Supports` 接上；Google / Grok 經跨 adapter golden tests 後
-      共用 `provider/protocol/openaiimage`，支援 `/images/generations` 的 URL / base64 result、
-      usage、bounded structured error 與 request-time credential decorator。明示
-      `Options.APIKey` 不再可能被 ambient decorator 覆蓋；七個誤名 `auth_api.go` 統一改為
-      `config.go`
-
-落地後追蹤事項：
-
-- [x] 將 Anthropic、Antigravity、Codex、Grok、MiniMax 五份 `stream.go` 從逐行
-      `bufio.Scanner` 遷移到 `provider/protocol/sse.Decoder`；各 provider 先鎖定
-      terminal / transport error / cancellation contract，Grok 必須覆蓋 UTF-8 BOM，
-      並共同覆蓋 multiline data、partial frame 與 size limit（2026-07-29）
-- [ ] OAuth 登入流程`未經實跑驗證`。C2 一律以 `auth` 的常數為準（in-tree 版本零呼叫者，
-      故不構成行為回歸），但兩份曾在 `TOKEN_URL`（`console.` vs `api.`）、
+- [ ] OAuth 登入流程`未經實跑驗證`。`provider/credential` 一律以外部 `auth` 的常數為準，
+      但移除前的 in-tree 版本曾在 `TOKEN_URL`（`console.` vs `api.`）、
       `REDIRECT_URI`（貼回碼 vs `localhost:54545`）、`SCOPES`（是否含 `org:create_api_key`）
       三處漂移。第一次真正跑 login 時要留意這三個值
 - [ ] `bizshuk/auth` 仍是未發布的 pseudo-version，`go work sync` 對它 `404`（靠 module cache
@@ -77,23 +24,7 @@
       的獨立 contract 與真實 adapter consumer，再把 `provider/sample --type audio` 從 typed
       unsupported 接到對應 factory；不得直接把三種 wire API 合成單一 fat interface
 
-## Agent Skeleton（2026-07-22 落地，`M1`–`M7` 完成）
-
-計畫見 [`plans/2026-07-22-agent-skeleton-config-opt-in.md`](plans/2026-07-22-agent-skeleton-config-opt-in.md)。
-
-- [x] `M1` `agent/spec`：`Config` + 8 個 feature block、`Choice` 中繼資料、tier 展開、驗證、JSON 編解（`go list -deps` 只見 `core`）
-- [x] `M2` `agent.Once` / `OnceStream`：走 `one_shot` rule + 全 nil port 的同一條 Engine 路徑，不繞過；順手移除 `core/thinking.go` 三行 stale `STUB` 註解
-- [x] `M3` `prompt` package：`Slot`(system/user/reminder) / `Section` / `Source` / `Builder`，+ `agent` 內五個 adapter（persona / context files / skills / env / reminder）
-- [x] `M4` `agent/build.go` + `agent/options.go`：7 stage pipeline、`New`/`MustNew`/`Bootstrap`、八個 `With*`；原 `Preflight` 已於 2026-07-27 併回單次 `Bootstrap`
-- [x] `M5` `provider/registry`：name → adapter 唯一真相，env 查詢注入化
-- [x] `M6` `sample/code-agent/cmd/compose.go` `333` → `101` 行；政策移到 `safety.go`、session 選取移到 `session.go`
-- [x] `M7` `cmd/wizard.go`：`wizard`/`w` 逐階段設定產生器，選項全部來自 `spec` 與 `agent.ProviderChoices()`
-- [x] vocabulary factory：`builtin.Register` / `reasoning.NewRule` / `core.ParseAutonomyLevel` 接管 name-to-implementation mapping，`agent` 只組裝（2026-07-27）
-- [x] provider capability 收窄：`core.Provider` 只留 `Generate`，stream / live catalog 拆成
-      optional interface；`Entry` 單獨擁有 name / metadata / static catalog / factory（2026-07-27）
-- [x] `CLAUDE.md` / `README.md` 同步（含順手修正的既有漂移：幽靈 `auth/`+`proxy/` 子樹、失效驗證迴圈、舊 workspace 路徑）
-
-待補：
+## Agent 組裝與設定
 
 - [ ] 恢復 `INSTRUCTION_CHECKPOINT` / `CheckpointInstruction`：先定義它與 runtime 每輪自動 `StateStore.Save` 的不同語意，接上真實 producer，並補 runtime、tracing 與 JSON round-trip tests
 - [ ] 恢復 `INSTRUCTION_EMIT` / `EmitInstruction`：先定義 envelope owner 與真實 consumer path，避免與 `core.EventSink` / `Engine.Emitter` 重疊，再補 wire-format tests
@@ -108,108 +39,20 @@
 - [ ] `wizard` 尚無 `--verify`（選了才在最後跑一次 `agent.Once` 做 smoke test）
 - [ ] `agent` 尚無 settings 檔階層載入（`~/.config/<app>/agent.yaml` → 專案 `agent.yaml` 的合併），與 hook/permission 的 settings 層一起做
 
-## Round / Batch / Interactive（2026-07-24 落地）
-
-計畫見 [`plans/2026-07-24-round-batch-and-interactive-seam.md`](plans/2026-07-24-round-batch-and-interactive-seam.md)（收斂並取代兩份 approval 草案）。
-
-- [x] `Task 0` `core.Budget` 加 `MaxRounds`/`UsedRounds`/`MaxToolCalls`、`Exceeded()` 加 `round_budget`；`spec.Limits` 三欄位 + tier 預設 + validate + `build.go` 映射
-- [x] `Task 1` batch settlement（修兩個 live bug）：`ThinkThenAct` dispatch phase 一次發 `N` 個 `CALL_TOOL`、`runtime` 播種整批並 `settleSkipped`/`settleUnrun`；`reasoning.decodeCalls` 修 JSON round-trip 後 pending call 消失
-- [x] `Task 2` `MaxToolCalls` 超限`整批 skip + settle + 暫停 continue-gate`（approve=resume 重讀 / reject=完成）；`MaxRounds` 經 budget middleware 生效
-- [x] `Task 3` 三介面草案收斂為單一 `agent.Interactive`（`NextRound`）+ `WithRoundTimeout`；`advance` 只走 `SubmitHumanDecision`（不 double-drive）
-- [x] `Task 4` `sample/skeleton-agent` 實作 `Interactive` 為 stdin REPL（單一背景 reader 餵 channel；live 驗證 `rounds:2`）
-- [x] `Task 5` `docs/terminology.md`（8 詞條）/ `CLAUDE.md`（app/config 列 + 三條核心決策）/ 本檔同步
-
-待補：
+## Round / Batch / Interactive
 
 - [ ] `MaxToolCalls` 目前是「人工減速帶」（超限暫停等 resume）；若某 agent 要「超限即硬失敗」需另加 `spec` 開關
 - [ ] continue-gate 的 resume 目前重讀重新規劃；「重發原批次」語意（budget 當一次性放行）尚未實作，需先解決 resume 時 bypass budget check 的迴圈風險
 
-## Provider CLI (root cobra subcommand, 2026-07-20)
+## Harness/UX
 
-- [x] `cmd/provider.go`：`NewProviderCommand()` — root cobra `provider` 子指令（旗標 `--provider`/`--model`/`--api-key`/`--base-url`/`--system`/`--max-tokens`/`--stream`/`--json`/`--list-models`/`--list-providers`）；prompt 接 positional args
-- [x] 不走 Engine/harness,直接 `core.Provider.Generate` / `core.StreamProvider.Stream`;registry map 收 minimax + anthropic adapter
-- [x] `main.go` 改為掛載 `cmd.NewProviderCommand()`,長敘述列出 `provider` 為唯一 subcommand
-- [x] `CLAUDE.md`：project tree 加 `cmd/`、module mapping 加 `root CLI subcommands` 列、`Development and Verification` 加 provider smoke-test 區塊
-- [x] registry 抽成共用 `provider/registry` package（2026-07-22）：`minimax`/`anthropic`/`google`/`grok`/`ollama` 五個 adapter，env 查詢改為 `LookupEnv` 注入；`cmd/provider.go` 與 `agent` 共用同一份，`--list-providers` 與設定檔不會漂移
-- [x] `codex` / `antigravity` 已進 registry（2026-07-24）；2026-07-27 起 discovery
-      資料只留在 `Entry.Metadata`，API key / OAuth 均由單一 `ResolvedConfig.Auth` 或 decorator 表達
-
-## Harness/UX（2026-07-19 skeleton 落地，細節待補）
-
-- [x] `sample/code-agent`：組合 tui + wire + harness 全套的互動 CLI（tui 的第一個 caller）— 2026-07-19 落地：互動 TUI / `-p` print / `--json` wire、session flags（`-c`/`-r`/`--fork`/`--sessions`）、`--fake` scripted provider、`.agentsdk/` skills/commands/agents 探索
 - [ ] `tui`：Editor（raw mode、autocomplete、bracketed paste）、Markdown component、行級 diff、CJK 寬度、ioctl Size
 - [ ] `hook`/`permission`：settings 檔載入層（JSON → Rules），對齊 claude-code settings 階層
 - [ ] `runtime`：follow-up phase reset 目前只認 `think_then_act.phase`，其他五個 rule 需通用 reset 慣例
 - [ ] `wire`：approval_request/human_decision 與 Engine HITL 的實際串接（目前只有 envelope 定義）
 - [ ] `session`：in-place tree branching（pi /tree 式單檔多分支）與 rewind
 - [ ] `runtime`：「round-trip-without-execution」機制 —— 拿到 model 完整 assistant 回應（含 `tool_calls`）但不真的執行；目前 short-circuit 只 cover「model 沒 tool_calls → COMPLETED」，有 tool_calls 就會 dispatch。三條可行方向：(a) 新增 `INSTRUCTION_RETURN_TOOL_DECISION` + `RUN_STATUS_AWAITING_DECISION`，(b) `Engine.DryRun()` 模式在第一個 CALL_MODEL 後強制停下並把 `ModelResult.ToolCalls` 暴露給 caller，(c) 寫一個 `RejectTools` rule 在「看到 tool_calls 時改 emit RETURN」。動工前先開 plan 並對齊 wire format（instruction kind 是否進 `core.Instruction` 的穩定區）。部分建材已就緒（2026-07-24）：`MaxToolCalls` 的 continue-gate 已示範「整批不執行 → 暫停 → 人工決定 resume/stop」，可作方向 (b) 的暫停機制參考。
-- [x] `subagent`：RunFunc 的 engine factory 標準組裝 —— 2026-07-22 由 `agent.subagentRunner` 承擔（scoped ephemeral engine、無 store/WAL、`SubAgent.Tools` allowlist 生效，空則沿用 parent 的工具集）
 - [ ] `contextfile`：auto-memory 寫回（MEMORY.md 索引式）
 - [ ] streaming delta：provider 原生 SSE 接進 `core.StreamEvent`（目前只有 folded events；`STREAM_MESSAGE_DELTA` 保留位）
 
-## Pending
-
-- [x] `perception/` 去留:已刪除套件(無 production consumer;`core.ObservationSource` port 保留在 `core`)
-- [x] `cli/` + `mcp/` 去留:已刪除套件(無 production consumer)
-  - `cli/` 為 JSONL 9 種 envelope + codec,只有 self test;`runtime/loop.go` 的 `Emitter` 註解改成「websocket writer 或其他 transport 承接」
-  - `mcp/` 為獨立 module + `modelcontextprotocol/go-sdk` 依賴,只有 self test;從 `go.work` 移除,`CLAUDE.md` 同步刪除對應條目
-  - 後續:若日後需要 MCP 或 JSONL 對外 wire format,以獨立 module 重新落地並補 wiring
-- [x] `video-utils` 外部依賴移除 (2026-07-19)
-  - `cmd/root.go` 移除 `videocmd` import 與 `videocmd.NewCommand()`;package doc 改為「auth + proxy 二者組裝」
-  - `cmd/root_test.go` 刪除(`TestNewRootBuildsIndependentVideoCommands` 唯一目的就是驗證 video command 指標獨立)
-  - `go.mod` / `go.sum` 移除 `github.com/bizshuk/video-utils` require
-  - `CLAUDE.md` 與 `README.md` 同步拿掉 video-utils / `video` 指令相關條目;模組數 12 → 11
-  - 前置需求段拿掉 ffmpeg/ffprobe 描述;若日後重啟,以獨立 git repo clone 後 add workspace module
-
-## M6 — Provider 認證 (`auth/`)
-
-- [x] `auth/` 機制層:`Credential` / `Authenticator` / `VerifyResult` / `Options`(純 stdlib,不認識任何 provider)
-- [x] `auth/oauth.go`:PKCE S256 + 可選 client_secret + state CSRF + single-flight refresh + 429 Retry-After 退避
-- [x] `auth/device.go`:Device Authorization Grant(RFC 8628)+ OIDC discovery(https-only 驗證)
-- [x] `auth/apikey.go`:`APIKeySpec` + 泛用 `APIKeyAuth`(env chain + models 端點驗證)
-- [x] `auth/store.go`:FileStore(0700 目錄 / 0600 檔 / atomic temp+rename)
-- [x] `auth/provider/{anthropic,openai,google,xai,antigravity,vertex}`:6 個 provider 包,只 import `auth`
-- [x] `auth/provider/provider.go`:`ROUTES` registry + `New` / `Login` / `For` / `IDs`(9 個 provider id)
-- [x] `auth/authtest/`:共用測試假 provider(給 `auth` 與各 provider 包)
-- [x] `cmd/auth/`:單一 `login --provider <id>` + list / verify / refresh / logout
-- [x] e2e:假 provider(models 端點 + 驗簽的 Google STS)跑通 login → list → verify → refresh → logout
-- [x] e2e:xAI device flow 對真實 `auth.x.ai` 跑通 OIDC discovery + device code 發放
-- [x] 到期自動 refresh：`provider/credential.Source.Decorator()` 每次 request 經
-      `auth.Resolver` 解析/換發，不重建 inner provider；舊 rebuild path 已移除
-
-## M5 — sample wiring 收尾 (完成)
-
-- [x] `sample/logdoctor-agent` 接入 `tool.RegisterDefaults`(8 工具:6 內建 + read_log_tail + notify;SecureMiddleware policy 由 nil 改為 `action.DefaultPolicy()`)
-- [x] `sample/file-agent` 建立(純 6 內建工具,以 greet-agent 範本;`go.work` 加 `./sample/file-agent`)
-
 ## Archive
-
-- [x] `sample/greet-agent` 接入 6 內建工具 + `SecureMiddleware` @2026-07-11_17:34:51 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
-- [x] `config.MustOpenForCLI` / `OpenForCLI` / `Host` wiring helper @2026-07-11_17:34:49 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
-- [x] `action.Policy` sandbox re-check inside tool(defense-in-depth) @2026-07-11_17:34:46 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
-- [x] `tool/tool.go` `RegisterDefaults(reg, opts)` 一次註冊 @2026-07-11_17:34:44 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
-- [x] `tool/{read,write,edit,bash,glob,grep}.go` — 6 個內建工具 @2026-07-11_17:34:42 @Completed @M5_—_內建工具_+_sample_wiring_helper_(完成)
-- [x] `--provider=anthropic|openaicompat|google` flag 接通 sample @2026-07-11_17:34:39 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
-- [x] 三 provider mock-driven 測試(anthropic httptest / google 內部 fixture) @2026-07-11_17:34:37 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
-- [x] `runtime/m4_hitl_e2e_test.go` — approve + reject 完整故事 @2026-07-11_17:34:34 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
-- [x] `runtime.consumeApprovedPendingCall` — out-of-band decision 消費 @2026-07-11_17:34:31 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
-- [x] `config.SecureMiddleware` — 含 sandbox + approval + spotlight + sanitizer 完整鏈 @2026-07-11_17:34:29 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
-- [x] `provider/{anthropic,openaicompat,google}` 三獨立 module @2026-07-11_17:34:27 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
-- [x] `cli/envelope.go` + `cli/codec.go` — JSONL 9 種 MessageType @2026-07-11_17:34:25 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
-- [x] `action/approval_policy.go` — `DefaultApprovalPolicy` L0-L4 grid @2026-07-11_17:34:22 @Completed @M4_—_架構解耦_+_HITL_+_三_Provider_(完成)
-- [x] `runtime/m3_e2e_test.go` — runtime 層 e2e 驗證 sanitizer + spotlight + transcript 同步 @2026-07-11_17:34:19 @Completed @M3_—_工具生態_+_執行期安全_(完成)
-- [x] `sample/logdoctor-agent`:`tool/{add_todo,list_todos,complete_todo}.go` + `core/todo.go` + `cmd/list.go` @2026-07-11_17:34:17 @Completed @M3_—_工具生態_+_執行期安全_(完成)
-- [x] `mcp/client.go` — `modelcontextprotocol/go-sdk`,實作 `action.ToolSource` @2026-07-11_17:34:15 @Completed @M3_—_工具生態_+_執行期安全_(完成)
-- [x] `middleware/observability/tracing.go` — OTel span @2026-07-11_17:34:13 @Completed @M3_—_工具生態_+_執行期安全_(完成)
-- [x] `middleware/security/spotlight.go` — 工具輸出 untrusted 標記(支援 `json.RawMessage` 結構化包覆) @2026-07-11_17:34:11 @Completed @M3_—_工具生態_+_執行期安全_(完成)
-- [x] `middleware/security/approval_gate.go` — `DefaultApprovalPolicy` (L0-L4 × RiskLevel grid) + ASK 改寫 REQUEST_APPROVAL @2026-07-11_17:34:08 @Completed @M3_—_工具生態_+_執行期安全_(完成)
-- [x] `middleware/security/sanitizer.go` — 命中 prompt injection 替換為 `[SANITIZED_BY_AGENTSDK]` banner @2026-07-11_17:34:06 @Completed @M3_—_工具生態_+_執行期安全_(完成)
-- [x] `action/sandbox.go` + `middleware/security/sandbox_mw.go` — 路徑/指令 allow-deny + DENY 改寫 NOTIFY+DONE @2026-07-11_17:34:04 @Completed @M3_—_工具生態_+_執行期安全_(完成)
-- [x] `action/schema.go` — `invopop/jsonschema` struct 反射 + required-field 驗證 @2026-07-11_17:34:02 @Completed @M3_—_工具生態_+_執行期安全_(完成)
-- [x] `sample/file-agent` 建立(M5 plan 驗收第 5 點;greet-agent 已先一步接入內建工具) @2026-07-11_17:32:31 @Completed @Pending
-
-### M3 — 工具生態 + 執行期安全 (完成)
-
-### M4 — 架構解耦 + HITL + 三 Provider (完成)
-
-### M5 — 內建工具 + sample wiring helper (完成)
