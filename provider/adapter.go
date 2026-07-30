@@ -31,5 +31,6 @@ type Metadata struct {
 	APIKeyEnv          []string // API key env list (lowest precedence in auto mode)
 	BaseURLEnv         string
 	VideoBaseURLEnv    string
+	MusicBaseURLEnv    string
 	CredentialRequired bool
 }

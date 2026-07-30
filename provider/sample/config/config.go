@@ -17,6 +17,13 @@ type Config struct {
 	BaseURL  string
 	Prompt   string
 	JSON     bool
+
+	Lyrics       string
+	AudioURL     string
+	OutputFormat string
+	SampleRate   int
+	Bitrate      int
+	AudioFormat  string
 }
 
 func (cfg Config) Validate() (provider.Entry, error) {
@@ -32,9 +39,12 @@ func (cfg Config) Validate() (provider.Entry, error) {
 		)
 	}
 	switch cfg.Type {
-	case API_TYPE_CHAT, API_TYPE_IMAGE, API_TYPE_AUDIO:
+	case API_TYPE_CHAT, API_TYPE_IMAGE, API_TYPE_MUSIC, API_TYPE_AUDIO:
 	default:
-		return provider.Entry{}, fmt.Errorf("type %q must be chat, image, or audio", cfg.Type)
+		return provider.Entry{}, fmt.Errorf(
+			"type %q must be chat, image, music, or audio",
+			cfg.Type,
+		)
 	}
 	switch cfg.Auth {
 	case AUTH_MODE_AUTO, AUTH_MODE_APIKEY, AUTH_MODE_OAUTH:

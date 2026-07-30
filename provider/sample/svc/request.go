@@ -14,6 +14,13 @@ type Request struct {
 	Prompt   string
 	JSON     bool
 	Options  provider.Options
+
+	Lyrics       string
+	AudioURL     string
+	OutputFormat string
+	SampleRate   int
+	Bitrate      int
+	AudioFormat  string
 }
 
 // WriteJSON encodes value as formatted JSON to out.

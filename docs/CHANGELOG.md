@@ -9,6 +9,19 @@
 
 ## 2026-07-31
 
+### MiniMax music optional capability
+
+- `provider` 新增 non-streaming `MusicGenerator`、`MusicRequest`、`MusicResult`、
+  `Entry.NewMusic`、`provider.NewMusic` 與 `CAPABILITY_MUSIC_GENERATE`，不擴肥 agent
+  runtime 的 `core.Provider`，也不把 music 假裝成 generic audio。
+- `provider/minimax` 接上 `POST /v1/music_generation`，支援 text-to-music 與 one-step /
+  feature-ID cover inputs、request-time Bearer auth、`music-3.0` / `music-cover` defaults、
+  bounded response/error、typed `APIError` 與獨立 `MINIMAX_MUSIC_BASE_URL`。
+- `provider/sample --type music` 成為真實 consumer，提供 cover URL、lyrics、output/audio
+  settings 與 safe terminal output；`--type audio` 繼續回 typed unsupported。
+- deterministic acceptance 使用 `httptest`；尚未以真實 `MINIMAX_API_KEY` 與
+  operator-owned source audio 執行 paid live smoke。
+
 ### MiniMax video optional capability
 
 - `provider` 新增 `VideoGenerator`、`VideoRequest`、`VideoResult`、`Entry.NewVideo`、

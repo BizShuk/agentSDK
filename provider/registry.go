@@ -1,4 +1,4 @@
-// Package provider is the layer that talks to model services: model and image
+// Package provider is the layer that talks to model services: model and media
 // capability contracts, the name → constructor registry, and the credential
 // resolution that stands between a config value and a live client.
 //
@@ -53,6 +53,7 @@ type Entry struct {
 	New      Factory
 	NewImage ImageFactory
 	NewVideo VideoFactory
+	NewMusic MusicFactory
 	Catalog  func() []core.ModelSpec
 }
 
@@ -68,7 +69,8 @@ var (
 // database/sql/driver). Providers should call this exactly once from
 // their package's init().
 func Register(e Entry) {
-	if strings.TrimSpace(e.Name) == "" || (e.New == nil && e.NewImage == nil && e.NewVideo == nil) {
+	if strings.TrimSpace(e.Name) == "" ||
+		(e.New == nil && e.NewImage == nil && e.NewVideo == nil && e.NewMusic == nil) {
 		panic(fmt.Sprintf(
 			"provider: Register requires Name and at least one factory (got %+v)",
 			e,
@@ -204,6 +206,30 @@ func NewVideo(name string, o Options) (VideoGenerator, error) {
 	return WithVideoDecorator(e.Name, generator, decorator), nil
 }
 
+// NewMusic builds the named provider's music-generation capability using the
+// same credential resolution and request-time decorator precedence as New.
+func NewMusic(name string, o Options) (MusicGenerator, error) {
+	e, err := lookup(name)
+	if err != nil {
+		return nil, err
+	}
+	if e.NewMusic == nil {
+		return nil, &UnsupportedCapabilityError{
+			Provider:   e.Name,
+			Capability: CAPABILITY_MUSIC_GENERATE,
+		}
+	}
+	resolved, decorator, err := resolveMusicOptions(e, o)
+	if err != nil {
+		return nil, err
+	}
+	generator, err := e.NewMusic(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s: music: %w", e.Name, err)
+	}
+	return WithMusicDecorator(e.Name, generator, decorator), nil
+}
+
 func lookup(name string) (Entry, error) {
 	e, ok := Lookup(name)
 	if !ok {
@@ -221,6 +247,14 @@ func resolveVideoOptions(e Entry, o Options) (ResolvedConfig, Decorator, error) 
 	metadata := e.Metadata
 	if metadata.VideoBaseURLEnv != "" {
 		metadata.BaseURLEnv = metadata.VideoBaseURLEnv
+	}
+	return resolveOptionsWithMetadata(e, o, metadata)
+}
+
+func resolveMusicOptions(e Entry, o Options) (ResolvedConfig, Decorator, error) {
+	metadata := e.Metadata
+	if metadata.MusicBaseURLEnv != "" {
+		metadata.BaseURLEnv = metadata.MusicBaseURLEnv
 	}
 	return resolveOptionsWithMetadata(e, o, metadata)
 }

@@ -6,7 +6,7 @@
 - provider：`anthropic`、`antigravity`、`codex`、`google`、`grok`、
   `minimax`、`ollama`。
 - auth：`auto`、`api_key`、`oauth`。
-- API type：`chat`、`image`、`audio`。
+- API type：`chat`、`image`、`music`、`audio`。
 
 ## 查看 capability matrix
 
@@ -14,7 +14,7 @@
 go run ./provider/sample --list
 ```
 
-輸出會列出每個 linked provider 的 `chat / image / audio` 支援狀態，以及實際查詢的
+輸出會列出每個 linked provider 的 `chat / image / music / audio` 支援狀態，以及實際查詢的
 API key / OAuth environment variables。
 
 `provider/all` 只負責 blank-import adapters；provider metadata 與 capability 仍以
@@ -99,6 +99,29 @@ XAI_API_KEY=... go run ./provider/sample \
 非 JSON 模式只顯示 URL、base64 長度、MIME type 與 usage，避免把大型 base64 payload
 直接灌進 terminal；需要完整 payload 時才加 `--json`。
 
+## Music
+
+目前 registry 中 `minimax` 實作 non-streaming `provider.MusicGenerator`。以下指令對應
+MiniMax one-step cover request：
+
+```bash
+MINIMAX_API_KEY=... go run ./provider/sample \
+  --provider minimax \
+  --auth api_key \
+  --type music \
+  --model music-cover \
+  --audio-url https://example.com/original-song.mp3 \
+  --output-format url \
+  --sample-rate 44100 \
+  --bitrate 256000 \
+  --audio-format mp3 \
+  "Jazz, smooth, late night lounge, saxophone"
+```
+
+非 JSON 模式只印 `music.url` 或 hex 字元數與 metadata，不把大型 audio payload 直接灌進
+terminal。Music endpoint 可用 `MINIMAX_MUSIC_BASE_URL` 獨立覆寫；它不會沿用指向
+Anthropic-compatible model endpoint 的 `MINIMAX_BASE_URL`。
+
 ## Audio
 
 ```bash
@@ -112,4 +135,5 @@ go run ./provider/sample \
 原因是 audio 尚未定義單一 production contract：`speech synthesis`、`transcription` 與
 `audio-chat input` 是三種不同 wire API；現有 adapters 也尚未轉譯
 `core.Part{Kind: PART_KIND_AUDIO}`。在語意與真實 adapter consumer 確定前，sample
-不會靜默丟棄音訊或把其中一種 API 假裝成全部 audio。
+不會靜默丟棄音訊或把其中一種 API 假裝成全部 audio。已落地的 music generation 是
+獨立 `MusicGenerator`，不代表 generic audio contract 已定義。

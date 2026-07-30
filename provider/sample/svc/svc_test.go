@@ -78,6 +78,44 @@ func TestImage(t *testing.T) {
 	}
 }
 
+func TestMusic(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{
+			"data":{"audio":"https://example.test/svc.mp3","status":2},
+			"base_resp":{"status_code":0}
+		}`)
+	}))
+	t.Cleanup(server.Close)
+
+	var out bytes.Buffer
+	err := Music(context.Background(), Request{
+		Provider:     "minimax",
+		Prompt:       "Jazz, smooth, late night lounge",
+		AudioURL:     "https://example.test/original.mp3",
+		OutputFormat: "url",
+		SampleRate:   44100,
+		Bitrate:      256000,
+		AudioFormat:  "mp3",
+		Options: provider.Options{
+			Model:   "music-cover",
+			BaseURL: server.URL,
+			LookupEnv: func(k string) string {
+				if k == "MINIMAX_API_KEY" {
+					return "test-key"
+				}
+				return ""
+			},
+		},
+	}, &out)
+	if err != nil {
+		t.Fatalf("Music: %v", err)
+	}
+	if !strings.Contains(out.String(), "https://example.test/svc.mp3") {
+		t.Errorf("output = %q, want music URL", out.String())
+	}
+}
+
 func TestAudio(t *testing.T) {
 	err := Audio("google")
 	if !errors.Is(err, provider.ErrUnsupportedCapability) {

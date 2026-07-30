@@ -16,9 +16,10 @@ Go Agentic Loop SDK：以`宣告式設定`組裝目標導向控制迴圈 (Goal-d
 
 `core/` 是純狀態機 (state + event + instruction + reasoning),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
 
-圖片與影片生成分別是 `provider.ImageGenerator`、`provider.VideoGenerator`
+圖片、影片與音樂生成分別是 `provider.ImageGenerator`、`provider.VideoGenerator`、
+`provider.MusicGenerator`
 optional capability，不進 agent runtime 的 `core.Provider`。caller 必須明確走
-`NewImage` 或 `NewVideo`；不支援的 adapter 回傳可用
+`NewImage`、`NewVideo` 或 `NewMusic`；不支援的 adapter 回傳可用
 `errors.Is(err, provider.ErrUnsupportedCapability)` 判斷的錯誤：
 
 ```go
@@ -39,9 +40,33 @@ MiniMax 的 video adapter 支援 text / image / startend / subject 四種 mode�
 asynchronous polling、authenticated download 與 MP4 verification；caller 提供
 `VideoRequest.OutputPath`，完成後取得 `VideoResult.Path`。
 
+MiniMax 的 music adapter 提供 non-streaming text-to-music 與 cover generation。
+以下是 user-supplied Python request 的 Go 等價寫法：
+
+```go
+generator, err := provider.NewMusic("minimax", provider.Options{})
+if err != nil {
+	return err
+}
+result, err := generator.GenerateMusic(ctx, provider.MusicRequest{
+	Model:        "music-cover",
+	AudioURL:     "https://example.com/original-song.mp3",
+	Prompt:       "Jazz, smooth, late night lounge, saxophone",
+	OutputFormat: "url",
+	AudioSetting: provider.MusicAudioSetting{
+		SampleRate: 44100,
+		Bitrate:    256000,
+		Format:     "mp3",
+	},
+})
+```
+
+`result.Audio.URL` 是短效連結；需要 durable asset 時由 caller 及時下載保存。
+
 可執行的 [`provider/sample`](provider/sample/README.md) 直接展示 provider、auth mode 與
-`chat / image / audio` API type matrix。`audio` 目前刻意回 typed unsupported：audio
-尚未決定是 speech synthesis、transcription 或 audio-chat，也沒有 adapter wire consumer。
+`chat / image / music / audio` API type matrix。`music` 明確走 `MusicGenerator`；
+`audio` 仍刻意回 typed unsupported，因為 speech synthesis、transcription 與
+audio-chat 是三個不同 contract。
 
 ## 怎麼用 (Getting Started)
 

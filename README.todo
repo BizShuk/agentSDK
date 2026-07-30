@@ -6,8 +6,8 @@
 
 ## Provider 認證與能力
 
-- [ ] 發布包含 `VideoGenerator` / MiniMax video adapter 的下一個 AgentSDK version；
-      `v0.0.29` 尚未包含此 capability
+- [ ] 發布包含 `MusicGenerator` / MiniMax music adapter 的下一個 AgentSDK version；
+      `v0.0.30` 尚未包含此 capability
 - [ ] OAuth 登入流程`未經實跑驗證`。`provider/credential` 一律以外部 `auth` 的常數為準，
       但移除前的 in-tree 版本曾在 `TOKEN_URL`（`console.` vs `api.`）、
       `REDIRECT_URI`（貼回碼 vs `localhost:54545`）、`SCOPES`（是否含 `org:create_api_key`）
@@ -22,11 +22,17 @@
       runtime acceptance
 - [ ] MiniMax video generation 尚未用真實 `MINIMAX_API_KEY` 跑 live smoke；目前四種 mode、
       polling、authenticated download 與 MP4 verification 只由 httptest 驗證
+- [ ] MiniMax music generation 尚未用真實 `MINIMAX_API_KEY` 與 operator-owned source
+      audio 跑 live smoke；目前 `music-cover` wire contract、text/cover model default、
+      validation、bounded response 與 typed API error 只由 httptest 驗證
+- [ ] MiniMax music streaming、lyrics generation 與 cover preprocess 尚無 production
+      consumer；目前 `MusicGenerator` 只承接 non-streaming `/v1/music_generation`
 - [ ] Image edits / variations / streaming 尚無 production consumer；出現 consumer 後再以
       sibling optional capability 接回，不擴肥 `core.Provider`
 - [ ] Audio capability：先選定 `speech synthesis`、`transcription`、`audio-chat input`
       的獨立 contract 與真實 adapter consumer，再把 `provider/sample --type audio` 從 typed
-      unsupported 接到對應 factory；不得直接把三種 wire API 合成單一 fat interface
+      unsupported 接到對應 factory；不得直接把三種 wire API 合成單一 fat interface。
+      已落地的 `MusicGenerator` 是 sibling capability，不代表 generic audio 已定義
 
 ## Agent 組裝與設定
 

@@ -10,6 +10,9 @@ var _ provider.Adapter = (*Provider)(nil)
 // Compile-time: ensure *VideoProvider satisfies provider.VideoGenerator.
 var _ provider.VideoGenerator = (*VideoProvider)(nil)
 
+// Compile-time: ensure *MusicProvider satisfies provider.MusicGenerator.
+var _ provider.MusicGenerator = (*MusicProvider)(nil)
+
 func init() {
 	provider.Register(provider.Entry{
 		Name: "minimax",
@@ -20,6 +23,7 @@ func init() {
 			OAuthEnv:           []string{OAuthEnvVar},
 			BaseURLEnv:         BaseURLEnvVar,
 			VideoBaseURLEnv:    VideoBaseURLEnvVar,
+			MusicBaseURLEnv:    MusicBaseURLEnvVar,
 			CredentialRequired: true,
 		},
 		New: func(cfg provider.ResolvedConfig) (provider.Adapter, error) {
@@ -27,6 +31,9 @@ func init() {
 		},
 		NewVideo: func(cfg provider.ResolvedConfig) (provider.VideoGenerator, error) {
 			return NewVideo(cfg)
+		},
+		NewMusic: func(cfg provider.ResolvedConfig) (provider.MusicGenerator, error) {
+			return NewMusic(cfg)
 		},
 		Catalog: DefaultCatalog,
 	})

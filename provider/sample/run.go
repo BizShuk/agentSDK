@@ -27,10 +27,16 @@ func run(
 	}
 
 	req := svc.Request{
-		Provider: cfg.Provider,
-		Prompt:   cfg.Prompt,
-		JSON:     cfg.JSON,
-		Options:  cfg.ProviderOptions(lookupEnv),
+		Provider:     cfg.Provider,
+		Prompt:       cfg.Prompt,
+		JSON:         cfg.JSON,
+		Lyrics:       cfg.Lyrics,
+		AudioURL:     cfg.AudioURL,
+		OutputFormat: cfg.OutputFormat,
+		SampleRate:   cfg.SampleRate,
+		Bitrate:      cfg.Bitrate,
+		AudioFormat:  cfg.AudioFormat,
+		Options:      cfg.ProviderOptions(lookupEnv),
 	}
 
 	switch cfg.Type {
@@ -38,6 +44,8 @@ func run(
 		return svc.Chat(ctx, req, out)
 	case config.API_TYPE_IMAGE:
 		return svc.Image(ctx, req, out)
+	case config.API_TYPE_MUSIC:
+		return svc.Music(ctx, req, out)
 	case config.API_TYPE_AUDIO:
 		return svc.Audio(entry.Name)
 	default:

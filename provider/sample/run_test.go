@@ -131,6 +131,76 @@ func TestRunImageWithAPIKeyEnvironment(t *testing.T) {
 	}
 }
 
+func TestRunMusicCoverWithAPIKeyEnvironment(t *testing.T) {
+	var requestPath string
+	var authorization string
+	var payload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPath = r.URL.Path
+		authorization = r.Header.Get("Authorization")
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := io.WriteString(w, `{
+			"data":{"audio":"https://example.test/generated.mp3","status":2},
+			"trace_id":"trace-sample-1",
+			"extra_info":{
+				"music_duration":25364,
+				"music_sample_rate":44100,
+				"music_channel":2,
+				"bitrate":256000,
+				"music_size":813651
+			},
+			"base_resp":{"status_code":0}
+		}`); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	var out bytes.Buffer
+	err := run(context.Background(), config.Config{
+		Provider:     "minimax",
+		Type:         config.API_TYPE_MUSIC,
+		Auth:         config.AUTH_MODE_APIKEY,
+		Model:        "music-cover",
+		BaseURL:      server.URL,
+		Prompt:       "Jazz, smooth, late night lounge, saxophone",
+		AudioURL:     "https://example.com/original-song.mp3",
+		OutputFormat: "url",
+		SampleRate:   44100,
+		Bitrate:      256000,
+		AudioFormat:  "mp3",
+	}, &out, func(key string) string {
+		if key == "MINIMAX_API_KEY" {
+			return "test-key"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("run music: %v", err)
+	}
+	if requestPath != "/v1/music_generation" {
+		t.Errorf("request path = %q, want /v1/music_generation", requestPath)
+	}
+	if authorization != "Bearer test-key" {
+		t.Errorf("authorization = %q, want Bearer test-key", authorization)
+	}
+	if payload["model"] != "music-cover" {
+		t.Errorf("model = %v, want music-cover", payload["model"])
+	}
+	if payload["audio_url"] != "https://example.com/original-song.mp3" {
+		t.Errorf("audio_url = %v, want supplied URL", payload["audio_url"])
+	}
+	if payload["output_format"] != "url" {
+		t.Errorf("output_format = %v, want url", payload["output_format"])
+	}
+	if !strings.Contains(out.String(), "https://example.test/generated.mp3") {
+		t.Errorf("output = %q, want music URL", out.String())
+	}
+}
+
 func TestRunAudioReturnsTypedUnsupportedCapability(t *testing.T) {
 	err := run(context.Background(), config.Config{
 		Provider: "google",
@@ -160,11 +230,14 @@ func TestWriteProviderMatrixShowsTypeAndAuthSupport(t *testing.T) {
 		"PROVIDER",
 		"CHAT",
 		"IMAGE",
+		"MUSIC",
 		"AUDIO",
 		"google",
 		"GOOGLE_API_KEY",
 		"grok",
 		"XAI_API_KEY",
+		"minimax",
+		"MINIMAX_API_KEY",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("matrix missing %q:\n%s", want, text)
@@ -172,15 +245,33 @@ func TestWriteProviderMatrixShowsTypeAndAuthSupport(t *testing.T) {
 	}
 	for _, line := range strings.Split(text, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 4 || fields[0] != "google" {
+		if len(fields) < 5 || fields[0] != "google" {
 			continue
 		}
-		if fields[1] != "yes" || fields[2] != "yes" || fields[3] != "no" {
-			t.Errorf("google type matrix = %v, want chat=yes image=yes audio=no", fields[1:4])
+		if fields[1] != "yes" || fields[2] != "yes" ||
+			fields[3] != "no" || fields[4] != "no" {
+			t.Errorf(
+				"google type matrix = %v, want chat=yes image=yes music=no audio=no",
+				fields[1:5],
+			)
+		}
+		break
+	}
+	for _, line := range strings.Split(text, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 5 || fields[0] != "minimax" {
+			continue
+		}
+		if fields[1] != "yes" || fields[2] != "no" ||
+			fields[3] != "yes" || fields[4] != "no" {
+			t.Errorf(
+				"minimax type matrix = %v, want chat=yes image=no music=yes audio=no",
+				fields[1:5],
+			)
 		}
 		return
 	}
-	t.Errorf("matrix missing google row:\n%s", text)
+	t.Errorf("matrix missing minimax row:\n%s", text)
 }
 
 func TestExecuteRejectsMissingPrompt(t *testing.T) {

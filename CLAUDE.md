@@ -21,18 +21,22 @@
 - Provider protocol codecs：`provider/protocol/sse` 只處理完整 SSE framing，不解讀
   provider terminal semantics；Google／Ollama 共用 `openaichat`，Google／Grok 共用
   `openaiimage`，其餘 vendor payload DTO 保持 local。
-- Provider media capabilities：`provider.ImageGenerator` 與
-  `provider.VideoGenerator` 留在 provider layer；`Entry.NewImage` /
-  `provider.NewImage` 與 `Entry.NewVideo` / `provider.NewVideo` 是一致建構路徑，
+- Provider media capabilities：`provider.ImageGenerator`、`provider.VideoGenerator`
+  與 `provider.MusicGenerator` 留在 provider layer；`Entry.NewImage` /
+  `provider.NewImage`、`Entry.NewVideo` / `provider.NewVideo` 與
+  `Entry.NewMusic` / `provider.NewMusic` 是一致建構路徑，
   unsupported adapter 回 typed `ErrUnsupportedCapability`。MiniMax video adapter
   擁有四種 mode、poll、authenticated download、MP4 verification 與
-  `MINIMAX_VIDEO_BASE_URL`；成功 response、error body 與 details 各有大小上限。
+  `MINIMAX_VIDEO_BASE_URL`。MiniMax music adapter 擁有 non-streaming
+  text-to-music / cover request validation、bounded response/error、typed API error 與
+  `MINIMAX_MUSIC_BASE_URL`。
 - Reasoning content boundary：`core.Part` 以 `PART_KIND_REASONING` 表示可攜 reasoning
   文字，`ReasoningState` 保存 opaque continuation metadata。`ModelResult.Parts` 是有序
   canonical assistant content；無法表示 metadata 的 wire path 必須明確報錯。
 - `provider/sample` 是 root module 內的 package-local executable；`--list` 產生
-  provider × chat/image/audio × auth-env matrix。Chat/image 分別走 `provider.New` /
-  `NewImage`；audio 在沒有 production contract 時回 typed unsupported error。
+  provider × chat/image/music/audio × auth-env matrix。Chat/image/music 分別走
+  `provider.New` / `NewImage` / `NewMusic`；generic audio 在沒有 production contract
+  時回 typed unsupported error。
 - 外部依賴：`auth` 是 go.mod require 的外部 module，只被 `provider/credential` 使用；`proxy` 完全在外部 repo。`tmp/auth2api` 與 `tmp/cliproxyapi` 僅供格式研究，不是 runtime dependency。
 
 ## 專案結構 (Project Structure)
@@ -76,15 +80,15 @@ agentsdk/
 ├── memory/                           # context window、compactor、checkpoint、JSON state/WAL
 ├── runtime/                          # Engine：dispatch Instruction、fold Event、Run/Resume/HITL
 ├── provider/                         # registry、credential bridge、protocol codecs 與七個 adapters
-│   ├── capability.go                 # model/image/video capability discovery + typed unsupported error
-│   ├── image.go / video.go / error.go # media contracts、request/result、auth wrappers、structured API error
+│   ├── capability.go                 # model/image/video/music capability discovery + typed unsupported error
+│   ├── image.go / video.go / music.go / error.go # media contracts、request/result、auth wrappers、structured API error
 │   ├── registry.go                   # Entry 是 name / metadata / static catalog / factories 的唯一真相 + DEFAULT_NAME
 │   ├── registry_options.go           # Options（unresolved）→ ResolvedConfig（construction input）；集中 env / credential class resolution
 │   ├── adapter.go                    # Adapter = core.Provider + core.StreamProvider；discovery data 不進 runtime client
-│   ├── decorator.go                  # Decorator = func(ctx) (core.Auth, error)：model/image/video 每次 request 共用解析規則
+│   ├── decorator.go                  # Decorator = func(ctx) (core.Auth, error)：model/image/video/music 每次 request 共用解析規則
 │   ├── credential/                   # 全 repo 唯一 import bizshuk/auth 之處：(name, kind) → auth route id 對照、Decorator 實作、Login 委派
 │   ├── all/                          # meta-package：blank-import 全部 adapter 的便利入口
-│   ├── sample/                       # provider/auth/chat-image-audio capability matrix + direct access CLI（含 config/、svc/）
+│   ├── sample/                       # provider/auth/chat-image-music-audio capability matrix + direct access CLI（含 config/、svc/）
 │   ├── protocol/
 │   │   ├── sse/                      # stdlib-only 完整 SSE frame decoder / writer；不含 provider terminal semantics
 │   │   ├── openaichat/               # Google/Ollama 共用 request/response codec + Frame → ModelChunk
@@ -95,7 +99,7 @@ agentsdk/
 │   ├── codex/                        # adapter：OpenAI Codex OAuth
 │   ├── google/                       # stdlib HTTP adapter
 │   ├── grok/                         # adapter：xAI Grok
-│   ├── minimax/                      # adapter：MiniMax model HTTP/SSE + video generation transport
+│   ├── minimax/                      # adapter：MiniMax model HTTP/SSE + video/music generation transport
 │   └── ollama/                       # adapter：本地 Ollama endpoint
 ├── sample/                           # demo-* 是單一元件展示，*-agent 是完整 agent
 │   ├── code-agent/                   # 全 harness 組合 CLI：tui 互動 / -p print / --json（wire）+ session flags；composition 位於 cmd/
@@ -156,9 +160,10 @@ agentsdk/
 - `core.ModelRequest` 同時是 provider request 與 `Instruction.CallModel` 的 canonical payload；`RequestID` 供 middleware/tracing 辨識，runtime 只在 request 未帶 tools 時補 registry list，其餘 `MaxTokens`/`StopReasons`/`Auth` 原樣轉送。`agent/spec.Subagents.MaxDepth` 直接注入 `skill.Spawner.MaxDepth`；OTel 是可組合的 `middleware/observability`，不走 config block。
 - `core.ModelResult.Parts` 是 provider 回應與 transcript 之間的 canonical ordered content；`NormalizeContent` 讓舊 provider 的 `Text` / `ToolCalls` 可合成 Parts，也讓新 provider 的 Parts 回填相容投影。reasoning 不併進 `Text`，避免 frontend 無意顯示 chain-of-thought；runtime 仍保留它供下一輪 provider continuation 使用。
 - Provider capability boundary：`core.Provider` 是 runtime 消費端定義的最小 port，只含
-  blocking `Generate`；stream、live catalog、image generation、video generation
+  blocking `Generate`；stream、live catalog、image generation、video generation、
+  music generation
   分別是 optional `core.StreamProvider`、`core.ModelLister`、
-  `provider.ImageGenerator`、`provider.VideoGenerator`。
+  `provider.ImageGenerator`、`provider.VideoGenerator`、`provider.MusicGenerator`。
   `provider.Entry` 單獨擁有 discovery metadata 與 factories。
 - Provider config pipeline：`provider.Options` 是 unresolved live input，只在
   `Resolve(Entry.Metadata)` 查 env 並投影成 `ResolvedConfig{Model, BaseURL, Auth}`。
@@ -203,7 +208,8 @@ agentsdk/
 - `sample/code-agent/tui` 是 zero-dependency application renderer，不 import agentsdk；
   SDK 與 `agent` composition 都不擁有 terminal presentation。
 - `provider.Entry` 是 discovery/config 的唯一 owner；每個 `register.go` 在 Entry literal
-  宣告 `Name`、`Metadata`、`Catalog`、`New` 與 optional `NewImage` / `NewVideo`。Static fallback
+  宣告 `Name`、`Metadata`、`Catalog`、`New` 與 optional `NewImage` / `NewVideo` /
+  `NewMusic`。Static fallback
   讀 `Entry.Catalog`，live path 才使用 `core.ModelLister`。
 - `provider.Decorator` 定義在 provider layer 並於每個 request 解析 `core.Auth`，
   讓 OAuth refresh 可涵蓋 retry/SSE reconnect 而不重建 adapter。只有
@@ -219,8 +225,8 @@ agentsdk/
   discovery roots 由 `agent` 組裝，`prompt/source` 不 import `skill` 或 `agent`。
 - 頂層 `sample/demo-*` 是單一 SDK 元件展示，`sample/*-agent` 是完整 agent；
   `provider/sample` 是 package-local provider API example。
-- `provider.Metadata` 分別宣告 `OAuthEnv` / `APIKeyEnv`，video endpoint 可另以
-  `VideoBaseURLEnv` 宣告 override；
+- `provider.Metadata` 分別宣告 `OAuthEnv` / `APIKeyEnv`，video / music endpoint 可另以
+  `VideoBaseURLEnv` / `MusicBaseURLEnv` 宣告 override；
   `Options.CredentialKind` 的 `auto` / `api_key` / `oauth` 使用
   `core.CREDENTIAL_KIND_*`，`Resolve` 產生 canonical `ResolvedConfig`。
 
@@ -286,11 +292,11 @@ JSONL 對外 envelope 由 `agent/wire` 擁有，經
 | agent lifecycle           | `agentsdk/agent`：`Run`、`Host`、`Interactive`、`Pause`/`Resume`、`WithRoundTimeout`；`agentsdk/agent/cli`：`Main`/`Run`、`OpenForCLI`/`MustOpenForCLI`                                                                                                                                                                                                                                                            |
 | middleware preset         | `agentsdk/middleware/preset`：`Default()`（retry→timeout→budget→loopguard）、`Secure(sandbox, approval)`（再加 sandbox→approval→spotlight→sanitizer）                                                                                                                                                                                                                                                              |
 | credential                | `agentsdk/provider/credential`：`RouteID`/`Kinds`/`Names`、`NewSource`/`NewAutoSource`/`Source.Decorator()`、`Login`；唯一 import `bizshuk/auth` 之處                                                                                                                                                                                                                                                              |
-| provider registry         | `agentsdk/provider`（package `provider`，非 `registry`）：`Entry` 單獨擁有 name / metadata / static catalog / model+image+video factories；`Names`/`Entries`/`Lookup`/`Catalog`/`Capabilities`/`New`/`NewImage`/`NewVideo`/`Options.Resolve`/`ResolvedConfig`/`DEFAULT_NAME`；`env` 查詢以 `LookupEnv` 注入                                                                                                        |
+| provider registry         | `agentsdk/provider`（package `provider`，非 `registry`）：`Entry` 單獨擁有 name / metadata / static catalog / model+image+video+music factories；`Names`/`Entries`/`Lookup`/`Catalog`/`Capabilities`/`New`/`NewImage`/`NewVideo`/`NewMusic`/`Options.Resolve`/`ResolvedConfig`/`DEFAULT_NAME`；`env` 查詢以 `LookupEnv` 注入                                                                                                        |
 | root CLI subcommands      | `agentsdk/cmd`：`NewWizardCommand`（`wizard`/`w` 設定產生器）、`NewProviderCommand`（root cobra `provider` smoke-test CLI；打 `core.Provider.Generate` / `core.StreamProvider.Stream` 不走 Engine；`--list-models` 優先打 live `core.ModelLister`,失敗 fallback `Entry.Catalog`）                                                                                                                                  |
 | authentication            | 外部 module `github.com/bizshuk/auth`：只由 `provider/credential` 消費；API 契約見該 repo                                                                                                                                                                                                                                                                                                                          |
 | proxy                     | 外部 repo `github.com/bizshuk/proxy`：本 repo 無目錄、無 require、無 import                                                                                                                                                                                                                                                                                                                                        |
-| provider adapters         | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity}`：各實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`）；Google/Grok 另實作 `provider.ImageGenerator`，MiniMax 另實作 `provider.VideoGenerator`；除 codex/antigravity 外皆另實作 optional `core.ModelLister`。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal |
+| provider adapters         | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity}`：各實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`）；Google/Grok 另實作 `provider.ImageGenerator`，MiniMax 另實作 `provider.VideoGenerator` / `provider.MusicGenerator`；除 codex/antigravity 外皆另實作 optional `core.ModelLister`。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal |
 
 ## 開發與驗證 (Development and Verification)
 

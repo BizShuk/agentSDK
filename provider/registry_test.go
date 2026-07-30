@@ -84,7 +84,7 @@ func TestEveryEntryIsSelfDescribing(t *testing.T) {
 			assert.Truef(t, hasEnvPath || hasDecoratorPath,
 				"entry %q has no credential path (OAuthEnv=%v APIKeyEnv=%v Note=%q); declare an env OR document a decorator path",
 				e.Name, e.Metadata.OAuthEnv, e.Metadata.APIKeyEnv, e.Metadata.Note)
-			assert.True(t, e.New != nil || e.NewImage != nil || e.NewVideo != nil,
+			assert.True(t, e.New != nil || e.NewImage != nil || e.NewVideo != nil || e.NewMusic != nil,
 				"every entry must expose at least one factory")
 			if e.New != nil {
 				assert.NotNil(t, e.Catalog,
@@ -261,6 +261,22 @@ func TestVideoCapabilitiesAreExplicit(t *testing.T) {
 	}
 }
 
+func TestMusicCapabilitiesAreExplicit(t *testing.T) {
+	entry, ok := provider.Lookup("minimax")
+	require.True(t, ok)
+	assert.True(t, entry.Supports(provider.CAPABILITY_MUSIC_GENERATE))
+	assert.Contains(t, entry.Capabilities(), provider.CAPABILITY_MUSIC_GENERATE)
+
+	for _, name := range []string{"anthropic", "antigravity", "codex", "google", "grok", "ollama"} {
+		t.Run(name, func(t *testing.T) {
+			entry, ok := provider.Lookup(name)
+			require.True(t, ok)
+			assert.False(t, entry.Supports(provider.CAPABILITY_MUSIC_GENERATE))
+			assert.NotContains(t, entry.Capabilities(), provider.CAPABILITY_MUSIC_GENERATE)
+		})
+	}
+}
+
 func TestNewImageRejectsUnsupportedCapabilityBeforeCredentialResolution(t *testing.T) {
 	_, err := provider.NewImage("anthropic", provider.Options{
 		LookupEnv: func(string) string { return "" },
@@ -300,6 +316,30 @@ func TestNewVideoRejectsUnsupportedCapabilityBeforeCredentialResolution(t *testi
 	require.True(t, errors.As(err, &unsupported))
 	assert.Equal(t, "anthropic", unsupported.Provider)
 	assert.Equal(t, provider.CAPABILITY_VIDEO_GENERATE, unsupported.Capability)
+}
+
+func TestNewMusicRejectsUnsupportedCapabilityBeforeCredentialResolution(t *testing.T) {
+	_, err := provider.NewMusic("anthropic", provider.Options{
+		LookupEnv: func(string) string { return "" },
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, provider.ErrUnsupportedCapability)
+
+	var unsupported *provider.UnsupportedCapabilityError
+	require.True(t, errors.As(err, &unsupported))
+	assert.Equal(t, "anthropic", unsupported.Provider)
+	assert.Equal(t, provider.CAPABILITY_MUSIC_GENERATE, unsupported.Capability)
+}
+
+func TestNewMusicAllowsDeferredCredentialConstruction(t *testing.T) {
+	generator, err := provider.NewMusic("minimax", provider.Options{
+		LookupEnv: func(string) string { return "" },
+		Decorator: func(context.Context) (core.Auth, error) {
+			return core.Auth{Bearer: "resolved-per-request"}, nil
+		},
+	})
+	require.NoError(t, err)
+	assert.NotNil(t, generator)
 }
 
 func TestDecoratorAllowsDeferredCredentialConstruction(t *testing.T) {

@@ -9,6 +9,9 @@ func TestAPITypeSet(t *testing.T) {
 	if err := typ.Set("chat"); err != nil || typ != API_TYPE_CHAT {
 		t.Errorf("Set(chat) = %v, %v", typ, err)
 	}
+	if err := typ.Set("music"); err != nil || typ != API_TYPE_MUSIC {
+		t.Errorf("Set(music) = %v, %v", typ, err)
+	}
 	if err := typ.Set("invalid"); err == nil {
 		t.Error("Set(invalid) expected error")
 	}
