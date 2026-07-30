@@ -7,6 +7,19 @@
 日期優先沿用來源文字；來源未標日期時，採該項目首次出現於 Git history 的日期。
 本檔記錄歷史事實，識別符可能已在後續重構中改名或移除。
 
+## 2026-07-31
+
+### MiniMax video optional capability
+
+- `provider` 新增 `VideoGenerator`、`VideoRequest`、`VideoResult`、`Entry.NewVideo`、
+  `provider.NewVideo` 與 `CAPABILITY_VIDEO_GENERATE`，不擴肥 agent runtime 的
+  `core.Provider`。
+- `provider/minimax` 接手 text / image / startend / subject 四種 mode，以及
+  asynchronous polling、authenticated download、MP4 `ftyp` verification 與獨立的
+  `MINIMAX_VIDEO_BASE_URL` endpoint override。
+- `ip-incubation` 改為 AgentSDK consumer，移除原本重複的 `svc/video` ownership；
+  deterministic acceptance 使用 `httptest`，尚未執行 live MiniMax smoke test。
+
 ## 2026-07-29
 
 ### Provider 串流協定

@@ -3,7 +3,7 @@ module github.com/bizshuk/agentsdk/sample/demo-strategy
 go 1.26.0
 
 require (
-	github.com/bizshuk/agentsdk v0.0.1
+	github.com/bizshuk/agentsdk v0.0.29
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 )

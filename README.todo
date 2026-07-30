@@ -6,6 +6,8 @@
 
 ## Provider 認證與能力
 
+- [ ] 發布包含 `VideoGenerator` / MiniMax video adapter 的下一個 AgentSDK version；
+      `v0.0.29` 尚未包含此 capability
 - [ ] OAuth 登入流程`未經實跑驗證`。`provider/credential` 一律以外部 `auth` 的常數為準，
       但移除前的 in-tree 版本曾在 `TOKEN_URL`（`console.` vs `api.`）、
       `REDIRECT_URI`（貼回碼 vs `localhost:54545`）、`SCOPES`（是否含 `org:create_api_key`）
@@ -18,6 +20,8 @@
 - [ ] Google / xAI image endpoint 尚未用真實 credential 跑 live smoke；目前驗證是官方
       contract 對照 + cross-adapter golden/httptest，不把 build-time contract test 說成上游
       runtime acceptance
+- [ ] MiniMax video generation 尚未用真實 `MINIMAX_API_KEY` 跑 live smoke；目前四種 mode、
+      polling、authenticated download 與 MP4 verification 只由 httptest 驗證
 - [ ] Image edits / variations / streaming 尚無 production consumer；出現 consumer 後再以
       sibling optional capability 接回，不擴肥 `core.Provider`
 - [ ] Audio capability：先選定 `speech synthesis`、`transcription`、`audio-chat input`

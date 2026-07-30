@@ -52,6 +52,7 @@ type Entry struct {
 	Metadata Metadata
 	New      Factory
 	NewImage ImageFactory
+	NewVideo VideoFactory
 	Catalog  func() []core.ModelSpec
 }
 
@@ -67,7 +68,7 @@ var (
 // database/sql/driver). Providers should call this exactly once from
 // their package's init().
 func Register(e Entry) {
-	if strings.TrimSpace(e.Name) == "" || (e.New == nil && e.NewImage == nil) {
+	if strings.TrimSpace(e.Name) == "" || (e.New == nil && e.NewImage == nil && e.NewVideo == nil) {
 		panic(fmt.Sprintf(
 			"provider: Register requires Name and at least one factory (got %+v)",
 			e,
@@ -179,6 +180,30 @@ func NewImage(name string, o Options) (ImageGenerator, error) {
 	return WithImageDecorator(e.Name, generator, decorator), nil
 }
 
+// NewVideo builds the named provider's video-generation capability using the
+// same credential resolution and request-time decorator precedence as New.
+func NewVideo(name string, o Options) (VideoGenerator, error) {
+	e, err := lookup(name)
+	if err != nil {
+		return nil, err
+	}
+	if e.NewVideo == nil {
+		return nil, &UnsupportedCapabilityError{
+			Provider:   e.Name,
+			Capability: CAPABILITY_VIDEO_GENERATE,
+		}
+	}
+	resolved, decorator, err := resolveVideoOptions(e, o)
+	if err != nil {
+		return nil, err
+	}
+	generator, err := e.NewVideo(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s: video: %w", e.Name, err)
+	}
+	return WithVideoDecorator(e.Name, generator, decorator), nil
+}
+
 func lookup(name string) (Entry, error) {
 	e, ok := Lookup(name)
 	if !ok {
@@ -189,7 +214,23 @@ func lookup(name string) (Entry, error) {
 }
 
 func resolveOptions(e Entry, o Options) (ResolvedConfig, Decorator, error) {
-	resolved, err := o.Resolve(e.Metadata)
+	return resolveOptionsWithMetadata(e, o, e.Metadata)
+}
+
+func resolveVideoOptions(e Entry, o Options) (ResolvedConfig, Decorator, error) {
+	metadata := e.Metadata
+	if metadata.VideoBaseURLEnv != "" {
+		metadata.BaseURLEnv = metadata.VideoBaseURLEnv
+	}
+	return resolveOptionsWithMetadata(e, o, metadata)
+}
+
+func resolveOptionsWithMetadata(
+	e Entry,
+	o Options,
+	metadata Metadata,
+) (ResolvedConfig, Decorator, error) {
+	resolved, err := o.Resolve(metadata)
 	if err != nil {
 		return ResolvedConfig{}, nil, fmt.Errorf("provider %s: %w", e.Name, err)
 	}

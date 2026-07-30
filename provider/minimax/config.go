@@ -15,5 +15,12 @@ const OAuthEnvVar = "MINIMAX_OAUTH_TOKEN"
 // minimax endpoint without recompiling.
 const BaseURLEnvVar = "MINIMAX_BASE_URL"
 
+// VideoBaseURLEnvVar lets operators override the MiniMax video API root
+// independently from the Anthropic-compatible model endpoint.
+const VideoBaseURLEnvVar = "MINIMAX_VIDEO_BASE_URL"
+
 // DefaultBaseURL is the public minimax Anthropic-compat endpoint.
 const DefaultBaseURL = "https://api.minimax.io/anthropic"
+
+// DefaultVideoBaseURL is the public MiniMax video-generation API root.
+const DefaultVideoBaseURL = "https://api.minimax.io"

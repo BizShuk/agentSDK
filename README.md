@@ -16,8 +16,9 @@ Go Agentic Loop SDK：以`宣告式設定`組裝目標導向控制迴圈 (Goal-d
 
 `core/` 是純狀態機 (state + event + instruction + reasoning),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
 
-圖片生成是 `provider.ImageGenerator` optional capability，不進 agent runtime 的
-`core.Provider`。caller 必須明確走 `NewImage`；不支援的 adapter 回傳可用
+圖片與影片生成分別是 `provider.ImageGenerator`、`provider.VideoGenerator`
+optional capability，不進 agent runtime 的 `core.Provider`。caller 必須明確走
+`NewImage` 或 `NewVideo`；不支援的 adapter 回傳可用
 `errors.Is(err, provider.ErrUnsupportedCapability)` 判斷的錯誤：
 
 ```go
@@ -33,6 +34,10 @@ result, err := generator.GenerateImage(ctx, provider.ImageRequest{
 
 binary 仍需 blank-import 目標 adapter（或 `provider/all`）讓它註冊。URL result 可能是
 短效連結；要持久化時由 caller 複製資產。
+
+MiniMax 的 video adapter 支援 text / image / startend / subject 四種 mode，負責
+asynchronous polling、authenticated download 與 MP4 verification；caller 提供
+`VideoRequest.OutputPath`，完成後取得 `VideoResult.Path`。
 
 可執行的 [`provider/sample`](provider/sample/README.md) 直接展示 provider、auth mode 與
 `chat / image / audio` API type matrix。`audio` 目前刻意回 typed unsupported：audio

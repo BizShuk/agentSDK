@@ -30,5 +30,6 @@ type Metadata struct {
 	OAuthEnv           []string // OAuth token env list (highest precedence in auto mode)
 	APIKeyEnv          []string // API key env list (lowest precedence in auto mode)
 	BaseURLEnv         string
+	VideoBaseURLEnv    string
 	CredentialRequired bool
 }
