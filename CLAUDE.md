@@ -139,7 +139,7 @@ agentsdk/
 | 類別                   | 技術                                              | 現況                                                                                                                                   |
 | ---------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | Language               | Go `1.26.0`                                       | `go.work` 納入 root 與 `sample/` 下各 module                                                                                           |
-| Root runtime           | Go stdlib、`github.com/bizshuk/gosdk v1.2.1`      | config/log/notify 等組合點在 root 或 sample                                                                                            |
+| Root runtime           | Go stdlib、`github.com/bizshuk/gosdk v1.3.3`      | config/log/notify 等組合點在 root 或 sample                                                                                            |
 | External auth module   | `github.com/bizshuk/auth`                         | `go.mod` dependency；只由 `provider/credential` import                                                                                 |
 | External HTTP proxy    | `gin-gonic/gin`、`gosdk/mw`、`gosdk/router`       | `github.com/bizshuk/proxy` 獨立 repo；不在本 workspace                                                                                 |
 | CLI/config             | `spf13/cobra v1.10.2`、`spf13/viper v1.20.1`      | auth/proxy module CLI、samples、root `provider` / `wizard` 子指令                                                                      |
