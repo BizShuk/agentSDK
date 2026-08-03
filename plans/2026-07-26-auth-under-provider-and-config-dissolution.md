@@ -282,7 +282,7 @@ Phase C2  收 OAuth 重複          (審查項 1)  風險最高，需先驗證�
 ## 驗證
 
 ```bash
-cd /Users/shuk/projects/ai/agentSDK
+cd "$(git rev-parse --show-toplevel)"
 
 # 1. 分層不變式（Phase A 之後就該全部成立）
 go list -deps ./agent    | grep bizshuk/auth   # 必須為空

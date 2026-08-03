@@ -1024,6 +1024,6 @@ EOF
 
 ## 不在本計畫範圍
 
-- `plans/` 目錄有 6 個 system-generated slug 檔名（`crystalline-brewing-sedgewick.md`、`modular-frolicking-key.md`、`peaceful-finding-owl.md`、`quizzical-wishing-garden.md`、`smooth-zooming-lecun.md`、`validated-meandering-rabbit.md`）與 12 個正確的 `YYYY-MM-DD-<topic>.md` 並存。不屬於本計畫的兩個目標檔，但 `CLAUDE.md` 的專案追蹤章節會指向該目錄，值得另開一個 task 處理。
+- 此 naming drift 已於 2026-08-03 解決：5 份 local plans 已改為 `YYYY-MM-DD-<topic>.md`，external proxy plan `smooth-zooming-lecun.md` 已整併至 `plans/2026-08-03-refresh.md`。
 - `AGENTS.md` 是否為指向 `CLAUDE.md` 的軟連結，未驗證。
 - 任何 sample module 若在 Task 2 Step 3 被發現建置失敗，回報而不在本計畫修復。

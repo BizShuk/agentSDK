@@ -1,5 +1,8 @@
 # Move `agent/load.go` to `utils/agentconfig/`
 
+Date: 2026-07-26
+Status: completed on 2026-07-26
+
 ## Context
 
 `agent/load.go` (55 lines, `package agent`) is pure file-IO glue: it
@@ -94,7 +97,7 @@ Add `utils/agentconfig` to the import block in each file.
 
 ## Verification
 
-Run from `/Users/shuk/projects/ai/agentSDK`:
+Run from the repo root (`git rev-parse --show-toplevel`):
 
 ```bash
 go work sync

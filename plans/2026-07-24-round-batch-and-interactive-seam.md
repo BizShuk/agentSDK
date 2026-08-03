@@ -7,11 +7,11 @@
 
 `Goal`：把 `round` / `tool call batch` / `next-round input` 三件事收斂成`一條不變式`加`一個介面`，並修掉沿路發現的兩個 live bug。
 
-`狀態 2026-07-24`：`全部 Task（0–5）已完成`並全綠（root module + `8` 個 sample module，skeleton-demo live 驗證 `rounds:2`）。已切 branch `feat/round-batch-interactive-seam`，skeleton 與本工作各自獨立 commit。實作差異已回寫對應段落。
+`狀態 2026-07-24`：`全部 Task（0–5）已完成`並全綠（root module + all sample modules，skeleton-agent live 驗證 `rounds:2`）。已切 branch `feat/round-batch-interactive-seam`，skeleton 與本工作各自獨立 commit。實作差異已回寫對應段落。
 
-`Scope`：`core`、`planning`、`runtime`、`app`、`agent/spec`、`sample/skeleton-demo`、docs。
+`Scope`：`core`、`reasoning`、`runtime`、`agent`、`agent/spec`、`sample/skeleton-agent`、docs。
 
-`Non-goals`：`sample/logdoctor` 全面改寫（其 `cmd/` 八個檔案的 cobra 分派不動）、provider adapter、proxy、TUI。
+`Non-goals`：`sample/logdoctor-agent` 全面改寫（其 `cmd/` 八個檔案的 cobra 分派不動）、provider adapter、proxy、TUI。
 
 ---
 
@@ -48,7 +48,7 @@
 `3` 個介面（`PauseHandler` / `ApprovalResolver` / `RejectionHandler`）收成 `1` 個。理由：approval decision 與 follow-up input 是`同一個問題`在不同 `pause reason` 下被問到 —— 「run 停了但不是終局，下一步做什麼」。
 
 ```go
-// app/agent.go
+// agent/agent.go
 type Interactive interface {
     NextRound(ctx context.Context, p Pause) (Resume, error)
 }
@@ -96,8 +96,8 @@ type Interactive interface {
 
 - Go `1.26.0`，module `github.com/bizshuk/agentsdk`，stdlib only（不加新依賴）
 - 常數 `SCREAMING_SNAKE_CASE`；變數/型別/函式 `MixedCaps`
-- 錯誤 `fmt.Errorf("...: %w", err)` wrap；`app.Run` 回 exit code 不 panic
-- `core/` 維持 stdlib only；`runtime` `不得` import `planning`（今天靠字面字串 key 維持，本 plan 沿用）
+- 錯誤 `fmt.Errorf("...: %w", err)` wrap；`agent.Run` 回傳 `error`，process exit code 由 `agent/cli` 擁有
+- `core/` 維持 stdlib only；`runtime` `不得` import `reasoning`（今天靠字面字串 key 維持，本 plan 沿用）
 - 測試 table-driven + `t.Run`，`testify/assert` + `require`
 - 公開 API 只增不改：既有 `Agent` / `Preflighter` / `Completer` 簽章不動
 
@@ -112,14 +112,14 @@ type Interactive interface {
 | `agent/spec/tier.go` | 四階 tier 的 `MaxRounds`/`MaxToolCalls` 預設 | 0 |
 | `agent/spec/validate.go` | 兩個新欄位的範圍檢查 | 0 |
 | `agent/build.go` | `Limits` → `core.Budget` 映射 | 0 |
-| `planning/helpers.go` | `scratchCalls` + `decodeCalls`（修 JSON round-trip bug） | 1 |
-| `planning/think_then_act.go` | `dispatch` phase 發 `N` 個 `CALL_TOOL` | 1 |
+| `reasoning/helpers.go` | `scratchCalls` + `decodeCalls`（修 JSON round-trip bug） | 1 |
+| `reasoning/think_then_act.go` | `dispatch` phase 發 `N` 個 `CALL_TOOL` | 1 |
 | `runtime/harness.go` | `settleSkipped` / `settleUnrun` / `skippedToolResult` | 1 |
 | `runtime/loop.go` | batch seeding、mid-batch settlement、`UsedRounds++` | 1, 2 |
-| `app/agent.go` | `Interactive` / `Pause` / `Resume` / `PauseReason` | 3 |
-| `app/options.go` | `WithRoundTimeout`（`options.go` `已存在`，不是新檔） | 3 |
-| `app/app.go` | `Run` 的 round loop + `pauseReason` / `resolveRound` / `advance` | 3 |
-| `sample/skeleton-demo/main.go` | `stdinAgent` 實作 `Interactive` | 4 |
+| `agent/agent.go` | `Interactive` / `Pause` / `Resume` / `PauseReason` | 3 |
+| `agent/options.go` | `WithRoundTimeout`（`options.go` `已存在`，不是新檔） | 3 |
+| `agent/lifecycle.go` | `Run` 的 round loop + `pauseReason` / `resolveRound` / `advance` | 3 |
+| `sample/skeleton-agent/main.go` | `stdinAgent` 實作 `Interactive` | 4 |
 | `docs/terminology.md`、`CLAUDE.md`、`README.todo` | 同步 | 5 |
 
 ---
@@ -203,7 +203,7 @@ TIER_STANDARD 以上 → MaxRounds 30, MaxToolCalls 8
 - [x] `Step 7` 驗證
 
 ```bash
-cd /Users/shuk/projects/ai/agentSDK
+cd "$(git rev-parse --show-toplevel)"
 go build ./... && go test ./core/... ./agent/... -count=1
 ```
 
@@ -233,7 +233,7 @@ func TestMultiToolCallBatchSettlesEveryCall(t *testing.T) {
 
 執行：`go test ./runtime/... -run TestMultiToolCallBatchSettlesEveryCall -count=1` → 預期 `FAIL`（只有 `1` 個 tool result）
 
-- [x] `Step 2` `planning/helpers.go` 加 `scratchCalls` + `decodeCalls`
+- [x] `Step 2` `reasoning/helpers.go` 加 `scratchCalls` + `decodeCalls`
 
 ```go
 // scratchCalls reads a pending tool-call batch from working memory.
@@ -281,11 +281,11 @@ func decodeCalls(v any) []core.ToolCall {
 }
 ```
 
-`planning/helpers.go` 需新增 `encoding/json` import（stdlib，不違反依賴紀律）。
+`reasoning/helpers.go` 需新增 `encoding/json` import（stdlib，不違反依賴紀律）。
 
 `實作差異`：原稿保留 `scratchCall` 作為單筆讀取器，實際`刪除`——改用 `scratchCalls` 後全 repo 已無 caller，留著就是死碼（linter 直接報 `unusedfunc`）。單筆語意由 `decodeCalls` 的 `core.ToolCall` 分支承接。
 
-- [x] `Step 3` `planning/think_then_act.go` 加常數並改 `dispatch` phase
+- [x] `Step 3` `reasoning/think_then_act.go` 加常數並改 `dispatch` phase
 
 ```go
 	// THINK_THEN_ACT_PENDING_CALLS holds the whole batch. The legacy
@@ -394,11 +394,11 @@ func skippedToolResult(call core.ToolCall, reason string) core.ToolResult {
 - [x] `Step 7` 測試轉綠
 
 ```bash
-cd /Users/shuk/projects/ai/agentSDK
-go test ./runtime/... ./planning/... -count=1
+cd "$(git rev-parse --show-toplevel)"
+go test ./runtime/... ./reasoning/... -count=1
 ```
 
-- [x] `Step 8` 加 resume 回歸測試 `planning/planning_test.go`
+- [x] `Step 8` 加 resume 回歸測試 `reasoning/reasoning_test.go`
 
 ```go
 // TestDispatchSurvivesJSONRoundTrip pins the crash-recovery path: state
@@ -478,7 +478,7 @@ func TestRoundBudgetTripsOnCallModel(t *testing.T) { ... }
 
 ## 10. Task 3 — `Interactive` 縫
 
-- [x] `Step 1` `app/agent.go` 接在 `Completer` 之後
+- [x] `Step 1` `agent/agent.go` 接在 `Completer` 之後
 
 ```go
 // PauseReason classifies why a run stopped without the application being
@@ -541,7 +541,7 @@ type Interactive interface {
 }
 ```
 
-- [x] `Step 2` `app/options.go`（`既有檔案`，不是新檔）加一個 knob
+- [x] `Step 2` `agent/options.go`（`既有檔案`，不是新檔）加一個 knob
 
 ```go
 // DEFAULT_ROUND_TIMEOUT caps how long a single NextRound call may block.
@@ -559,27 +559,27 @@ func WithRoundTimeout(d time.Duration) Option {
 
 `options` struct 加 `roundTimeout time.Duration`；`defaultOptions()` 設 `roundTimeout: DEFAULT_ROUND_TIMEOUT`。
 
-- [x] `Step 3` 先寫失敗測試 `app/app_test.go`
+- [x] `Step 3` 先寫失敗測試 `agent/lifecycle_test.go`
 
 ```go
 // TestRunConsultsInteractiveOnApprovalPause drives Run with an Agent that
 // implements Interactive, and asserts the pause was routed to NextRound
 // and an APPROVE answer carried the run to COMPLETED.
 func TestRunConsultsInteractiveOnApprovalPause(t *testing.T) {
-	var seen []app.PauseReason
+	var seen []agent.PauseReason
 	a := &interactiveTestAgent{
-		next: func(ctx context.Context, p app.Pause) (app.Resume, error) {
+		next: func(ctx context.Context, p agent.Pause) (agent.Resume, error) {
 			seen = append(seen, p.Reason)
-			if p.Reason == app.PAUSE_APPROVAL {
-				return app.Resume{Decision: core.APPROVAL_DECISION_APPROVE, By: "tester"}, nil
+			if p.Reason == agent.PAUSE_APPROVAL {
+				return agent.Resume{Decision: core.APPROVAL_DECISION_APPROVE, By: "tester"}, nil
 			}
-			return app.Resume{Stop: true}, nil
+			return agent.Resume{Stop: true}, nil
 		},
 	}
-	exit := app.Run(context.Background(), a,
-		app.WithLogToStdout(), app.WithRoundTimeout(5*time.Second))
-	require.Equal(t, app.EXIT_OK, exit)
-	assert.Contains(t, seen, app.PAUSE_APPROVAL)
+	err := agent.Run(context.Background(), a, testHost(a.name),
+		agent.WithLogToStdout(), agent.WithRoundTimeout(5*time.Second))
+	require.NoError(t, err)
+	assert.Contains(t, seen, agent.PAUSE_APPROVAL)
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, a.final.Status)
 }
 
@@ -590,7 +590,7 @@ func TestRunExitsOnPauseWithoutInteractive(t *testing.T) { ... }
 
 `interactiveTestAgent` 必須把 `OnComplete` 收到的 `final` 存進欄位，測試才有東西可斷言（原稿的 `finalStatus` 宣告後從未賦值，斷言必失敗）。
 
-- [x] `Step 4` `app/app.go` 在 `safeRun` 與 `Completer` 之間插入 round loop
+- [x] `Step 4` `agent/lifecycle.go` 在 `safeRun` 與 `Completer` 之間插入 round loop
 
 ```go
 	// 5. Run under panic recovery.
@@ -659,7 +659,7 @@ func TestRunExitsOnPauseWithoutInteractive(t *testing.T) { ... }
 
 原本 `safeRun` 後那行 `dur := time.Since(start)` 要刪掉 —— round loop 會讓它嚴重低估，改為在使用點現算。
 
-- [x] `Step 5` `app/app.go` 加三個 helper
+- [x] `Step 5` `agent/lifecycle.go` 加三個 helper
 
 ```go
 // pauseReason classifies a stop. FAILED and ABORTED return false: those
@@ -733,8 +733,8 @@ func advance(ctx context.Context, e *runtime.Engine, s core.State, reason PauseR
 - [x] `Step 6` 驗證
 
 ```bash
-cd /Users/shuk/projects/ai/agentSDK
-go test ./app/... -count=1 -v -run 'Interactive|Pause'
+cd "$(git rev-parse --show-toplevel)"
+go test ./agent/... -count=1 -v -run 'Interactive|Pause'
 go test ./... -count=1 -timeout=120s
 ```
 
@@ -742,11 +742,11 @@ go test ./... -count=1 -timeout=120s
 
 ---
 
-## 11. Task 4 — sample 落地（`skeleton-demo`）
+## 11. Task 4 — sample 落地（`skeleton-agent`）
 
-選 `sample/skeleton-demo` 而非 `sample/logdoctor`：前者已經是 `app.Main(agent.MustNew(cfg))` 形狀，`stdinAgent` 只覆寫 `Bootstrap`，加一個 `NextRound` 就是完整可跑的示範；後者要動 `cmd/` 八個檔案的 cobra 分派，與本 plan 的縫無關。
+選 `sample/skeleton-agent` 而非 `sample/logdoctor-agent`：前者已經是 `cli.Main(agent.MustNew(cfg))` 形狀，`stdinAgent` 只覆寫 `Bootstrap`，加一個 `NextRound` 就是完整可跑的示範；後者要動 `cmd/` 八個檔案的 cobra 分派，與本 plan 的縫無關。
 
-- [x] `Step 1` `sample/skeleton-demo/main.go` 給 `stdinAgent` 加方法
+- [x] `Step 1` `sample/skeleton-agent/main.go` 給 `stdinAgent` 加方法
 
 ```go
 // NextRound makes the demo interactive: an approval pause prints the
@@ -756,9 +756,9 @@ go test ./... -count=1 -timeout=120s
 // Notification (the Fprintf) lives here rather than in a separate hook —
 // it needs the same State and the same ctx as the answer, so a second
 // interface would only add a call site.
-func (s stdinAgent) NextRound(ctx context.Context, p app.Pause) (app.Resume, error) {
+func (s stdinAgent) NextRound(ctx context.Context, p agent.Pause) (agent.Resume, error) {
 	switch p.Reason {
-	case app.PAUSE_APPROVAL:
+	case agent.PAUSE_APPROVAL:
 		if n := len(p.State.PendingApprovals); n > 0 {
 			pa := p.State.PendingApprovals[n-1]
 			name := "(none)"
@@ -770,20 +770,20 @@ func (s stdinAgent) NextRound(ctx context.Context, p app.Pause) (app.Resume, err
 		}
 		line, err := readLine(ctx)
 		if err != nil {
-			return app.Resume{}, err
+			return agent.Resume{}, err
 		}
 		if line == "y" || line == "yes" {
-			return app.Resume{Decision: core.APPROVAL_DECISION_APPROVE, By: "operator"}, nil
+			return agent.Resume{Decision: core.APPROVAL_DECISION_APPROVE, By: "operator"}, nil
 		}
-		return app.Resume{Decision: core.APPROVAL_DECISION_REJECT, By: "operator"}, nil
+		return agent.Resume{Decision: core.APPROVAL_DECISION_REJECT, By: "operator"}, nil
 
 	default: // PAUSE_ROUND_END
 		fmt.Fprint(os.Stderr, "\n[next] anything else? (blank to finish) ")
 		line, err := readLine(ctx)
 		if err != nil {
-			return app.Resume{}, err
+			return agent.Resume{}, err
 		}
-		return app.Resume{Input: line}, nil
+		return agent.Resume{Input: line}, nil
 	}
 }
 
@@ -815,14 +815,14 @@ func readLine(ctx context.Context) (string, error) {
 
 注意：`Bootstrap` 已經 `io.ReadAll(os.Stdin)` 把 stdin 吃光，所以互動模式需要在 `Bootstrap` 改成只在 stdin 是 pipe 時整份讀取（`os.Stdin.Stat()` 檢查 `ModeCharDevice`），tty 時留給 `readLine`。這一步要一併做，否則 `NextRound` 永遠讀到 EOF。
 
-- [x] `Step 2` `app.Main` 呼叫加 `app.WithRoundTimeout(2*time.Minute)`
+- [x] `Step 2` `cli.Main` 呼叫加 `agent.WithRoundTimeout(2*time.Minute)`
 
-- [x] `Step 3` 更新 `sample/skeleton-demo/README.md` 的對比表，加一列說明 `Interactive`
+- [x] `Step 3` 更新 `sample/skeleton-agent/README.md` 的對比表，加一列說明 `Interactive`
 
 - [x] `Step 4` 驗證
 
 ```bash
-cd /Users/shuk/projects/ai/agentSDK/sample/skeleton-demo
+cd "$(git rev-parse --show-toplevel)/sample/skeleton-agent"
 go build ./...
 # pipe 模式（非互動，NextRound 在 round_end 收到 EOF → 空字串 → 結束）
 echo "Payment page throws 500" | go run .
@@ -830,7 +830,7 @@ echo "Payment page throws 500" | go run .
 go run .
 ```
 
-- [x] `Step 5` commit：done（`feat(skeleton-demo): implement app.Interactive as a stdin REPL`）
+- [x] `Step 5` commit：done（`feat(skeleton-agent): implement agent.Interactive as a stdin REPL`）
 
 ---
 
@@ -839,7 +839,7 @@ go run .
 - [x] `Step 1` `docs/terminology.md` 的 `Core / Runtime` 表加六列：`round`、`turn`、`tool call batch`、`settlement`、`pause reason`、`Interactive`（定義照 §1 與 §3，出處填實際檔案路徑）
 
 - [x] `Step 2` `CLAUDE.md`
-  - 模組對應表 `app/config` 列補 `Interactive`（mid-run HITL + follow-up input）、`WithRoundTimeout`
+  - 模組對應表 `agent` 列補 `Interactive`（mid-run HITL + follow-up input）、`WithRoundTimeout`
   - 核心架構決策加一條：batch settlement 不變式（§2 那句）
   - 「目前明確未完成或刻意保留」移除已解決項
 
@@ -855,17 +855,17 @@ go run .
 
 | # | 原稿位置 | 問題 | 本 plan 處置 |
 | --- | --- | --- | --- |
-| 1 | resolver plan Task 2 Step 1 | 稱 `app/options.go` 不存在，要求把 Option 加進 `app/app.go` | `options.go` 已存在 `54` 行；新 knob 加在該檔（§10 Step 2） |
+| 1 | resolver plan Task 2 Step 1 | 稱 `agent/options.go` 不存在，要求把 Option 加進 `agent/lifecycle.go` | `options.go` 已存在 `54` 行；新 knob 加在該檔（§10 Step 2） |
 | 2 | resolver plan Task 1 Step 5 | `var _ pauseImpl = (*resolveImpl)(nil)` —— pointer-to-interface 不實作 interface，編譯失敗 | 刪除。改用真正跑 `Run` 的行為測試（§10 Step 3） |
 | 3 | resolver plan Task 3 Step 4 | `SubmitHumanDecision` 後再呼叫 `Resume` → WAL replay → 重複執行 tool 與 model | `advance` 只呼叫 `SubmitHumanDecision`，理由寫進 doc comment |
 | 4 | resolver plan Task 3 Step 4 | `defer cancel()` 在 `for` 迴圈內，`N` 次 pause 累積 `N` 個未釋放 timer | 抽出 `resolveRound`，defer 在每次呼叫都返回的函式內 |
 | 5 | resolver plan Task 1 vs Task 3 | `PauseHandler` 註解說無 resolver 時仍會跑，程式碼卻先 `break` | 介面收成 `1` 個，矛盾消失 |
 | 6 | resolver plan Task 3 Step 2 | 測試的 `finalStatus` 宣告後從未賦值，斷言必失敗 | agent 存 `final` 欄位供斷言 |
-| 7 | resolver plan Task 4 | `a.fixture` vs 欄位 `Fixture`；`app.Main` 後的不可達 `if err := error(nil)`；`os.Args[i+2]` 越界 | 整個 Task 換成 `skeleton-demo`（§11） |
+| 7 | resolver plan Task 4 | `a.fixture` vs 欄位 `Fixture`；`cli.Main` 後的不可達 `if err := error(nil)`；`os.Args[i+2]` 越界 | 整個 Task 換成 `skeleton-agent`（§11） |
 | 8 | 兩稿皆 | `turn` / `round` 混用，且實碼 `Turn` 是 Decide 次數 | §1 定案，Task 0 落地 `MaxRounds` |
 | 9 | resolver plan §Companion | `MaxToolCalls` 列為 not planned | 併入 Task 2，與 settlement 共用同一段程式碼 |
 | 10 | 兩稿皆未發現 | `runtime/loop.go:415` 只取 `ToolCalls[0]`，違反 §2 不變式（live bug） | Task 1 |
-| 11 | 兩稿皆未發現 | `planning/helpers.go::scratchCall` 直接型別斷言，JSON round-trip 後永遠 false → 崩潰後 Resume 靜默完成（live bug） | Task 1 Step 2 |
+| 11 | 兩稿皆未發現 | `reasoning/helpers.go::scratchCall` 直接型別斷言，JSON round-trip 後永遠 false → 崩潰後 Resume 靜默完成（live bug） | Task 1 Step 2 |
 | 12 | diagram plan §8 | 稱 resolver panic「需擴充 panic recovery」 | round loop 在 `safeRun` 外，`NextRound` panic 會炸掉 process。已知取捨，寫進 §15 |
 
 ---
@@ -895,7 +895,7 @@ flowchart TB
     INV --> R["reflect → 下一個 CALL_MODEL"]
 ```
 
-### `app.Run` lifecycle
+### `agent.Run` lifecycle
 
 ```mermaid
 flowchart TB
@@ -927,17 +927,17 @@ flowchart TB
 ## 16. 全域驗證
 
 ```bash
-cd /Users/shuk/projects/ai/agentSDK
+cd "$(git rev-parse --show-toplevel)"
 go build ./... && go test ./... -count=1 -timeout=120s
 
-for mod in . sample/code-agent sample/file-agent sample/greet-agent sample/logdoctor \
-  sample/memory-demo sample/middleware-demo sample/skeleton-demo sample/strategy-demo; do
+for mod in . sample/code-agent sample/file-agent sample/greet-agent sample/logdoctor-agent \
+  sample/demo-memory sample/demo-middleware sample/skeleton-agent sample/demo-strategy; do
   (cd "$mod" && go build ./... && go test ./... -count=1 -timeout=120s) || echo "FAIL $mod"
 done
 
 # 依賴紀律：宣告層只准看到 core
 go list -deps ./agent/spec | grep agentsdk
 go list -deps ./prompt     | grep agentsdk
-# runtime 不得 import planning
-go list -deps ./runtime | grep -c 'agentsdk/planning'   # 必須是 0
+# runtime 不得 import reasoning
+go list -deps ./runtime | grep -c 'agentsdk/reasoning'  # 必須是 0
 ```

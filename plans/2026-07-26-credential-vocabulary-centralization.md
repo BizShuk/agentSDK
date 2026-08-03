@@ -1,5 +1,8 @@
 # credential vocabulary 集中化: core / spec / registry / cmd
 
+Date: 2026-07-26
+Status: completed on 2026-07-26
+
 ## Context
 
 `agent/spec/` 與 `provider/registry.go` 之間存在 credential 相關常數的雙重宣告,risk of drift 而無 guard test 守住。這個 plan 把這些常數下沉到 `core` package — 已經是兩個 caller 的共同依賴 — 讓 single source of truth 出現在 leaf 層,並修補 `cmd/provider.go` 直接寫死 `"minimax"` 字面值這個第三處風險點。
@@ -165,11 +168,12 @@ func TestProviderFlagDefaultReferencesRegistryDefault(t *testing.T) {
 ## 驗證
 
 ```bash
-cd /Users/shuk/projects/ai/agentSDK
+cd "$(git rev-parse --show-toplevel)"
 
 # 1. 所有 module build + test 不 regression
-for mod in . sample/code-agent sample/file-agent sample/greet-agent sample/logdoctor \
-  sample/memory-demo sample/middleware-demo sample/skeleton-demo sample/strategy-demo; do
+for mod in . sample/code-agent sample/file-agent sample/greet-agent sample/log-agent-v2 \
+  sample/logdoctor-agent sample/demo-memory sample/demo-middleware sample/skeleton-agent \
+  sample/demo-strategy; do
   (cd "$mod" && go build ./... && go test ./... -count=1 -timeout=120s)
 done
 

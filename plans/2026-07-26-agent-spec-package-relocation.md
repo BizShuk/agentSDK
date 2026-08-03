@@ -1,5 +1,8 @@
 # 將 `agent/spec/` 移入 `config/agent/`
 
+Date: 2026-07-26
+Status: not applied; superseded by the current canonical `agent/spec` boundary
+
 ## Context
 
 `agentsdk` 目前有兩個語意命名都叫 `agent` 的 package 候選人：
@@ -88,7 +91,7 @@
 | `README.todo`（line 11）                             | `M1 \`agent/spec\`：...` 改 `M1 \`config/agent\`：...`                                                |
 | `docs/superpowers/plans/2026-07-23-agent-approval-resolver.md`（line 590, 901） | import path、source path 引用                                  |
 | `plans/2026-07-22-agent-skeleton-config-opt-in.md`（多處） | 歷史 plan 內 path 引用                                                                     |
-| `plans/validated-meandering-rabbit.md`（多處）       | 設計 plan 內 path 引用                                                                                |
+| `plans/2026-07-26-credential-vocabulary-centralization.md`（多處） | 設計 plan 內 path 引用                                                             |
 | `plans/2026-07-24-round-batch-and-interactive-seam.md`（多處） | 設計 plan 內 path 引用                                                                |
 | `config.example.yaml`（line 3，**untracked**）       | header comment 改 `agent/spec.Config` → `config/agent.Config`                                         |
 
@@ -128,7 +131,7 @@ Phase 2: 更新 11 個 doc 檔 → grep 二次確認 → commit 2
 
 ## 驗證矩陣 (Verification)
 
-從 repo root `/Users/shuk/projects/ai/agentSDK` 執行。
+從 repo root（`git rev-parse --show-toplevel`）執行。
 
 ### A. Format + 殘留檢查
 
@@ -176,8 +179,9 @@ go vet ./...
 ### E. 八個 sample module（go.work workspace）
 
 ```bash
-for d in sample/code-agent sample/file-agent sample/greet-agent sample/logdoctor \
-         sample/memory-demo sample/middleware-demo sample/skeleton-demo sample/strategy-demo; do
+for d in sample/code-agent sample/file-agent sample/greet-agent sample/log-agent-v2 \
+         sample/logdoctor-agent sample/demo-memory sample/demo-middleware \
+         sample/skeleton-agent sample/demo-strategy; do
   (cd "$d" && go build ./... && go test ./... -count=1 -timeout=120s)
 done
 ```
@@ -204,7 +208,7 @@ grep -n 'agent/spec/tier' docs/architecture.svg       # expect: empty
 2. **Source-breaking import path**：外部直接 `import …/agent/spec` 的程式會壞。目前無外部 caller；若之後要 release，需在 release notes 標示 breaking。
 3. **Universal `agentcfg` 與既有慣例張力**：samples 已經用 `appconfig "…/config"`，新規則 `agentcfg "…/config/agent"` 與之對稱；wizard 內若有人想用 bare `agent` 會撞名，需在 `cmd/agent/wizard/CLAUDE.md` 或 wizard.go 開頭註解說明「always use `agentcfg`」避免回歸。
 4. **`.claude/settings.local.json` 含舊 path**（gitignored）：本機層級，不影響 build/commit；如本機開發流程依賴該權限字串，自行更新。
-5. **sample binary 內含舊 path 字串**：`sample/file-agent/file-agent` 與 `sample/skeleton-demo/skeleton-demo` 是編譯產物，grep 會命中；驗證時排除 `*.output` 或直接 rebuild 後再 grep。
+5. **sample binary 內含舊 path 字串**：若 `sample/file-agent/file-agent` 或 `sample/skeleton-agent/skeleton-agent` 等 local build artifacts 存在，grep 可能命中；驗證時排除 binary 或直接 rebuild 後再 grep。
 6. **`config.example.yaml` 是 untracked**：本次更新內容時**不要**順手 `git add` 它，除非明確決定要把它加入 tracked artifacts。若要 track，分開一個獨立 commit。
 
 ## 不在這次範圍內 (Out of Scope)

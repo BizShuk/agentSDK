@@ -221,7 +221,7 @@
 
 ### Harness/UX skeleton
 
-計畫：[`plans/2026-07-19-harness-ux-modularization.md`](../plans/2026-07-19-harness-ux-modularization.md)。
+計畫歷史：[`plans/2026-08-03-refresh.md`](../plans/2026-08-03-refresh.md)。
 來源調查：[`docs/memory/2026-07-19-agent-client-feature-catalog.md`](memory/2026-07-19-agent-client-feature-catalog.md)。
 
 - `sample/code-agent` 接上 TUI、wire、hooks、permission、session、skills、commands、

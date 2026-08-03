@@ -1,5 +1,8 @@
 # MiniMax Music Generation Implementation Plan
 
+**Status:** completed on 2026-07-31. Deterministic implementation and tests are
+complete; paid live smoke remains tracked in [`README.todo`](../README.todo).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: execute inline with
 > `test-driven-development`; do not delegate or create commits in this session.
 
@@ -59,21 +62,21 @@ registry, Cobra, `httptest`, `testify`.
   `MusicResult`.
 - Produces: `Metadata.MusicBaseURLEnv`.
 
-- [ ] **Step 1: Write failing contract tests**
+- [x] **Step 1: Write failing contract tests**
 
   Add tests that exercise provider-independent request validation, per-request
   credential decoration, explicit-auth precedence, and decorator failure.
   `MusicRequest.Validate` must reject an empty request, multiple simultaneous
   cover sources, negative sample rate, and negative bitrate.
 
-- [ ] **Step 2: Write failing registry tests**
+- [x] **Step 2: Write failing registry tests**
 
   Assert MiniMax advertises `CAPABILITY_MUSIC_GENERATE`, all other built-in
   adapters do not, unsupported construction returns
   `*UnsupportedCapabilityError`, and a request decorator permits deferred
   credential construction.
 
-- [ ] **Step 3: Verify RED**
+- [x] **Step 3: Verify RED**
 
   Run:
 
@@ -83,7 +86,7 @@ registry, Cobra, `httptest`, `testify`.
 
   Expected: compile failure because the music capability symbols do not exist.
 
-- [ ] **Step 4: Implement the minimal contract**
+- [x] **Step 4: Implement the minimal contract**
 
   Add these public shapes without importing them into `core`:
 
@@ -116,13 +119,13 @@ registry, Cobra, `httptest`, `testify`.
   `MusicAsset` separates `URL` from `Hex`; `MusicInfo` exposes duration in
   milliseconds, sample rate, channels, bitrate, and size in bytes.
 
-- [ ] **Step 5: Implement registry discovery and construction**
+- [x] **Step 5: Implement registry discovery and construction**
 
   Extend the one-shot registration invariant to accept `NewMusic`, add stable
   capability ordering after video, resolve `Metadata.MusicBaseURLEnv`, and wrap
   the result with `WithMusicDecorator`.
 
-- [ ] **Step 6: Verify GREEN**
+- [x] **Step 6: Verify GREEN**
 
   Run:
 
@@ -152,7 +155,7 @@ registry, Cobra, `httptest`, `testify`.
 - Defaults: `music-3.0` without a cover source; `music-cover` with a cover
   source.
 
-- [ ] **Step 1: Write the failing supplied-contract test**
+- [x] **Step 1: Write the failing supplied-contract test**
 
   Use `httptest` to submit:
 
@@ -173,14 +176,14 @@ registry, Cobra, `httptest`, `testify`.
   Assert `POST /v1/music_generation`, `Authorization: Bearer test-key`, exact
   field names, URL result mapping, status, trace ID, and audio metadata.
 
-- [ ] **Step 2: Add failing error and boundary tests**
+- [x] **Step 2: Add failing error and boundary tests**
 
   Cover explicit request-auth precedence, decorator-based construction,
   `MINIMAX_MUSIC_BASE_URL`, non-zero `base_resp.status_code`, non-2xx HTTP
   errors, missing audio, incomplete status, oversized success payload, and
   context cancellation.
 
-- [ ] **Step 3: Add failing MiniMax validation tests**
+- [x] **Step 3: Add failing MiniMax validation tests**
 
   Cover prompt and lyrics rune limits, cover prompt minimum/maximum, required
   cover source, allowed output formats (`url`, `hex`), sample rates
@@ -188,7 +191,7 @@ registry, Cobra, `httptest`, `testify`.
   (`32000`, `64000`, `128000`, `256000`), and audio formats
   (`mp3`, `wav`, `pcm`).
 
-- [ ] **Step 4: Verify RED**
+- [x] **Step 4: Verify RED**
 
   Run:
 
@@ -198,28 +201,28 @@ registry, Cobra, `httptest`, `testify`.
 
   Expected: compile failure because `NewMusic` is not defined.
 
-- [ ] **Step 5: Implement request mapping and validation**
+- [x] **Step 5: Implement request mapping and validation**
 
   Keep MiniMax model-specific limits in `provider/minimax/music.go`. Do not
   reject unknown explicit model IDs solely because the static list may change;
   apply cover rules to `music-cover` / `music-cover-free` and general
   non-streaming limits to other models.
 
-- [ ] **Step 6: Implement bounded HTTP transport**
+- [x] **Step 6: Implement bounded HTTP transport**
 
   `music_client.go` owns request creation, bearer/custom headers, a
   `128 MiB` success limit, a `1 MiB` error limit, and structured
   `provider.APIError` mapping. A successful MiniMax envelope must have
   `base_resp.status_code == 0`, `data.status == 2`, and non-empty audio.
 
-- [ ] **Step 7: Implement result mapping**
+- [x] **Step 7: Implement result mapping**
 
   Map `data.audio` to `MusicAsset.URL` for `output_format=url`, otherwise to
   `MusicAsset.Hex`. Map `extra_info.music_duration`,
   `music_sample_rate`, `music_channel`, `bitrate`, and `music_size` without
   preserving the full wire DTO.
 
-- [ ] **Step 8: Verify GREEN**
+- [x] **Step 8: Verify GREEN**
 
   Run:
 
@@ -253,13 +256,13 @@ registry, Cobra, `httptest`, `testify`.
 - Non-JSON output prints a returned URL or hex character count, never a full
   hex payload.
 
-- [ ] **Step 1: Write failing CLI and service tests**
+- [x] **Step 1: Write failing CLI and service tests**
 
   Assert the supplied cover request passes through the sample, the matrix
   reports MiniMax music support, and non-JSON output prints the returned URL.
   Keep the existing generic audio unsupported test unchanged.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
   Run:
 
@@ -270,20 +273,20 @@ registry, Cobra, `httptest`, `testify`.
   Expected: compile failure because `API_TYPE_MUSIC` and `svc.Music` do not
   exist.
 
-- [ ] **Step 3: Implement CLI mapping**
+- [x] **Step 3: Implement CLI mapping**
 
   Preserve the prompt positional argument. Default the sample music output to
   `url` and audio settings to `44100 / 256000 / mp3`, matching the supplied
   request. Forward `--model music-cover` and `--audio-url` without embedding a
   credential in flags.
 
-- [ ] **Step 4: Implement safe output**
+- [x] **Step 4: Implement safe output**
 
   JSON mode emits the complete folded `MusicResult`. Text mode emits
   `music.url=...` or `music.hex_chars=N` plus status, trace ID, duration,
   sample rate, bitrate, and size.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
   Run:
 
@@ -312,24 +315,24 @@ registry, Cobra, `httptest`, `testify`.
 - `docs/CHANGELOG.md` records the completed implementation.
 - `docs/terminology.md` defines `MusicGenerator` once.
 
-- [ ] **Step 1: Update the business-facing example**
+- [x] **Step 1: Update the business-facing example**
 
   Show the Go equivalent of the supplied `music-cover` request and state that
   returned URLs expire according to MiniMax policy.
 
-- [ ] **Step 2: Update technical ownership**
+- [x] **Step 2: Update technical ownership**
 
   Add `MusicGenerator`, `Entry.NewMusic`, `provider.NewMusic`,
   `CAPABILITY_MUSIC_GENERATE`, `MINIMAX_MUSIC_BASE_URL`, and the MiniMax music
   files to the canonical architecture descriptions.
 
-- [ ] **Step 3: Record verification boundaries**
+- [x] **Step 3: Record verification boundaries**
 
   State that deterministic `httptest` covers the wire contract, while no live
   paid request was executed without a real operator-owned API key and source
   audio.
 
-- [ ] **Step 4: Format and run targeted verification**
+- [x] **Step 4: Format and run targeted verification**
 
   Run:
 
@@ -349,7 +352,7 @@ registry, Cobra, `httptest`, `testify`.
 
   Expected: formatting changes only in scoped Go files; tests PASS.
 
-- [ ] **Step 5: Run full verification**
+- [x] **Step 5: Run full verification**
 
   Run:
 

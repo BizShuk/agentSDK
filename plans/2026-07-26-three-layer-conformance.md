@@ -38,7 +38,7 @@ root module:        go test ./... 全綠 (37 packages ok)
 8 sample modules:   go test ./... 全綠
 依賴方向:           utils 留原地 (P0 結案)；其他 SDK package 不看見 agent/
 L2 職責:            grep 'os.Exit\|slog.SetDefault\|signal\.' agent/*.go → 僅 doc comment
-L1 邊界:            grep 'agentsdk/runtime\|agentsdk/planning' sample/logdoctor-agent/cmd/*.go → empty
+L1 邊界:            grep 'agentsdk/runtime\|agentsdk/reasoning' sample/logdoctor-agent/cmd/*.go → empty
 ```
 
 ## 0. 契約 (Contract)
@@ -177,7 +177,7 @@ agent/cli/             Main / Run / os.Exit / signal / slog.SetDefault / OpenFor
 ## 3. 驗收指令 (Verification)
 
 ```bash
-cd /Users/shuk/projects/ai/agentSDK
+cd "$(git rev-parse --show-toplevel)"
 
 # 依賴方向：L3 不得看見 L2
 for p in core planning action tool memory runtime middleware prompt skill provider utils; do

@@ -6,8 +6,6 @@
 
 ## Provider 認證與能力
 
-- [ ] 發布包含 `MusicGenerator` / MiniMax music adapter 的下一個 AgentSDK version；
-      `v0.0.30` 尚未包含此 capability
 - [ ] OAuth 登入流程`未經實跑驗證`。`provider/credential` 一律以外部 `auth` 的常數為準，
       但移除前的 in-tree 版本曾在 `TOKEN_URL`（`console.` vs `api.`）、
       `REDIRECT_URI`（貼回碼 vs `localhost:54545`）、`SCOPES`（是否含 `org:create_api_key`）

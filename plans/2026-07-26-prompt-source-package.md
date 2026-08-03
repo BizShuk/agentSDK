@@ -1,7 +1,7 @@
 # Plan: `prompt/source/` sub-package — assemble all built-in Sources in one place
 
 Date: 2026-07-26
-Status: planning (not executed)
+Status: completed on 2026-07-26
 
 ## Context
 
@@ -24,7 +24,7 @@ Outcome:
 
 ## File layout
 
-New directory `/Users/shuk/projects/ai/agentSDK/prompt/source/`, package `source`:
+New directory `prompt/source/`, package `source`:
 
 | File | Responsibility |
 | --- | --- |
@@ -275,9 +275,9 @@ done
 ### Analyzer pass
 
 ```bash
-go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work --format text
-go-dependency-analysis --workspace /Users/shuk/projects/ai/agentSDK/go.work \
-  --policy /Users/shuk/projects/go-dependency-analysis/examples/agentsdk.json
+go-dependency-analysis --workspace "$(git rev-parse --show-toplevel)/go.work" --format text
+go-dependency-analysis --workspace "$(git rev-parse --show-toplevel)/go.work" \
+  --policy "$(git rev-parse --show-toplevel)/../../tools/go-dependency-analysis/examples/agentsdk.json"
 ```
 
 ## Risks

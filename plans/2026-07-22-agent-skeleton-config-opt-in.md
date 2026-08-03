@@ -1,6 +1,6 @@
 # Agent Skeleton：tier 階梯 × 兩層 opt-in × prompt content management
 
-日期：2026-07-22（v3：`M1`–`M7` 全數落地，實作結果回填）。前置：[`plans/2026-07-19-harness-ux-modularization.md`](2026-07-19-harness-ux-modularization.md)。
+日期：2026-07-22（v3：`M1`–`M7` 全數落地，實作結果回填）。前置計畫已整併至 [`2026-08-03-refresh.md`](2026-08-03-refresh.md)。
 
 ## 目標
 
@@ -10,7 +10,7 @@
 
 | 主題 | 決策 |
 | --- | --- |
-| opt-in 有兩層 | 層 `1` = feature 開關（block pointer，`nil` = 關）；層 `2` = variant 選擇（block 內具名字串）。`planning` 再多一層：`註冊哪些 rule` vs `這次跑哪個` |
+| opt-in 有兩層 | 層 `1` = feature 開關（block pointer，`nil` = 關）；層 `2` = variant 選擇（block 內具名字串）。`reasoning` 再多一層：`註冊哪些 rule` vs `這次跑哪個` |
 | engagement 是階梯不是開關集合 | `T0 oneshot`（不建 Engine，單次 provider）→ `T1 basic` → `T2 standard` → `T3 full`（= `sample/code-agent`），單調包含 |
 | `contextfile` 只是 content management 的一個來源 | 新增 `prompt` package 管三個 slot（system / user / reminder）；`contextfile` 降為其中一個 `Source`，不擴張自己的職責 |
 
@@ -34,7 +34,7 @@
 | `Output` | opt-in | `Format` | `text` `json` `tui` |
 | `Sessions` `Subagents` `Hooks` | opt-in | 無 variant（只有參數） | — |
 
-### planning 的第三層：註冊 vs 選用
+### reasoning 的第三層：註冊 vs 選用
 
 `core.NewDecide` 收的是 `map[ReasoningStyle]DecisionRule`，而 `State.ReasoningStyle` 才決定這一步派給誰。這是兩件事，設定要分開：
 
@@ -53,7 +53,7 @@ reasoning:
   enable: [choose_agent, think_then_act, plan_then_run]
 ```
 
-（`M2` 更正）六個 rule 都已是完整的 phase FSM，沒有 stub。`core/thinking.go` 原先對 `one_shot` / `learn_from_failure` / `choose_agent` 標的 `STUB` 是 doc drift——實作與 `TestRulesReachDone` 等測試都已完備，註解已於 `M2` 移除。設定層不需要 stub warning。
+（`M2` 更正）六個 rule 都已是完整的 phase FSM，沒有 stub。`core/decision.go` 原先對 `one_shot` / `learn_from_failure` / `choose_agent` 標的 `STUB` 是 doc drift——實作與 `TestRulesReachDone` 等測試都已完備，註解已於 `M2` 移除。設定層不需要 stub warning。
 
 ## 二、Tier 階梯
 
@@ -62,25 +62,25 @@ reasoning:
 | tier | 內容 | 走 Engine | 對應現況 |
 | --- | --- | --- | --- |
 | `T0 oneshot` | 只有 provider，單次 `Generate`/`Stream` | 是（`one_shot` rule，其餘 port 全 nil） | `cmd/provider.go` |
-| `T1 basic` | `+` 一個 planning strategy `+` default middleware `+` store/WAL/log | 是 | `sample/greet-agent` |
-| `T2 standard` | `+` 內建工具 `+` permission/sandbox `+` session `+` prompt(files) | 是 | `sample/file-agent` `sample/logdoctor` |
+| `T1 basic` | `+` 一個 reasoning strategy `+` default middleware `+` store/WAL/log | 是 | `sample/greet-agent` |
+| `T2 standard` | `+` 內建工具 `+` permission/sandbox `+` session `+` prompt(files) | 是 | `sample/file-agent` `sample/logdoctor-agent` |
 | `T3 full` | `+` skills `+` subagents `+` hooks `+` output(json/tui) | 是 | `sample/code-agent` |
 
 ### T0 不是結構性斷點（v2 修正）
 
-初版把 `T0` 設計成繞過 Engine 的獨立 code path。實測後推翻：`planning.OneShotReasoning` 已經就是「只呼叫一次 provider」的 rule，而 `runtime.Engine` 對 `Tools`/`Store`/`Log`/`Middleware`/`Approval`/`Hooks`/`Sink` 全部 nil-safe。所以 `T0` 只是`一組 nil block 的 config`，不需要第二條路徑。
+初版把 `T0` 設計成繞過 Engine 的獨立 code path。實測後推翻：`reasoning.OneShotReasoning` 已經就是「只呼叫一次 provider」的 rule，而 `runtime.Engine` 對 `Tools`/`Store`/`Log`/`Middleware`/`Approval`/`Hooks`/`Sink` 全部 nil-safe。所以 `T0` 只是`一組 nil block 的 config`，不需要第二條路徑。
 
 驗證（probe test，已跑過後刪除）：`one_shot` rule + `NewEngine(step, prov, nil)` 且其餘欄位全 nil →
 `RequestCount=1`、`turns=1`、`messages=2`、`status=completed`。
 
-不要另外寫 no-op `Decide`。一個「每次都回 `[CALL_MODEL, DONE]`」的 rule 會違反 `core.Decide` 的純函式不變式——retry 或 WAL replay 會重發 model call。這正是 `one_shot` 從舊 STUB 改成 two-phase FSM 的原因，理由寫在 [`planning/one_shot.go`](../planning/one_shot.go) 的型別註解裡：`think` 只觸發一次，之後每次都回 `DONE`。
+不要另外寫 no-op `Decide`。一個「每次都回 `[CALL_MODEL, DONE]`」的 rule 會違反 `core.Decide` 的純函式不變式——retry 或 WAL replay 會重發 model call。這正是 `one_shot` 從舊 STUB 改成 two-phase FSM 的原因，理由寫在 [`reasoning/one_shot.go`](../reasoning/one_shot.go) 的型別註解裡：`think` 只觸發一次，之後每次都回 `DONE`。
 
-補充：`core/thinking.go` 對 `REASON_ONE_SHOT` 仍標 `STUB`，但實作與測試（`TestOneShotThinkEmitsCallModel` / `TestOneShotDoneEmitsDone` / `TestOneShotUnknownPhaseEmitsDone` / `TestRulesReachDone`）都已完備——那行註解是 doc drift，`M1` 順手修掉。
+補充：`core/decision.go` 對 `REASON_ONE_SHOT` 曾標 `STUB`，但實作與測試（`TestOneShotThinkEmitsCallModel` / `TestOneShotDoneEmitsDone` / `TestOneShotUnknownPhaseEmitsDone` / `TestRulesReachDone`）都已完備——該註解是 doc drift，`M1` 已修正。
 
 因此 API 收斂成一組，`Once` 只是 facade 不是另一條路：
 
 ```go
-// T1+：建 Agent，實作 app.Agent 介面
+// T1+：建 Agent，實作 agent.Runner 介面
 func New(cfg Config, opts ...Option) (*Agent, error)   // Config = spec.Config（type alias）
 func MustNew(cfg Config, opts ...Option) *Agent
 
@@ -112,7 +112,7 @@ tier: oneshot
 memory: {}      # 打開持久化（此時 Name 才變必填）
 ```
 
-邊界剛好落在 `T0` / `T1`，也就是 `Once` / `New` 的分界：`T1+` 走 `app.Main` 時由 [`app/app.go`](../app/app.go) 的 Bootstrap 後回填自動取得 `Store`/`Log`，不需要 config 明寫。
+邊界剛好落在 `T0` / `T1`，也就是 `Once` / `New` 的分界：`T1+` 走 `cli.Main` 時由 [`agent/cli.OpenForCLI`](../agent/cli/cli.go) 建立 `Host` 並取得 `Store`/`Log`，不需要 config 明寫。
 
 ### tier × reasoning 是正交的，不驗證衝突（決議）
 
@@ -145,20 +145,20 @@ style=do_then_review  calls=1 turns=1 status=completed
 out, err := agent.Once(ctx, agent.Config{Model: agent.Model{Provider: "minimax"}}, "ping")
 
 // T1 —— basic
-app.Main(agent.MustNew(agent.Config{
+cli.Main(agent.MustNew(agent.Config{
     Name: "my-agent", Tier: "basic",
     Model: agent.Model{Provider: "minimax"},
 }))
 
 // T2 —— standard，只覆寫一個 variant
-app.Main(agent.MustNew(agent.Config{
+cli.Main(agent.MustNew(agent.Config{
     Name: "file-agent", Tier: "standard",
     Model:     agent.Model{Provider: "anthropic"},
     Reasoning: agent.Reasoning{Style: "plan_then_run"},
 }))
 
 // T3 —— full，再加無法序列化的注入
-app.Main(agent.MustNew(cfg,
+cli.Main(agent.MustNew(cfg,
     agent.WithTools(myDeployTool),
     agent.WithHooks(hook.Rule{Event: core.HOOK_PRE_TOOL_USE, Match: "bash",
         Handlers: []hook.Handler{hook.Func(blockRootRM)}}),
@@ -348,7 +348,7 @@ flowchart TD
 
 | 事實 | 意義 |
 | --- | --- |
-| 六個 `ReasoningStyle` 常數在 [`core/thinking.go`](../core/thinking.go)，不在 `planning/` | 列舉 style 只需 `core`，不必 import `planning` |
+| 六個 `ReasoningStyle` 常數在 [`core/decision.go`](../core/decision.go)，不在 `reasoning/` | 列舉 style 只需 `core`，不必 import `reasoning` |
 | tier 與 variant 是 `spec` 自己的詞彙 | 純 literal，無外部知識 |
 | 只有 provider 清單需要「誰被編進來」的知識 | 由 `M5` 的 provider registry 在 `agent` 層提供，`spec` 不碰 |
 
@@ -411,7 +411,7 @@ type Prompt struct {
 
 ### 注入用 `agent.Option`，不用 `Deps` struct（決議）
 
-無法序列化者一律走 functional option，沿用 repo 既有慣例——`type Option func(*x)` 在 [`app/options.go`](../app/options.go) 與七個 provider adapter 共出現 `8` 次，是本 repo 對 DI 的標準答案。初版的 `New(cfg, deps ...Deps)` 用 variadic struct 模擬 optional，是繞過語言而非順著語言，捨棄。
+無法序列化者一律走 functional option；composition options 集中在 [`agent/options.go`](../agent/options.go)。初版的 `New(cfg, deps ...Deps)` 用 variadic struct 模擬 optional，是繞過語言而非順著語言，捨棄。
 
 ```go
 package agent
@@ -431,9 +431,9 @@ func New(cfg Config, opts ...Option) (*Agent, error)   // Config = spec.Config�
 func MustNew(cfg Config, opts ...Option) *Agent
 ```
 
-回傳 `error` 而非 `func(*builder)`：注入本身可能失敗（工具重名、rule 的 `Kind()` 與 `Enable[]` 不符），及早報比在 stage 8 才炸好。這是與 `app.Option`（`func(*options)`，不會失敗）唯一的差異，值得。
+回傳 `error` 而非 `func(*builder)`：注入本身可能失敗（工具重名、rule 的 `Kind()` 與 `Enable[]` 不符），及早報比在 stage 8 才炸好。
 
-「應用層要知道注入什麼」的可發現性不靠 struct 欄位，靠把全部 `With*` 集中在 `agent/options.go` 一個檔案——godoc 會把它們列在一起，`app/options.go` 現在就是這樣被閱讀的。
+「應用層要知道注入什麼」的可發現性不靠 struct 欄位，靠把全部 `With*` 集中在 `agent/options.go` 一個檔案——godoc 會把它們列在一起。
 
 ### `Choice` 不併進 `Option`
 
@@ -447,7 +447,7 @@ func MustNew(cfg Config, opts ...Option) *Agent
 | 可列舉 | 是——wizard 要先`列出全部`才能讓人選 | 否——`func(*builder) error` 無法自我描述 |
 | 可預設 | 是（`Default: true`） | 無此概念 |
 
-決定性的一條是`可列舉`：wizard 必須在套用前先枚舉。`app.WithTimeout(5*time.Minute)` 不是「在候選中挑一個」，它是一次 mutation——你無法問一個 closure「你可能是哪些值」。
+決定性的一條是`可列舉`：wizard 必須在套用前先枚舉。`agent.WithTimeout(5*time.Minute)` 不是「在候選中挑一個」，它是一次 mutation——你無法問一個 closure「你可能是哪些值」。
 
 兩者確實會相遇，但在`輸出端`而非型別層：wizard 的 `--print-go` 就是把選好的 `Choice` 印成等價的 `With*` 呼叫。同一份決策，兩種載體。
 
@@ -518,7 +518,7 @@ type Choice struct {
 }
 
 func TierChoices() []Choice
-func StyleChoices() []Choice            // 來自 planning 六個 rule
+func StyleChoices() []Choice            // 來自 reasoning 六個 rule
 func ProviderChoices() []Choice         // 來自 M5 的 provider registry
 func VariantChoices(block string) []Choice // middleware / memory / safety / output
 ```
@@ -539,7 +539,7 @@ wizard `不`做的事：不建 Agent、不打 provider、不驗證憑證——�
 | 階段 | 狀態 | 內容 | 驗收 |
 | --- | --- | --- | --- |
 | `M1` | 完成 | `agent/spec`：Config/Choice、tier 展開、variant 驗證、`Load`（只 import core） | JSON round-trip；tier 單調性 table test；未知 `Style` 與 `Style ∉ Enable[]` 報錯；`tier: oneshot` + `reasoning` 明確斷言`不`報錯 |
-| `M2` | 完成 | `agent.Once` / `OnceStream` facade（tier=oneshot），順手修 `core/thinking.go` 的 stale `STUB` 註解 | 保留 probe：`one_shot` + 全 nil port 走 Engine，`RequestCount==1` 且 `status==completed`；`cmd/provider.go` 改呼叫 `agent.Once` 後行為等價 |
+| `M2` | 完成 | `agent.Once` / `OnceStream` facade（tier=oneshot），順手修 `core/decision.go` 的 stale `STUB` 註解 | 保留 probe：`one_shot` + 全 nil port 走 Engine，`RequestCount==1` 且 `status==completed`；`cmd/provider.go` 改呼叫 `agent.Once` 後行為等價 |
 | `M3` | 完成 | `prompt` package：Slot/Section/Source/Builder + `agent` 內的四個 adapter | Builder 三個 slot 順序與 MaxBytes 截斷測試；zero-source = 空 seed |
 | `M4` | 完成 | `agent/build.go` + `agent/options.go`：8 stage pipeline、`New`/`Bootstrap`/`Preflight`、全部 `With*` | 每個 block nil/非 nil 各一組 assert Engine 欄位 |
 | `M5` | 完成 | provider registry（name → constructor），與 `cmd/provider.go` 共用 | `--list-providers` 與 Config 同一份來源 |

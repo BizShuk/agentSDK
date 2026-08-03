@@ -1,5 +1,8 @@
 # Provider Adapter Interface
 
+Date: 2026-07-24
+Status: completed on 2026-07-24
+
 ## Context
 
 `provider/` 目前以 `Entry` struct literal 形式收集 adapter 註冊資訊。`Entry` 同時持有兩種資料：runtime-facing 欄位（`New`、`Catalog`）與註冊 metadata（`Name`、`Label`、`Note`、`APIKeyEnv`、`BaseURLEnv`）。後 5 個欄位其實是「描述 adapter 本身」的事，卻散落在 registry 端；7 個 adapter 各自實作了相同的 6 個 `core.Provider` 方法加上 `Name()`，但 `Name()` 並不在 `core.Provider` 內。
@@ -150,7 +153,7 @@ OAuth adapter (`codex` / `antigravity` / `grok`) 因為有 `NewWithOAuth`,`New` 
 ## 驗證
 
 ```bash
-cd /Users/shuk/projects/ai/agentSDK
+cd "$(git rev-parse --show-toplevel)"
 
 # 1. 全 workspace build 與 vet
 go work sync
@@ -164,8 +167,8 @@ go test ./agent/... ./cmd/... -count=1 -timeout=120s
 
 # 4. 7 個 sample module 都需重 build + test
 for mod in . sample/code-agent sample/file-agent sample/greet-agent \
-  sample/logdoctor sample/memory-demo sample/middleware-demo \
-  sample/skeleton-demo sample/strategy-demo; do
+  sample/log-agent-v2 sample/logdoctor-agent sample/demo-memory sample/demo-middleware \
+  sample/skeleton-agent sample/demo-strategy; do
   (cd "$mod" && go build ./... && go test ./... -count=1 -timeout=120s)
 done
 
