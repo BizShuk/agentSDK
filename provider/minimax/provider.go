@@ -204,11 +204,10 @@ func toRequestBody(req core.ModelRequest, model string) (RequestBody, error) {
 				}
 			case core.PART_KIND_TOOL_RESULT:
 				if c.ToolResult != nil {
-					raw, _ := json.Marshal(c.ToolResult.Output)
 					blocks = append(blocks, ContentParam{
 						Type:      "tool_result",
 						ToolUseID: c.ToolResult.CallID,
-						Content:   raw,
+						Content:   encodeToolResultContent(c.ToolResult.Output),
 						IsError:   c.ToolResult.Error != "",
 					})
 				}
@@ -269,6 +268,35 @@ func fromResponse(r Response) core.ModelResult {
 		}
 	}
 	return out.NormalizeContent()
+}
+
+// encodeToolResultContent renders a tool result as the JSON string that a
+// tool_result block accepts.
+//
+// The Messages API takes either a string or an array of content blocks here,
+// never a bare object. Marshalling core.ToolResult.Output directly is fine for
+// a tool that returns a string, but a tool returning a struct or map produced
+// an object and minimax rejected the whole request with
+// "invalid params, invalid tool_result content (2013)" — so any agent whose
+// tools return structured data could not complete a single round. Structured
+// output is therefore serialized and passed along as text, which is what the
+// model reads anyway.
+func encodeToolResultContent(output any) json.RawMessage {
+	text, ok := output.(string)
+	if !ok {
+		encoded, err := json.Marshal(output)
+		if err != nil {
+			// Keep the tool_use/tool_result pairing intact: dropping the block
+			// would leave the next request structurally invalid.
+			encoded = []byte(fmt.Sprintf("%v", output))
+		}
+		text = string(encoded)
+	}
+	raw, err := json.Marshal(text)
+	if err != nil {
+		return json.RawMessage(`""`)
+	}
+	return raw
 }
 
 // maxTokensOrDefault returns req.MaxTokens or 4096 when unset. The
