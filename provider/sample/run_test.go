@@ -201,10 +201,101 @@ func TestRunMusicCoverWithAPIKeyEnvironment(t *testing.T) {
 	}
 }
 
-func TestRunAudioReturnsTypedUnsupportedCapability(t *testing.T) {
+func TestRunSpeechWithAPIKeyEnvironment(t *testing.T) {
+	var requestPath string
+	var apiKey string
+	var payload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPath = r.URL.Path
+		apiKey = r.Header.Get("xi-api-key")
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "audio/mpeg")
+		if _, err := w.Write([]byte("synthesized")); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	var out bytes.Buffer
+	err := run(context.Background(), config.Config{
+		Provider:     "elevenlabs",
+		Type:         config.API_TYPE_SPEECH,
+		Auth:         config.AUTH_MODE_APIKEY,
+		BaseURL:      server.URL,
+		Prompt:       "say hello",
+		Voice:        "voice-42",
+		SpeechFormat: "mp3_44100_128",
+	}, &out, func(key string) string {
+		if key == "ELEVENLABS_API_KEY" {
+			return "test-key"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("run speech: %v", err)
+	}
+	if requestPath != "/v1/text-to-speech/voice-42" {
+		t.Errorf("request path = %q, want /v1/text-to-speech/voice-42", requestPath)
+	}
+	if apiKey != "test-key" {
+		t.Errorf("xi-api-key = %q, want test-key", apiKey)
+	}
+	if payload["text"] != "say hello" {
+		t.Errorf("text = %v, want say hello", payload["text"])
+	}
+	if !strings.Contains(out.String(), "speech.bytes=11") {
+		t.Errorf("output = %q, want the synthesized byte count", out.String())
+	}
+}
+
+func TestRunTranscribeWithAPIKeyEnvironment(t *testing.T) {
+	var requestPath string
+	var apiKey string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPath = r.URL.Path
+		apiKey = r.Header.Get("xi-api-key")
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := io.WriteString(w, `{"language_code":"en","text":"hello there"}`); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	var out bytes.Buffer
+	err := run(context.Background(), config.Config{
+		Provider: "elevenlabs",
+		Type:     config.API_TYPE_TRANSCRIBE,
+		Auth:     config.AUTH_MODE_APIKEY,
+		BaseURL:  server.URL,
+		AudioURL: "https://example.test/clip.mp3",
+		Language: "en",
+		Diarize:  true,
+	}, &out, func(key string) string {
+		if key == "ELEVENLABS_API_KEY" {
+			return "test-key"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("run transcribe: %v", err)
+	}
+	if requestPath != "/v1/speech-to-text" {
+		t.Errorf("request path = %q, want /v1/speech-to-text", requestPath)
+	}
+	if apiKey != "test-key" {
+		t.Errorf("xi-api-key = %q, want test-key", apiKey)
+	}
+	if !strings.Contains(out.String(), "hello there") {
+		t.Errorf("output = %q, want the transcript", out.String())
+	}
+}
+
+func TestRunSpeechReturnsTypedUnsupportedCapability(t *testing.T) {
 	err := run(context.Background(), config.Config{
 		Provider: "google",
-		Type:     config.API_TYPE_AUDIO,
+		Type:     config.API_TYPE_SPEECH,
 		Auth:     config.AUTH_MODE_AUTO,
 		Prompt:   "say hello",
 	}, io.Discard, func(string) string { return "" })
@@ -215,8 +306,20 @@ func TestRunAudioReturnsTypedUnsupportedCapability(t *testing.T) {
 	if !errors.As(err, &unsupported) {
 		t.Fatalf("error = %T, want *provider.UnsupportedCapabilityError", err)
 	}
-	if unsupported.Provider != "google" || unsupported.Capability != provider.Capability("audio") {
-		t.Errorf("unsupported = %+v, want google/audio", unsupported)
+	if unsupported.Provider != "google" ||
+		unsupported.Capability != provider.CAPABILITY_AUDIO_SPEECH {
+		t.Errorf("unsupported = %+v, want google/audio_speech", unsupported)
+	}
+}
+
+func TestRunTranscribeRequiresAnAudioSource(t *testing.T) {
+	err := run(context.Background(), config.Config{
+		Provider: "elevenlabs",
+		Type:     config.API_TYPE_TRANSCRIBE,
+		Auth:     config.AUTH_MODE_AUTO,
+	}, io.Discard, func(string) string { return "" })
+	if err == nil || !strings.Contains(err.Error(), "--audio-file or --audio-url") {
+		t.Fatalf("error = %v, want an audio source requirement", err)
 	}
 }
 
@@ -231,47 +334,48 @@ func TestWriteProviderMatrixShowsTypeAndAuthSupport(t *testing.T) {
 		"CHAT",
 		"IMAGE",
 		"MUSIC",
-		"AUDIO",
+		"SPEECH",
+		"TRANSCRIBE",
 		"google",
 		"GOOGLE_API_KEY",
 		"grok",
 		"XAI_API_KEY",
 		"minimax",
 		"MINIMAX_API_KEY",
+		"elevenlabs",
+		"ELEVENLABS_API_KEY",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("matrix missing %q:\n%s", want, text)
 		}
 	}
+
+	// chat, image, music, speech, transcribe — in header order.
+	want := map[string][5]string{
+		"google":     {"yes", "yes", "no", "no", "no"},
+		"minimax":    {"yes", "no", "yes", "yes", "no"},
+		"elevenlabs": {"no", "no", "no", "yes", "yes"},
+	}
+	seen := map[string]bool{}
 	for _, line := range strings.Split(text, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 5 || fields[0] != "google" {
+		if len(fields) < 6 {
 			continue
 		}
-		if fields[1] != "yes" || fields[2] != "yes" ||
-			fields[3] != "no" || fields[4] != "no" {
-			t.Errorf(
-				"google type matrix = %v, want chat=yes image=yes music=no audio=no",
-				fields[1:5],
-			)
-		}
-		break
-	}
-	for _, line := range strings.Split(text, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 5 || fields[0] != "minimax" {
+		expected, ok := want[fields[0]]
+		if !ok {
 			continue
 		}
-		if fields[1] != "yes" || fields[2] != "no" ||
-			fields[3] != "yes" || fields[4] != "no" {
-			t.Errorf(
-				"minimax type matrix = %v, want chat=yes image=no music=yes audio=no",
-				fields[1:5],
-			)
+		seen[fields[0]] = true
+		if got := [5]string(fields[1:6]); got != expected {
+			t.Errorf("%s capability row = %v, want %v", fields[0], got, expected)
 		}
-		return
 	}
-	t.Errorf("matrix missing minimax row:\n%s", text)
+	for name := range want {
+		if !seen[name] {
+			t.Errorf("matrix missing %s row:\n%s", name, text)
+		}
+	}
 }
 
 func TestExecuteRejectsMissingPrompt(t *testing.T) {

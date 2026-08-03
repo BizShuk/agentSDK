@@ -15,6 +15,7 @@ import (
 	_ "github.com/bizshuk/agentsdk/provider/anthropic"
 	_ "github.com/bizshuk/agentsdk/provider/antigravity"
 	_ "github.com/bizshuk/agentsdk/provider/codex"
+	_ "github.com/bizshuk/agentsdk/provider/elevenlabs"
 	_ "github.com/bizshuk/agentsdk/provider/google"
 	_ "github.com/bizshuk/agentsdk/provider/grok"
 	_ "github.com/bizshuk/agentsdk/provider/minimax"

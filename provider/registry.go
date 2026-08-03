@@ -48,13 +48,15 @@ type Factory func(ResolvedConfig) (Adapter, error)
 // each supported capability, the metadata a CLI or wizard renders, and the
 // bundled model catalog used when live discovery is unavailable.
 type Entry struct {
-	Name     string
-	Metadata Metadata
-	New      Factory
-	NewImage ImageFactory
-	NewVideo VideoFactory
-	NewMusic MusicFactory
-	Catalog  func() []core.ModelSpec
+	Name           string
+	Metadata       Metadata
+	New            Factory
+	NewImage       ImageFactory
+	NewVideo       VideoFactory
+	NewMusic       MusicFactory
+	NewTranscriber TranscriberFactory
+	NewSpeech      SpeechFactory
+	Catalog        func() []core.ModelSpec
 }
 
 // entries is the registry proper. Keys are lower-case; Lookup normalizes.
@@ -69,8 +71,7 @@ var (
 // database/sql/driver). Providers should call this exactly once from
 // their package's init().
 func Register(e Entry) {
-	if strings.TrimSpace(e.Name) == "" ||
-		(e.New == nil && e.NewImage == nil && e.NewVideo == nil && e.NewMusic == nil) {
+	if strings.TrimSpace(e.Name) == "" || !e.hasFactory() {
 		panic(fmt.Sprintf(
 			"provider: Register requires Name and at least one factory (got %+v)",
 			e,
@@ -83,6 +84,19 @@ func Register(e Entry) {
 		panic(fmt.Sprintf("provider %q already registered", e.Name))
 	}
 	entries[key] = e
+}
+
+// hasFactory reports whether the entry can construct at least one capability.
+// Model generation is not among the required ones: an audio-only vendor has
+// no chat surface to expose, and demanding one would keep it out of the
+// registry that discovery, credential resolution, and the CLI all read from.
+func (e Entry) hasFactory() bool {
+	return e.New != nil ||
+		e.NewImage != nil ||
+		e.NewVideo != nil ||
+		e.NewMusic != nil ||
+		e.NewTranscriber != nil ||
+		e.NewSpeech != nil
 }
 
 // Names lists the registered provider names, sorted.
@@ -230,6 +244,54 @@ func NewMusic(name string, o Options) (MusicGenerator, error) {
 	return WithMusicDecorator(e.Name, generator, decorator), nil
 }
 
+// NewTranscriber builds the named provider's speech-to-text capability using
+// the same credential resolution and request-time decorator precedence as New.
+func NewTranscriber(name string, o Options) (Transcriber, error) {
+	e, err := lookup(name)
+	if err != nil {
+		return nil, err
+	}
+	if e.NewTranscriber == nil {
+		return nil, &UnsupportedCapabilityError{
+			Provider:   e.Name,
+			Capability: CAPABILITY_AUDIO_TRANSCRIBE,
+		}
+	}
+	resolved, decorator, err := resolveOptions(e, o)
+	if err != nil {
+		return nil, err
+	}
+	transcriber, err := e.NewTranscriber(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s: transcribe: %w", e.Name, err)
+	}
+	return WithTranscriberDecorator(e.Name, transcriber, decorator), nil
+}
+
+// NewSpeech builds the named provider's text-to-speech capability using the
+// same credential resolution and request-time decorator precedence as New.
+func NewSpeech(name string, o Options) (SpeechGenerator, error) {
+	e, err := lookup(name)
+	if err != nil {
+		return nil, err
+	}
+	if e.NewSpeech == nil {
+		return nil, &UnsupportedCapabilityError{
+			Provider:   e.Name,
+			Capability: CAPABILITY_AUDIO_SPEECH,
+		}
+	}
+	resolved, decorator, err := resolveSpeechOptions(e, o)
+	if err != nil {
+		return nil, err
+	}
+	generator, err := e.NewSpeech(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s: speech: %w", e.Name, err)
+	}
+	return WithSpeechDecorator(e.Name, generator, decorator), nil
+}
+
 func lookup(name string) (Entry, error) {
 	e, ok := Lookup(name)
 	if !ok {
@@ -255,6 +317,17 @@ func resolveMusicOptions(e Entry, o Options) (ResolvedConfig, Decorator, error) 
 	metadata := e.Metadata
 	if metadata.MusicBaseURLEnv != "" {
 		metadata.BaseURLEnv = metadata.MusicBaseURLEnv
+	}
+	return resolveOptionsWithMetadata(e, o, metadata)
+}
+
+// resolveSpeechOptions applies the speech-specific base URL override.
+// Transcription has no counterpart: no registered provider serves it from a
+// different host than the one BaseURLEnv already names.
+func resolveSpeechOptions(e Entry, o Options) (ResolvedConfig, Decorator, error) {
+	metadata := e.Metadata
+	if metadata.SpeechBaseURLEnv != "" {
+		metadata.BaseURLEnv = metadata.SpeechBaseURLEnv
 	}
 	return resolveOptionsWithMetadata(e, o, metadata)
 }

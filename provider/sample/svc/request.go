@@ -21,6 +21,12 @@ type Request struct {
 	SampleRate   int
 	Bitrate      int
 	AudioFormat  string
+
+	Voice        string
+	SpeechFormat string
+	AudioFile    string
+	Language     string
+	Diarize      bool
 }
 
 // WriteJSON encodes value as formatted JSON to out.

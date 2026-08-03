@@ -34,6 +34,22 @@ func DefaultCatalog() []core.ModelSpec {
 		{ID: "MiniMax-Text-01", Family: "minimax-Text", Reasoning: false,
 			Input:         []core.Modality{core.MODALITY_TEXT},
 			ContextWindow: 128000, MaxTokens: 8192},
+
+		// speech-* — t2a_v2 voices reached through provider.SpeechGenerator,
+		// not through Generate. ContextWindow / MaxTokens stay zero because
+		// t2a_v2 bounds a request by characters of input text, not tokens.
+		{ID: "speech-2.5-hd-preview", Family: "speech-2.5",
+			Input: []core.Modality{core.MODALITY_TEXT}},
+		{ID: "speech-2.5-turbo-preview", Family: "speech-2.5",
+			Input: []core.Modality{core.MODALITY_TEXT}},
+		{ID: "speech-02-hd", Family: "speech-02",
+			Input: []core.Modality{core.MODALITY_TEXT}},
+		{ID: "speech-02-turbo", Family: "speech-02",
+			Input: []core.Modality{core.MODALITY_TEXT}},
+		{ID: "speech-01-hd", Family: "speech-01",
+			Input: []core.Modality{core.MODALITY_TEXT}},
+		{ID: "speech-01-turbo", Family: "speech-01",
+			Input: []core.Modality{core.MODALITY_TEXT}},
 	}
 }
 

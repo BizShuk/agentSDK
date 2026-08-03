@@ -13,6 +13,9 @@ var _ provider.VideoGenerator = (*VideoProvider)(nil)
 // Compile-time: ensure *MusicProvider satisfies provider.MusicGenerator.
 var _ provider.MusicGenerator = (*MusicProvider)(nil)
 
+// Compile-time: ensure *SpeechProvider satisfies provider.SpeechGenerator.
+var _ provider.SpeechGenerator = (*SpeechProvider)(nil)
+
 func init() {
 	provider.Register(provider.Entry{
 		Name: "minimax",
@@ -24,6 +27,7 @@ func init() {
 			BaseURLEnv:         BaseURLEnvVar,
 			VideoBaseURLEnv:    VideoBaseURLEnvVar,
 			MusicBaseURLEnv:    MusicBaseURLEnvVar,
+			SpeechBaseURLEnv:   SpeechBaseURLEnvVar,
 			CredentialRequired: true,
 		},
 		New: func(cfg provider.ResolvedConfig) (provider.Adapter, error) {
@@ -34,6 +38,9 @@ func init() {
 		},
 		NewMusic: func(cfg provider.ResolvedConfig) (provider.MusicGenerator, error) {
 			return NewMusic(cfg)
+		},
+		NewSpeech: func(cfg provider.ResolvedConfig) (provider.SpeechGenerator, error) {
+			return NewSpeech(cfg)
 		},
 		Catalog: DefaultCatalog,
 	})

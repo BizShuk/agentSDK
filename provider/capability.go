@@ -16,6 +16,9 @@ const (
 	CAPABILITY_IMAGE_GENERATE Capability = "image_generate"
 	CAPABILITY_VIDEO_GENERATE Capability = "video_generate"
 	CAPABILITY_MUSIC_GENERATE Capability = "music_generate"
+
+	CAPABILITY_AUDIO_TRANSCRIBE Capability = "audio_transcribe"
+	CAPABILITY_AUDIO_SPEECH     Capability = "audio_speech"
 )
 
 // ErrUnsupportedCapability identifies a provider that is registered but does
@@ -50,6 +53,10 @@ func (e Entry) Supports(capability Capability) bool {
 		return e.NewVideo != nil
 	case CAPABILITY_MUSIC_GENERATE:
 		return e.NewMusic != nil
+	case CAPABILITY_AUDIO_TRANSCRIBE:
+		return e.NewTranscriber != nil
+	case CAPABILITY_AUDIO_SPEECH:
+		return e.NewSpeech != nil
 	default:
 		return false
 	}
@@ -64,6 +71,8 @@ func (e Entry) Capabilities() []Capability {
 		CAPABILITY_IMAGE_GENERATE,
 		CAPABILITY_VIDEO_GENERATE,
 		CAPABILITY_MUSIC_GENERATE,
+		CAPABILITY_AUDIO_TRANSCRIBE,
+		CAPABILITY_AUDIO_SPEECH,
 	}
 	out := make([]Capability, 0, len(ordered))
 	for _, capability := range ordered {

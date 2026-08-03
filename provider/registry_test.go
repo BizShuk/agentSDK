@@ -84,7 +84,9 @@ func TestEveryEntryIsSelfDescribing(t *testing.T) {
 			assert.Truef(t, hasEnvPath || hasDecoratorPath,
 				"entry %q has no credential path (OAuthEnv=%v APIKeyEnv=%v Note=%q); declare an env OR document a decorator path",
 				e.Name, e.Metadata.OAuthEnv, e.Metadata.APIKeyEnv, e.Metadata.Note)
-			assert.True(t, e.New != nil || e.NewImage != nil || e.NewVideo != nil || e.NewMusic != nil,
+			assert.True(t,
+				e.New != nil || e.NewImage != nil || e.NewVideo != nil ||
+					e.NewMusic != nil || e.NewTranscriber != nil || e.NewSpeech != nil,
 				"every entry must expose at least one factory")
 			if e.New != nil {
 				assert.NotNil(t, e.Catalog,
@@ -344,7 +346,9 @@ func TestNewMusicAllowsDeferredCredentialConstruction(t *testing.T) {
 
 func TestDecoratorAllowsDeferredCredentialConstruction(t *testing.T) {
 	for _, entry := range provider.Entries() {
-		if !entry.Metadata.CredentialRequired {
+		// Audio-only entries have no model factory to defer a credential
+		// into; NewSpeech / NewTranscriber cover them.
+		if !entry.Metadata.CredentialRequired || entry.New == nil {
 			continue
 		}
 		t.Run(entry.Name, func(t *testing.T) {

@@ -12,6 +12,15 @@ func TestAPITypeSet(t *testing.T) {
 	if err := typ.Set("music"); err != nil || typ != API_TYPE_MUSIC {
 		t.Errorf("Set(music) = %v, %v", typ, err)
 	}
+	if err := typ.Set("speech"); err != nil || typ != API_TYPE_SPEECH {
+		t.Errorf("Set(speech) = %v, %v", typ, err)
+	}
+	if err := typ.Set("TRANSCRIBE"); err != nil || typ != API_TYPE_TRANSCRIBE {
+		t.Errorf("Set(TRANSCRIBE) = %v, %v", typ, err)
+	}
+	if err := typ.Set("audio"); err == nil {
+		t.Error("Set(audio) expected error; audio split into speech and transcribe")
+	}
 	if err := typ.Set("invalid"); err == nil {
 		t.Error("Set(invalid) expected error")
 	}
@@ -54,5 +63,20 @@ func TestConfigValidate(t *testing.T) {
 	unknownProvider.Provider = "unknown_xyz"
 	if _, err := unknownProvider.Validate(); err == nil {
 		t.Error("Validate() unknown provider expected error")
+	}
+
+	// Transcription reads audio, so it needs an audio source rather than a
+	// prompt.
+	transcribe := Config{
+		Provider: "elevenlabs",
+		Type:     API_TYPE_TRANSCRIBE,
+		Auth:     AUTH_MODE_AUTO,
+	}
+	if _, err := transcribe.Validate(); err == nil {
+		t.Error("Validate() transcribe without audio expected error")
+	}
+	transcribe.AudioURL = "https://example.test/clip.mp3"
+	if _, err := transcribe.Validate(); err != nil {
+		t.Errorf("Validate() transcribe with audio URL: %v", err)
 	}
 }

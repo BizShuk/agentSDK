@@ -11,17 +11,20 @@ import (
 
 func writeProviderMatrix(out io.Writer) error {
 	writer := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-	if _, err := fmt.Fprintln(writer, "PROVIDER\tCHAT\tIMAGE\tMUSIC\tAUDIO\tAUTH ENV"); err != nil {
+	header := "PROVIDER\tCHAT\tIMAGE\tMUSIC\tSPEECH\tTRANSCRIBE\tAUTH ENV"
+	if _, err := fmt.Fprintln(writer, header); err != nil {
 		return fmt.Errorf("write provider matrix header: %w", err)
 	}
 	for _, entry := range provider.Entries() {
 		if _, err := fmt.Fprintf(
 			writer,
-			"%s\t%s\t%s\t%s\tno\t%s\n",
+			"%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			entry.Name,
 			yesNo(entry.Supports(provider.CAPABILITY_MODEL_GENERATE)),
 			yesNo(entry.Supports(provider.CAPABILITY_IMAGE_GENERATE)),
 			yesNo(entry.Supports(provider.CAPABILITY_MUSIC_GENERATE)),
+			yesNo(entry.Supports(provider.CAPABILITY_AUDIO_SPEECH)),
+			yesNo(entry.Supports(provider.CAPABILITY_AUDIO_TRANSCRIBE)),
 			authEnvironmentSummary(entry.Metadata),
 		); err != nil {
 			return fmt.Errorf("write provider matrix row: %w", err)

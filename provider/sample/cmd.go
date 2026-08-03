@@ -43,6 +43,10 @@ Examples:
   go run ./provider/sample --provider minimax --type music \
     --model music-cover --audio-url https://example.com/song.mp3 \
     "Jazz, smooth, late night lounge, saxophone"
+  go run ./provider/sample --provider elevenlabs --type speech \
+    --speech-format mp3_44100_128 "早安，新加坡"
+  go run ./provider/sample --provider elevenlabs --type transcribe \
+    --audio-file ./clip.mp3 --diarize
 `),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -69,12 +73,20 @@ Examples:
 	flags := cmd.Flags()
 	flags.StringVar(&cfg.Provider, "provider", cfg.Provider,
 		"provider name; use --list to see linked providers")
-	flags.Var(&cfg.Type, "type", "API type: chat | image | music | audio")
+	flags.Var(&cfg.Type, "type", "API type: chat | image | music | speech | transcribe")
 	flags.Var(&cfg.Auth, "auth", "credential source: auto | api_key | oauth")
 	flags.StringVar(&cfg.Model, "model", "", "model id; empty uses the provider default")
 	flags.StringVar(&cfg.BaseURL, "base-url", "", "provider base URL override")
 	flags.StringVar(&cfg.Lyrics, "lyrics", "", "music lyrics; use newline characters between lines")
-	flags.StringVar(&cfg.AudioURL, "audio-url", "", "reference audio URL for music cover generation")
+	flags.StringVar(&cfg.AudioURL, "audio-url", "",
+		"audio URL: music cover reference, or the clip to transcribe")
+	flags.StringVar(&cfg.AudioFile, "audio-file", "",
+		"local audio file to upload for transcription")
+	flags.StringVar(&cfg.Voice, "voice", "", "speech voice id; empty uses the provider default")
+	flags.StringVar(&cfg.SpeechFormat, "speech-format", "",
+		"speech output encoding, e.g. mp3_44100_128 | pcm_16000")
+	flags.StringVar(&cfg.Language, "language", "", "ISO-639 language hint for transcription")
+	flags.BoolVar(&cfg.Diarize, "diarize", false, "attribute transcribed words to speakers")
 	flags.StringVar(&cfg.OutputFormat, "output-format", cfg.OutputFormat,
 		"music response encoding: url | hex")
 	flags.IntVar(&cfg.SampleRate, "sample-rate", cfg.SampleRate, "music sample rate in Hz")

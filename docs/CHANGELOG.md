@@ -7,6 +7,28 @@
 日期優先沿用來源文字；來源未標日期時，採該項目首次出現於 Git history 的日期。
 本檔記錄歷史事實，識別符可能已在後續重構中改名或移除。
 
+## 2026-08-03
+
+### Audio capability（STT/TTS）+ ElevenLabs / MiniMax speech adapters
+
+- `provider` 新增 `Transcriber`（STT）與 `SpeechGenerator`（TTS；optional
+  `SpeechStreamer` 回 `io.ReadCloser`）contract、`CAPABILITY_AUDIO_TRANSCRIBE` /
+  `CAPABILITY_AUDIO_SPEECH`、`Entry.NewTranscriber` / `Entry.NewSpeech` 與
+  `provider.NewTranscriber` / `provider.NewSpeech` 建構路徑；`Register` 的
+  「至少一 factory」檢查放寬納入 audio factories。
+- 新 adapter `provider/elevenlabs`（首個 audio-only、`New == nil` 的 provider）：
+  `xi-api-key` header、`ELEVENLABS_API_KEY` / `ELEVENLABS_BASE_URL`、multipart
+  STT（`scribe_v1`）、TTS + `/stream`（`eleven_flash_v2_5`）。
+- `provider/minimax` 增 `NewSpeech`：`t2a_v2`、hex 解碼為 canonical bytes、
+  `extra_info` → `SpeechInfo`、預設 `speech-02-hd`；speech models 入 catalog；
+  `Metadata.SpeechBaseURLEnv` + `MINIMAX_SPEECH_BASE_URL`（比照 music/video，
+  speech 解析不再消費 `MINIMAX_BASE_URL`），resolved base 尾段 `/anthropic`
+  一律 trim（不分來源，文件化於 `speechBaseURL`）。
+- `provider/sample`：audio 欄由 generic unsupported stub 改為真實
+  `NewSpeech` / `NewTranscriber` dispatch。
+- 發起方：`customer_service` 語音客服（STT → agent → TTS 級聯）；
+  live smoke（打真 API）尚未執行。
+
 ## 2026-07-31
 
 ### MiniMax music optional capability

@@ -3,10 +3,10 @@
 這個 sample 直接呼叫 `provider` package，不經 `agent`、`runtime.Engine` 或 tool loop。
 它展示三個正交選擇：
 
-- provider：`anthropic`、`antigravity`、`codex`、`google`、`grok`、
+- provider：`anthropic`、`antigravity`、`codex`、`elevenlabs`、`google`、`grok`、
   `minimax`、`ollama`。
 - auth：`auto`、`api_key`、`oauth`。
-- API type：`chat`、`image`、`music`、`audio`。
+- API type：`chat`、`image`、`music`、`speech`、`transcribe`。
 
 ## 查看 capability matrix
 
@@ -14,8 +14,8 @@
 go run ./provider/sample --list
 ```
 
-輸出會列出每個 linked provider 的 `chat / image / music / audio` 支援狀態，以及實際查詢的
-API key / OAuth environment variables。
+輸出會列出每個 linked provider 的 `chat / image / music / speech / transcribe` 支援狀態，
+以及實際查詢的 API key / OAuth environment variables。
 
 `provider/all` 只負責 blank-import adapters；provider metadata 與 capability 仍以
 `provider.Entry` 為唯一真相。
@@ -31,6 +31,7 @@ export ANTHROPIC_OAUTH_TOKEN=...
 export GOOGLE_API_KEY=...
 export XAI_API_KEY=...
 export MINIMAX_API_KEY=...
+export ELEVENLABS_API_KEY=...
 ```
 
 模式：
@@ -122,18 +123,50 @@ MINIMAX_API_KEY=... go run ./provider/sample \
 terminal。Music endpoint 可用 `MINIMAX_MUSIC_BASE_URL` 獨立覆寫；它不會沿用指向
 Anthropic-compatible model endpoint 的 `MINIMAX_BASE_URL`。
 
-## Audio
+## Speech（text-to-speech）
+
+`elevenlabs` 與 `minimax` 實作 `provider.SpeechGenerator`；只有 `elevenlabs` 另外
+實作 optional `provider.SpeechStreamer`。
 
 ```bash
-go run ./provider/sample \
-  --provider google \
-  --type audio \
-  "say hello"
+ELEVENLABS_API_KEY=... go run ./provider/sample \
+  --provider elevenlabs \
+  --auth api_key \
+  --type speech \
+  --voice 21m00Tcm4TlvDq8ikWAM \
+  --speech-format mp3_44100_128 \
+  "早安，新加坡"
+
+MINIMAX_API_KEY=... go run ./provider/sample \
+  --provider minimax \
+  --type speech \
+  --model speech-02-hd \
+  --speech-format pcm_16000 \
+  "早安，新加坡"
 ```
 
-目前會回傳可由 `errors.Is(err, provider.ErrUnsupportedCapability)` 判斷的 typed error。
-原因是 audio 尚未定義單一 production contract：`speech synthesis`、`transcription` 與
-`audio-chat input` 是三種不同 wire API；現有 adapters 也尚未轉譯
-`core.Part{Kind: PART_KIND_AUDIO}`。在語意與真實 adapter consumer 確定前，sample
-不會靜默丟棄音訊或把其中一種 API 假裝成全部 audio。已落地的 music generation 是
-獨立 `MusicGenerator`，不代表 generic audio contract 已定義。
+`--speech-format` 是 provider-neutral label：`mp3_44100_128`、`pcm_16000`。
+ElevenLabs 原樣送成 `output_format` query parameter；MiniMax adapter 會拆成
+`audio_setting.format` + `audio_setting.sample_rate`。
+
+非 JSON 模式只印 byte 數與 metadata；`--json` 會把 `SpeechResult` 完整輸出，audio bytes
+以 base64 呈現。sample 不落檔，需要保存音訊請自行導出 JSON 後解碼。
+
+## Transcribe（speech-to-text）
+
+`elevenlabs` 實作 `provider.Transcriber`。輸入用 `--audio-file`（上傳 bytes）或
+`--audio-url`（交由 provider 抓取），兩者互斥；此 type 不需要 positional prompt。
+
+```bash
+ELEVENLABS_API_KEY=... go run ./provider/sample \
+  --provider elevenlabs \
+  --auth api_key \
+  --type transcribe \
+  --audio-file ./meeting.mp3 \
+  --language en \
+  --diarize
+```
+
+非 JSON 模式印出 transcript 與 `[language=... words=...]`；`--json` 另外帶出每個 word 的
+毫秒起訖與 speaker。不支援該 capability 的 provider 回傳可由
+`errors.Is(err, provider.ErrUnsupportedCapability)` 判斷的 typed error。

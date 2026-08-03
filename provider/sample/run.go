@@ -21,8 +21,7 @@ func run(
 	if out == nil {
 		return fmt.Errorf("output writer is required")
 	}
-	entry, err := cfg.Validate()
-	if err != nil {
+	if _, err := cfg.Validate(); err != nil {
 		return err
 	}
 
@@ -36,6 +35,11 @@ func run(
 		SampleRate:   cfg.SampleRate,
 		Bitrate:      cfg.Bitrate,
 		AudioFormat:  cfg.AudioFormat,
+		Voice:        cfg.Voice,
+		SpeechFormat: cfg.SpeechFormat,
+		AudioFile:    cfg.AudioFile,
+		Language:     cfg.Language,
+		Diarize:      cfg.Diarize,
 		Options:      cfg.ProviderOptions(lookupEnv),
 	}
 
@@ -46,8 +50,10 @@ func run(
 		return svc.Image(ctx, req, out)
 	case config.API_TYPE_MUSIC:
 		return svc.Music(ctx, req, out)
-	case config.API_TYPE_AUDIO:
-		return svc.Audio(entry.Name)
+	case config.API_TYPE_SPEECH:
+		return svc.Speech(ctx, req, out)
+	case config.API_TYPE_TRANSCRIBE:
+		return svc.Transcribe(ctx, req, out)
 	default:
 		return fmt.Errorf("unreachable API type %q", cfg.Type)
 	}
