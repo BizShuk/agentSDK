@@ -6,6 +6,7 @@ package anthropic
 // definitions; this file owns the marshalling logic.
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -39,6 +40,25 @@ func toMessageParams(msgs []core.Message) ([]MessageParam, error) {
 						block.Signature = c.Reasoning.Signature
 					}
 					blocks = append(blocks, block)
+				}
+			case core.PART_KIND_IMAGE:
+				// core.Part.Image holds raw decoded bytes; the wire wants
+				// base64. Dropping the part instead would leave the model
+				// answering a vision prompt blind, which reads as a bad
+				// model rather than a missing capability.
+				if len(c.Image) > 0 {
+					mime := c.ImageMIME
+					if mime == "" {
+						mime = "image/jpeg"
+					}
+					blocks = append(blocks, ContentParam{
+						Type: "image",
+						Source: &ImageSource{
+							Type:      "base64",
+							MediaType: mime,
+							Data:      base64.StdEncoding.EncodeToString(c.Image),
+						},
+					})
 				}
 			case core.PART_KIND_TOOL_USE:
 				if c.ToolUse != nil {

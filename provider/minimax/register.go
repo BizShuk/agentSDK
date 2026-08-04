@@ -25,6 +25,7 @@ func init() {
 			APIKeyEnv:          []string{APIKeyEnvVar},
 			OAuthEnv:           []string{OAuthEnvVar},
 			BaseURLEnv:         BaseURLEnvVar,
+			ImageBaseURLEnv:    ImageBaseURLEnvVar,
 			VideoBaseURLEnv:    VideoBaseURLEnvVar,
 			MusicBaseURLEnv:    MusicBaseURLEnvVar,
 			SpeechBaseURLEnv:   SpeechBaseURLEnvVar,
@@ -32,6 +33,9 @@ func init() {
 		},
 		New: func(cfg provider.ResolvedConfig) (provider.Adapter, error) {
 			return New(cfg)
+		},
+		NewImage: func(cfg provider.ResolvedConfig) (provider.ImageGenerator, error) {
+			return NewImage(cfg)
 		},
 		NewVideo: func(cfg provider.ResolvedConfig) (provider.VideoGenerator, error) {
 			return NewVideo(cfg)

@@ -22,7 +22,17 @@ func (r RequestBody) Validate() error {
 		default:
 			return fmt.Errorf("grok: message[%d] role %q must be system|user|assistant|tool", i, m.Role)
 		}
-		if m.Content == "" && m.ReasoningContent == "" && len(m.ToolCalls) == 0 && m.ToolCallID == "" {
+		hasContent := false
+		switch content := m.Content.(type) {
+		case nil:
+		case string:
+			hasContent = content != ""
+		case []ContentPart:
+			hasContent = len(content) > 0
+		default:
+			return fmt.Errorf("grok: message[%d] content must be string or []ContentPart, got %T", i, m.Content)
+		}
+		if !hasContent && m.ReasoningContent == "" && len(m.ToolCalls) == 0 && m.ToolCallID == "" {
 			return fmt.Errorf("grok: message[%d] has empty content", i)
 		}
 	}

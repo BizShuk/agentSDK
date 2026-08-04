@@ -18,6 +18,7 @@ package grok
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -186,14 +187,17 @@ func toChatMessages(msgs []core.Message) ([]ChatMessage, error) {
 		case core.ROLE_TOOL:
 			role = "tool"
 		}
-		text, reasoningText, toolCalls, toolResults, err := flattenMessage(m)
+		text, reasoningText, images, toolCalls, toolResults, err := flattenMessage(m)
 		if err != nil {
 			return nil, err
 		}
-		cm := ChatMessage{Role: role, Content: text, ReasoningContent: reasoningText, ToolCalls: toolCalls}
+		cm := ChatMessage{Role: role, Content: textContent(text), ReasoningContent: reasoningText, ToolCalls: toolCalls}
+		if len(images) > 0 {
+			cm.Content = multimodalContent(text, images)
+		}
 		if len(toolResults) > 0 {
 			cm.ToolCallID = toolResults[0].CallID
-			cm.Content = toolResults[0].OutputAsString()
+			cm.Content = textContent(toolResults[0].OutputAsString())
 			cm.Name = toolResults[0].Name
 		}
 		out = append(out, cm)
@@ -215,9 +219,18 @@ func (r flatToolResult) OutputAsString() string {
 	return string(raw)
 }
 
-func flattenMessage(m core.Message) (string, string, []ToolCall, []flatToolResult, error) {
+// flattenMessage pulls the bits the wire shape carries out of one message:
+// concatenated text, inline images as data URIs, assistant-side tool calls,
+// and tool results.
+//
+// core.Part.Image holds raw decoded bytes, so they are base64-encoded here.
+// An empty ImageMIME falls back to image/jpeg. Dropping an image part instead
+// would leave the model answering a vision prompt blind, which reads as a bad
+// model rather than a missing capability.
+func flattenMessage(m core.Message) (string, string, []ImageURL, []ToolCall, []flatToolResult, error) {
 	var sb strings.Builder
 	var reasoning strings.Builder
+	var images []ImageURL
 	var tcs []ToolCall
 	var trs []flatToolResult
 	for _, c := range m.Parts {
@@ -226,9 +239,19 @@ func flattenMessage(m core.Message) (string, string, []ToolCall, []flatToolResul
 			sb.WriteString(c.Text)
 		case core.PART_KIND_REASONING:
 			if c.Reasoning != nil && (c.Reasoning.ID != "" || c.Reasoning.Signature != "" || c.Reasoning.EncryptedContent != "") {
-				return "", "", nil, nil, fmt.Errorf("grok: Chat reasoning_content cannot preserve reasoning continuation metadata")
+				return "", "", nil, nil, nil, fmt.Errorf("grok: Chat reasoning_content cannot preserve reasoning continuation metadata")
 			}
 			reasoning.WriteString(c.Text)
+		case core.PART_KIND_IMAGE:
+			if len(c.Image) > 0 {
+				mime := c.ImageMIME
+				if mime == "" {
+					mime = "image/jpeg"
+				}
+				images = append(images, ImageURL{
+					URL: "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(c.Image),
+				})
+			}
 		case core.PART_KIND_TOOL_USE:
 			if c.ToolUse != nil {
 				args, _ := json.Marshal(c.ToolUse.Args)
@@ -250,7 +273,7 @@ func flattenMessage(m core.Message) (string, string, []ToolCall, []flatToolResul
 			}
 		}
 	}
-	return sb.String(), reasoning.String(), tcs, trs, nil
+	return sb.String(), reasoning.String(), images, tcs, trs, nil
 }
 
 func toToolDefs(schemas []core.ToolSpec) []ToolDef {

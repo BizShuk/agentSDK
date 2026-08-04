@@ -185,7 +185,7 @@ func NewImage(name string, o Options) (ImageGenerator, error) {
 			Capability: CAPABILITY_IMAGE_GENERATE,
 		}
 	}
-	resolved, decorator, err := resolveOptions(e, o)
+	resolved, decorator, err := resolveImageOptions(e, o)
 	if err != nil {
 		return nil, err
 	}
@@ -303,6 +303,14 @@ func lookup(name string) (Entry, error) {
 
 func resolveOptions(e Entry, o Options) (ResolvedConfig, Decorator, error) {
 	return resolveOptionsWithMetadata(e, o, e.Metadata)
+}
+
+func resolveImageOptions(e Entry, o Options) (ResolvedConfig, Decorator, error) {
+	metadata := e.Metadata
+	if metadata.ImageBaseURLEnv != "" {
+		metadata.BaseURLEnv = metadata.ImageBaseURLEnv
+	}
+	return resolveOptionsWithMetadata(e, o, metadata)
 }
 
 func resolveVideoOptions(e Entry, o Options) (ResolvedConfig, Decorator, error) {

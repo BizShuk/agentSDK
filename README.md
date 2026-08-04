@@ -16,11 +16,51 @@ Go Agentic Loop SDK：以`宣告式設定`組裝目標導向控制迴圈 (Goal-d
 
 `core/` 是純狀態機 (state + event + instruction + reasoning),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
 
-圖片、影片與音樂生成分別是 `provider.ImageGenerator`、`provider.VideoGenerator`、
-`provider.MusicGenerator`
-optional capability，不進 agent runtime 的 `core.Provider`。caller 必須明確走
-`NewImage`、`NewVideo` 或 `NewMusic`；不支援的 adapter 回傳可用
+圖片、影片、音樂、語音 (TTS) 與轉錄 (STT) 分別是 `provider.ImageGenerator`、
+`provider.VideoGenerator`、`provider.MusicGenerator`、`provider.SpeechGenerator`、
+`provider.Transcriber` optional capability，不進 agent runtime 的 `core.Provider`。
+caller 必須明確走 `NewImage`、`NewVideo`、`NewMusic`、`NewSpeech` 或
+`NewTranscriber`；不支援的 adapter 回傳可用
 `errors.Is(err, provider.ErrUnsupportedCapability)` 判斷的錯誤：
+
+### Provider Capabilities
+
+| Provider     | Chat | Vision read | Image | Video | Music | Speech (TTS) | STT | Voice list | Live catalog |
+| ------------ | ---- | ----------- | ----- | ----- | ----- | ------------ | --- | ---------- | ------------ |
+| `anthropic`  | V    | V           | -     | -     | -     | -            | -   | -          | V            |
+| `antigravity`| V    | V           | -     | -     | -     | -            | -   | -          | -            |
+| `codex`      | V    | V           | -     | -     | -     | -            | -   | -          | -            |
+| `elevenlabs` | -    | -           | -     | -     | -     | V (+stream)  | V   | V          | V            |
+| `google`     | V    | V           | V     | -     | -     | -            | -   | -          | V            |
+| `grok`       | V    | V           | V     | -     | -     | -            | -   | -          | V            |
+| `minimax`    | V    | V           | V     | V     | V     | V            | -   | V          | V            |
+| `ollama`     | V    | V           | -     | -     | -     | -            | -   | -          | V            |
+
+- `Vision read`：chat request 可攜帶 image part（各 adapter 編成自家 wire 形狀）
+- `Image`：MiniMax 同時支援 t2i 與 i2i（`ImageRequest.SubjectReferences`）
+- `Voice list`：`provider.VoiceLister`，從 `NewSpeech` 回傳值以 type assertion 取得
+- `Live catalog`：`core.ModelLister`；沒有的 provider 讀 static `Entry.Catalog`
+
+### Capability Interfaces
+
+每個 capability 一個小 interface；optional capability 不併進 `core.Provider`，
+不支援的 provider 在 factory 回 typed `ErrUnsupportedCapability`：
+
+| Capability       | Interface                  | Method                                                      | 取得方式                        |
+| ---------------- | -------------------------- | ----------------------------------------------------------- | ------------------------------- |
+| Chat (blocking)  | `core.Provider`            | `Generate(ctx, ModelRequest) (ModelResult, error)`          | `provider.New`                  |
+| Chat (streaming) | `core.StreamProvider`      | `Stream(ctx, ModelRequest) (<-chan ModelChunk, error)`      | 同上（`Adapter` = 兩者合體）    |
+| Live catalog     | `core.ModelLister`         | `ListModels(ctx) ([]ModelSpec, error)`                      | type assertion                  |
+| Image (t2i/i2i)  | `provider.ImageGenerator`  | `GenerateImage(ctx, ImageRequest) (ImageResult, error)`     | `provider.NewImage`             |
+| Video            | `provider.VideoGenerator`  | `MaxPromptLength() int`；`GenerateVideo(ctx, VideoRequest) (VideoResult, error)` | `provider.NewVideo` |
+| Music            | `provider.MusicGenerator`  | `GenerateMusic(ctx, MusicRequest) (MusicResult, error)`     | `provider.NewMusic`             |
+| Speech (TTS)     | `provider.SpeechGenerator` | `GenerateSpeech(ctx, SpeechRequest) (SpeechResult, error)`  | `provider.NewSpeech`            |
+| Speech streaming | `provider.SpeechStreamer`  | `StreamSpeech(ctx, SpeechRequest) (io.ReadCloser, error)`   | `NewSpeech` 值 type assertion   |
+| Voice list       | `provider.VoiceLister`     | `ListVoices(ctx, VoiceListRequest) (VoiceListResult, error)` | `NewSpeech` 值 type assertion  |
+| Transcribe (STT) | `provider.Transcriber`     | `Transcribe(ctx, TranscribeRequest) (TranscribeResult, error)` | `provider.NewTranscriber`    |
+
+streaming 與 voice list 這類「同一 client 的附加能力」以 type assertion 發現，
+credential decorator 包裝後仍保留。
 
 ```go
 generator, err := provider.NewImage("grok", provider.Options{})
@@ -64,9 +104,9 @@ result, err := generator.GenerateMusic(ctx, provider.MusicRequest{
 `result.Audio.URL` 是短效連結；需要 durable asset 時由 caller 及時下載保存。
 
 可執行的 [`provider/sample`](provider/sample/README.md) 直接展示 provider、auth mode 與
-`chat / image / music / audio` API type matrix。`music` 明確走 `MusicGenerator`；
-`audio` 仍刻意回 typed unsupported，因為 speech synthesis、transcription 與
-audio-chat 是三個不同 contract。
+`chat / image / music / speech / transcribe` API type matrix。speech synthesis、
+transcription 與 audio-chat 是三個不同 contract，分別走 `SpeechGenerator`、
+`Transcriber` 與（尚未有 adapter 支援的）audio-chat。
 
 ## 怎麼用 (Getting Started)
 
@@ -205,7 +245,13 @@ go run . watch
 - 歷史變更與已完成里程碑：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)
 - 尚未完成的工作：[`README.todo`](README.todo)
 - 已實作規格：
-  - [`2026-07-29-Summary.md`](docs/specs/2026-07-29-Summary.md)（M1–M5 歷史摘要）
-  - [`2026-07-18-continuous-logdoctor-minimax.md`](docs/specs/2026-07-18-continuous-logdoctor-minimax.md)
+  - [`2026-08-04-Summary.md`](docs/specs/2026-08-04-Summary.md)（2026-07-21 之前的歷史摘要）
   - [`2026-07-27-agent-sdk-contract-alignment.md`](docs/specs/2026-07-27-agent-sdk-contract-alignment.md)
   - [`2026-07-27-provider-auth-image-capabilities.md`](docs/specs/2026-07-27-provider-auth-image-capabilities.md)
+
+## 已淘汰功能 (Deprecated Features)
+
+| 淘汰日期 | 功能 | 原始文件 | 說明 |
+| -------- | ---- | -------- | ---- |
+| 2026-08-04 | Logdoctor proposal / approval lifecycle | `2026-07-18-continuous-logdoctor-minimax.md` | immutable proposal + digest 與 `list` / `show` / `approve` / `reject` 子指令已於 `879e246` 隨 log-agent-v2 重構移除；`sample/logdoctor-agent` 現只保留 `analyze` 與 `watch` |
+| 2026-08-04 | `provider/openaicompat` | `2026-07-18-continuous-logdoctor-minimax.md` | 已於 `551410d` 移除；OpenAI-compatible wire 改由 `provider/protocol/openaichat` 共用 codec 承接 |

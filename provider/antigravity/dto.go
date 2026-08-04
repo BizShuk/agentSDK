@@ -30,9 +30,9 @@ type MessageParam struct {
 	Content []ContentParam `json:"content"`
 }
 
-// ContentParam is one block of a message (text / tool_use / tool_result).
+// ContentParam is one block of a message (text / image / tool_use / tool_result).
 type ContentParam struct {
-	Type      string          `json:"type"` // "text" | "tool_use" | "tool_result"
+	Type      string          `json:"type"` // "text" | "image" | "tool_use" | "tool_result"
 	Text      string          `json:"text,omitempty"`
 	Thinking  string          `json:"thinking,omitempty"`
 	Signature string          `json:"signature,omitempty"`
@@ -42,6 +42,14 @@ type ContentParam struct {
 	ToolUseID string          `json:"tool_use_id,omitempty"`
 	Content   json.RawMessage `json:"content,omitempty"`
 	IsError   bool            `json:"is_error,omitempty"`
+	Source    *ImageSource    `json:"source,omitempty"`
+}
+
+// ImageSource is the payload of a type="image" content block.
+type ImageSource struct {
+	Type      string `json:"type"` // always "base64" here
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
 }
 
 // ToolUnionParam is the wire shape of one entry in request.tools. Antigravity

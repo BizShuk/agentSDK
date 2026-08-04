@@ -353,7 +353,7 @@ func TestWriteProviderMatrixShowsTypeAndAuthSupport(t *testing.T) {
 	// chat, image, music, speech, transcribe — in header order.
 	want := map[string][5]string{
 		"google":     {"yes", "yes", "no", "no", "no"},
-		"minimax":    {"yes", "no", "yes", "yes", "no"},
+		"minimax":    {"yes", "yes", "yes", "yes", "no"},
 		"elevenlabs": {"no", "no", "no", "yes", "yes"},
 	}
 	seen := map[string]bool{}

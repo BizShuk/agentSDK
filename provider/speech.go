@@ -143,9 +143,41 @@ func (d *decoratedSpeechStreamer) StreamSpeech(
 	return d.streamer.StreamSpeech(ctx, req)
 }
 
+// decoratedSpeechVoiceLister forwards the optional voice catalog capability.
+type decoratedSpeechVoiceLister struct {
+	decoratedSpeech
+	lister VoiceLister
+}
+
+func (d *decoratedSpeechVoiceLister) ListVoices(
+	ctx context.Context,
+	req VoiceListRequest,
+) (VoiceListResult, error) {
+	auth, err := resolveRequestAuth(ctx, d.name, d.decorate, req.Auth)
+	if err != nil {
+		return VoiceListResult{}, err
+	}
+	req.Auth = auth
+	return d.lister.ListVoices(ctx, req)
+}
+
+// decoratedSpeechStreamerVoiceLister carries both optional capabilities.
+type decoratedSpeechStreamerVoiceLister struct {
+	decoratedSpeechStreamer
+	decoratedSpeechVoiceLister
+}
+
+// GenerateSpeech disambiguates the two embedded copies of decoratedSpeech.
+func (d *decoratedSpeechStreamerVoiceLister) GenerateSpeech(
+	ctx context.Context,
+	req SpeechRequest,
+) (SpeechResult, error) {
+	return d.decoratedSpeechStreamer.decoratedSpeech.GenerateSpeech(ctx, req)
+}
+
 // WithSpeechDecorator returns a speech generator that resolves credentials
-// before every outbound request, preserving the wrapped value's streaming
-// capability. A nil decorator returns generator unchanged.
+// before every outbound request, preserving the wrapped value's streaming and
+// voice-catalog capabilities. A nil decorator returns generator unchanged.
 func WithSpeechDecorator(
 	name string,
 	generator SpeechGenerator,
@@ -159,8 +191,19 @@ func WithSpeechDecorator(
 		name:      name,
 		decorate:  decorator,
 	}
-	if streamer, ok := generator.(SpeechStreamer); ok {
+	streamer, streams := generator.(SpeechStreamer)
+	lister, lists := generator.(VoiceLister)
+	switch {
+	case streams && lists:
+		return &decoratedSpeechStreamerVoiceLister{
+			decoratedSpeechStreamer:    decoratedSpeechStreamer{decoratedSpeech: base, streamer: streamer},
+			decoratedSpeechVoiceLister: decoratedSpeechVoiceLister{decoratedSpeech: base, lister: lister},
+		}
+	case streams:
 		return &decoratedSpeechStreamer{decoratedSpeech: base, streamer: streamer}
+	case lists:
+		return &decoratedSpeechVoiceLister{decoratedSpeech: base, lister: lister}
+	default:
+		return &base
 	}
-	return &base
 }

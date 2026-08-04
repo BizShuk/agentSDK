@@ -35,9 +35,47 @@ func DefaultCatalog() []core.ModelSpec {
 			Input:         []core.Modality{core.MODALITY_TEXT},
 			ContextWindow: 128000, MaxTokens: 8192},
 
+		// image-* — image_generation models reached through
+		// provider.ImageGenerator, not through Generate. Token bounds do
+		// not apply; the prompt is bounded by characters.
+		{ID: "image-01", Family: "image-01",
+			Input: []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE}},
+		{ID: "image-01-live", Family: "image-01",
+			Input: []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE}},
+
+		// video — video_generation models reached through
+		// provider.VideoGenerator. MiniMax-H3 (Hailuo 03) is the current
+		// flagship: t2v / i2v / first-last frame / multimodal reference,
+		// 768P-2K, 4-15s at 24 fps. The Hailuo-2.x and S2V entries are the
+		// legacy models the adapter's per-mode defaults still name.
+		{ID: "MiniMax-H3", Family: "MiniMax-H3",
+			Input: []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE}},
+		{ID: "MiniMax-Hailuo-2.3", Family: "MiniMax-Hailuo",
+			Input: []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE}},
+		{ID: "MiniMax-Hailuo-02", Family: "MiniMax-Hailuo",
+			Input: []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE}},
+		{ID: "S2V-01", Family: "S2V",
+			Input: []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE}},
+
+		// music — music generation models reached through
+		// provider.MusicGenerator. music-cover conditions on reference
+		// audio; the text models are bounded by prompt/lyrics characters.
+		{ID: "music-3.0", Family: "music-3.0",
+			Input: []core.Modality{core.MODALITY_TEXT}},
+		{ID: "music-2.6", Family: "music-2.6",
+			Input: []core.Modality{core.MODALITY_TEXT}},
+		{ID: "music-cover", Family: "music-cover",
+			Input: []core.Modality{core.MODALITY_TEXT, core.MODALITY_AUDIO}},
+
 		// speech-* — t2a_v2 voices reached through provider.SpeechGenerator,
 		// not through Generate. ContextWindow / MaxTokens stay zero because
 		// t2a_v2 bounds a request by characters of input text, not tokens.
+		// speech-2.8 is the current generation (40 languages, 7 emotions);
+		// older families remain for explicit selection.
+		{ID: "speech-2.8-hd", Family: "speech-2.8",
+			Input: []core.Modality{core.MODALITY_TEXT}},
+		{ID: "speech-2.8-turbo", Family: "speech-2.8",
+			Input: []core.Modality{core.MODALITY_TEXT}},
 		{ID: "speech-2.5-hd-preview", Family: "speech-2.5",
 			Input: []core.Modality{core.MODALITY_TEXT}},
 		{ID: "speech-2.5-turbo-preview", Family: "speech-2.5",

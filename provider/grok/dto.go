@@ -24,13 +24,50 @@ type RequestBody struct {
 // Tool-calls and tool-results use the OpenAI conventions: assistant
 // messages with role=assistant carry an array of tool_calls, and tool
 // results arrive as separate messages with role=tool and tool_call_id.
+//
+// Content is `any` because the spec allows two shapes: a plain string for
+// text-only turns, and an array of ContentPart for multimodal ones. Build
+// it with textContent / multimodalContent — nothing else is valid on the
+// wire, and Validate enforces that before the request leaves.
 type ChatMessage struct {
 	Role             string     `json:"role"`
-	Content          string     `json:"content,omitempty"`
+	Content          any        `json:"content,omitempty"`
 	ReasoningContent string     `json:"reasoning_content,omitempty"`
 	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string     `json:"tool_call_id,omitempty"`
 	Name             string     `json:"name,omitempty"`
+}
+
+// ContentPart is one element of a multimodal content array. Type is
+// "text" or "image_url"; exactly one payload field is set.
+type ContentPart struct {
+	Type     string    `json:"type"`
+	Text     string    `json:"text,omitempty"`
+	ImageURL *ImageURL `json:"image_url,omitempty"`
+}
+
+// ImageURL carries an inline image as an RFC 2397 data URI:
+// data:<mime>;base64,<payload>.
+type ImageURL struct {
+	URL string `json:"url"`
+}
+
+// textContent renders a text-only turn as the plain-string form the spec
+// prefers.
+func textContent(text string) any { return text }
+
+// multimodalContent renders a turn carrying at least one image as the array
+// form. Text leads so the instruction precedes the images it refers to.
+func multimodalContent(text string, images []ImageURL) any {
+	parts := make([]ContentPart, 0, len(images)+1)
+	if text != "" {
+		parts = append(parts, ContentPart{Type: "text", Text: text})
+	}
+	for i := range images {
+		image := images[i]
+		parts = append(parts, ContentPart{Type: "image_url", ImageURL: &image})
+	}
+	return parts
 }
 
 // ToolCall is one element of a chat message's tool_calls array.

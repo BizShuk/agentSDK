@@ -229,7 +229,7 @@ func TestNewBuildsAProvider(t *testing.T) {
 }
 
 func TestImageCapabilitiesAreExplicit(t *testing.T) {
-	for _, name := range []string{"google", "grok"} {
+	for _, name := range []string{"google", "grok", "minimax"} {
 		t.Run(name, func(t *testing.T) {
 			entry, ok := provider.Lookup(name)
 			require.True(t, ok)
@@ -237,7 +237,7 @@ func TestImageCapabilitiesAreExplicit(t *testing.T) {
 			assert.Contains(t, entry.Capabilities(), provider.CAPABILITY_IMAGE_GENERATE)
 		})
 	}
-	for _, name := range []string{"anthropic", "antigravity", "codex", "minimax", "ollama"} {
+	for _, name := range []string{"anthropic", "antigravity", "codex", "ollama"} {
 		t.Run(name, func(t *testing.T) {
 			entry, ok := provider.Lookup(name)
 			require.True(t, ok)

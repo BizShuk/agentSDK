@@ -33,12 +33,29 @@ type ImageRequest struct {
 	Background        string `json:"background,omitempty"`
 	Moderation        string `json:"moderation,omitempty"`
 	User              string `json:"user,omitempty"`
+
+	// SubjectReferences supplies reference images for image-to-image
+	// generation. Providers that cannot condition on a reference image
+	// reject a request carrying any — silently ignoring one would return
+	// an unrelated image that reads as a bad model rather than a missing
+	// capability.
+	SubjectReferences []ImageReference `json:"subject_references,omitempty"`
+
 	// Extra carries non-streaming vendor extensions. Standard fields and
 	// streaming controls are rejected by the shared codec.
 	Extra map[string]json.RawMessage `json:"-"`
 
 	// Auth overrides construction-time or decorated credentials for this call.
 	Auth core.Auth `json:"auth,omitempty"`
+}
+
+// ImageReference is one image-to-image conditioning input. Exactly one of
+// URL or Base64 must be set; Base64 payloads carry raw base64 (no data URI
+// prefix) plus the MIME type the provider should label them with.
+type ImageReference struct {
+	URL      string `json:"url,omitempty"`
+	Base64   string `json:"base64,omitempty"`
+	MIMEType string `json:"mime_type,omitempty"`
 }
 
 // Validate checks provider-independent image request invariants.
@@ -51,6 +68,13 @@ func (r ImageRequest) Validate() error {
 	}
 	if r.OutputCompression != nil && (*r.OutputCompression < 0 || *r.OutputCompression > 100) {
 		return fmt.Errorf("image output compression must be between 0 and 100")
+	}
+	for i, ref := range r.SubjectReferences {
+		hasURL := strings.TrimSpace(ref.URL) != ""
+		hasBase64 := strings.TrimSpace(ref.Base64) != ""
+		if hasURL == hasBase64 {
+			return fmt.Errorf("image subject reference %d must set exactly one of url or base64", i)
+		}
 	}
 	return nil
 }

@@ -88,6 +88,9 @@ func EncodeRequest(input provider.ImageRequest, defaultModel string) ([]byte, er
 	if err := input.Validate(); err != nil {
 		return nil, err
 	}
+	if len(input.SubjectReferences) > 0 {
+		return nil, fmt.Errorf("image subject references are not supported by this provider")
+	}
 	model := strings.TrimSpace(input.Model)
 	if model == "" {
 		model = strings.TrimSpace(defaultModel)

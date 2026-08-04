@@ -24,14 +24,26 @@
 - Provider media capabilities：`provider.ImageGenerator`、`provider.VideoGenerator`、
   `provider.MusicGenerator`、`provider.Transcriber`（STT）與
   `provider.SpeechGenerator`（TTS；optional `provider.SpeechStreamer` 回
-  `io.ReadCloser` raw audio stream）留在 provider layer；`Entry.NewImage` /
+  `io.ReadCloser` raw audio stream，optional `provider.VoiceLister` 列 voice
+  catalog——兩者都以 type assertion 發現，`WithSpeechDecorator` 保留能力）留在
+  provider layer；`Entry.NewImage` /
   `provider.NewImage`、`Entry.NewVideo` / `provider.NewVideo`、
   `Entry.NewMusic` / `provider.NewMusic`、`Entry.NewTranscriber` /
   `provider.NewTranscriber` 與 `Entry.NewSpeech` / `provider.NewSpeech`
   是一致建構路徑，unsupported adapter 回 typed `ErrUnsupportedCapability`；
   `Register` 的「至少一 factory」檢查涵蓋 audio factories（ElevenLabs 是首個
   `New == nil` 的 audio-only provider）。`SpeechAsset.Bytes` 是 canonical
-  decoded bytes——hex 是 MiniMax wire 細節，adapter 內解碼。MiniMax video adapter
+  decoded bytes——hex 是 MiniMax wire 細節，adapter 內解碼。
+  `provider.VoiceLister` 的 request 詞彙以 ElevenLabs `GET /v2/voices`
+  （search/category/pagination 皆 server-side）為標準；MiniMax 走
+  `POST /v1/get_voice`（僅 `voice_type` 一參數），search 與 page-size 由
+  adapter local 補齊、pagination token 直接拒收。
+  `ImageRequest.SubjectReferences` 是 provider-neutral 的 i2i 輸入：MiniMax
+  編成 `subject_reference`（type `character`，URL 或 data URI），
+  `openaiimage` codec（Google/Grok）明確拒收。MiniMax image adapter 走
+  `/v1/image_generation`（t2i + i2i 同 endpoint，預設 `image-01`；`Size` 收
+  `W:H` aspect ratio 或 `WxH` dimensions，`MINIMAX_IMAGE_BASE_URL` 比照
+  video/music/speech 覆寫 base）。MiniMax video adapter
   擁有四種 mode、poll、authenticated download、MP4 verification 與
   `MINIMAX_VIDEO_BASE_URL`。MiniMax music adapter 擁有 non-streaming
   text-to-music / cover request validation、bounded response/error、typed API error 與
@@ -242,8 +254,9 @@ agentsdk/
   discovery roots 由 `agent` 組裝，`prompt/source` 不 import `skill` 或 `agent`。
 - 頂層 `sample/demo-*` 是單一 SDK 元件展示，`sample/*-agent` 是完整 agent；
   `provider/sample` 是 package-local provider API example。
-- `provider.Metadata` 分別宣告 `OAuthEnv` / `APIKeyEnv`，video / music endpoint 可另以
-  `VideoBaseURLEnv` / `MusicBaseURLEnv` 宣告 override；
+- `provider.Metadata` 分別宣告 `OAuthEnv` / `APIKeyEnv`，image / video / music /
+  speech endpoint 可另以 `ImageBaseURLEnv` / `VideoBaseURLEnv` /
+  `MusicBaseURLEnv` / `SpeechBaseURLEnv` 宣告 override；
   `Options.CredentialKind` 的 `auto` / `api_key` / `oauth` 使用
   `core.CREDENTIAL_KIND_*`，`Resolve` 產生 canonical `ResolvedConfig`。
 
@@ -313,7 +326,7 @@ JSONL 對外 envelope 由 `agent/wire` 擁有，經
 | root CLI subcommands      | `agentsdk/cmd`：`NewWizardCommand`（`wizard`/`w` 設定產生器）、`NewProviderCommand`（root cobra `provider` smoke-test CLI；打 `core.Provider.Generate` / `core.StreamProvider.Stream` 不走 Engine；`--list-models` 優先打 live `core.ModelLister`,失敗 fallback `Entry.Catalog`,audio-only entry 改由 speech client 取得 lister,無 chat surface 的 prompt path 回報該 provider 實際支援的 capabilities）                                                                                                                                  |
 | authentication            | 外部 module `github.com/bizshuk/auth`：只由 `provider/credential` 消費；API 契約見該 repo                                                                                                                                                                                                                                                                                                                          |
 | proxy                     | 外部 repo `github.com/bizshuk/proxy`：本 repo 無目錄、無 require、無 import                                                                                                                                                                                                                                                                                                                                        |
-| provider adapters         | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity,elevenlabs}`：前七者實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`）；Google/Grok 另實作 `provider.ImageGenerator`，MiniMax 另實作 `provider.VideoGenerator` / `provider.MusicGenerator` / `provider.SpeechGenerator`；ElevenLabs 是 audio-only（`New` 為 nil）：`provider.Transcriber` + `provider.SpeechGenerator` + `provider.SpeechStreamer`；除 codex/antigravity 外皆另實作 optional `core.ModelLister`（ElevenLabs 掛在 `*SpeechProvider` 上，非 chat client）。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal |
+| provider adapters         | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity,elevenlabs}`：前七者實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`）；Google/Grok/MiniMax 另實作 `provider.ImageGenerator`（前兩者走 `openaiimage` codec，MiniMax 是自有 `/v1/image_generation` transport），MiniMax 另實作 `provider.VideoGenerator` / `provider.MusicGenerator` / `provider.SpeechGenerator`；ElevenLabs 是 audio-only（`New` 為 nil）：`provider.Transcriber` + `provider.SpeechGenerator` + `provider.SpeechStreamer`；ElevenLabs 與 MiniMax 的 `*SpeechProvider` 另實作 `provider.VoiceLister`；vision 輸入（`PART_KIND_IMAGE`）由全部 chat adapter 編碼進 request——anthropic/antigravity 用 `image` source block，grok 與 `openaichat` codec（google/ollama）用 `image_url` content array，codex 用 `input_image`，minimax 用 content blocks；除 codex/antigravity 外皆另實作 optional `core.ModelLister`（ElevenLabs 掛在 `*SpeechProvider` 上，非 chat client）。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal |
 
 ## 開發與驗證 (Development and Verification)
 
@@ -404,7 +417,7 @@ cobra、沒有四種 dispatch mode、不需要 `*Parts.Sessions` / `*Parts.Skill
 - 歷史變更與已完成里程碑：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)。
 - 尚未完成與刻意保留的工作：[`README.todo`](README.todo)。
 - 仍在執行的落地計畫：`plans/`。
-- 已實作規格的濃縮索引：[`docs/specs/2026-07-29-Summary.md`](docs/specs/2026-07-29-Summary.md)。
+- 已實作規格的濃縮索引：[`docs/specs/2026-08-04-Summary.md`](docs/specs/2026-08-04-Summary.md)。
 
 ## 慣例與注意事項 (Conventions and Caveats)
 
