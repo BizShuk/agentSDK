@@ -75,3 +75,5 @@
       envelope；本 repo 負責維持 `core.Part` / `ReasoningState` 契約不變。
 
 ## Archive
+
+見 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
