@@ -165,6 +165,34 @@ func TestProviderListModelsFallback(t *testing.T) {
 	assert.Contains(t, stderr, "live catalog unavailable")
 }
 
+// TestProviderListModelsAudioOnly proves --list-models works for a provider
+// with no chat surface: elevenlabs has no Entry.New, so the catalog must come
+// from its speech client (live) or its bundled list (here, since the base URL
+// is unroutable) rather than failing on the missing model capability.
+func TestProviderListModelsAudioOnly(t *testing.T) {
+	stdout, stderr, err := runCLI(t,
+		"--provider", "elevenlabs",
+		"--base-url", "http://127.0.0.1:1",
+		"--api-key", "sk-test",
+		"--list-models",
+	)
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "elevenlabs catalog")
+	assert.Contains(t, stdout, "static")
+	assert.Contains(t, stdout, "scribe_v2")
+	assert.Contains(t, stderr, "live catalog unavailable")
+}
+
+// TestProviderChatRejectsAudioOnly proves the prompt path names the surfaces
+// the provider does have instead of only reporting the missing one.
+func TestProviderChatRejectsAudioOnly(t *testing.T) {
+	_, _, err := runCLI(t, "--provider", "elevenlabs", "--api-key", "sk-test", "ping")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no chat surface")
+	assert.Contains(t, err.Error(), "audio_transcribe")
+	assert.Contains(t, err.Error(), "audio_speech")
+}
+
 // TestProviderListProviders prints the registered adapter names.
 func TestProviderListProviders(t *testing.T) {
 	stdout, _, err := runCLI(t, "--list-providers")

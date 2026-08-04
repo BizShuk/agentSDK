@@ -20,8 +20,8 @@ const DefaultBaseURL = "https://api.elevenlabs.io"
 const DefaultSpeechModel = "eleven_flash_v2_5"
 
 // DefaultTranscribeModel is the speech-to-text model used when a request
-// names none.
-const DefaultTranscribeModel = "scribe_v1"
+// names none. scribe_v1 is deprecated upstream in favour of this id.
+const DefaultTranscribeModel = "scribe_v2"
 
 // DefaultVoiceID is the stock "Rachel" voice, used when a request names no
 // voice. Voice ids are account-scoped identifiers, not display names.

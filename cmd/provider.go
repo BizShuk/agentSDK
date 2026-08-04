@@ -91,24 +91,42 @@ Examples:
 				ProviderName, strings.Join(provider.Names(), ", "))
 		}
 		label := entry.Name
-
-		prov, err := provider.New(ProviderName, provider.Options{
+		options := provider.Options{
 			Model:          ProviderModel,
 			APIKey:         ProviderAPIKey,
 			BaseURL:        ProviderBaseURL,
 			LookupEnv:      envLookup,
 			CredentialKind: ProviderCredentialKind,
-		})
-		if err != nil {
-			return err
 		}
 
+		// Catalog listing is a discovery surface, not a chat call: an
+		// audio-only provider (elevenlabs) still ships a static Catalog and
+		// a live one. model_generate is therefore not a precondition here —
+		// the client is only built to reach the live core.ModelLister.
 		if ProviderListModels {
 			var static []core.ModelSpec
 			if entry.Catalog != nil {
 				static = entry.Catalog()
 			}
-			return dumpCatalog(cmd.Context(), errOut, out, prov, label, static)
+			lister, err := openLister(entry, options)
+			if err != nil {
+				// A client that will not build (missing credential, bad
+				// base URL) fails the same way a failed live call does:
+				// discovery still answers from the bundled catalog.
+				fmt.Fprintf(errOut,
+					"[provider] %s: live catalog unavailable, using static (%v)\n", label, err)
+			}
+			return dumpCatalog(cmd.Context(), errOut, out, lister, label, static)
+		}
+
+		if !entry.Supports(provider.CAPABILITY_MODEL_GENERATE) {
+			return fmt.Errorf("provider %s has no chat surface; supported capabilities: %s",
+				label, joinCapabilities(entry.Capabilities()))
+		}
+
+		prov, err := provider.New(ProviderName, options)
+		if err != nil {
+			return err
 		}
 
 		prompt := strings.TrimSpace(strings.Join(args, " "))
@@ -321,21 +339,60 @@ func runStream(ctx context.Context, prov core.StreamProvider, req core.ModelRequ
 	return nil
 }
 
+// openLister builds whichever client on this entry can enumerate models
+// live, or returns nil when none can. The chat surface is preferred; an
+// audio-only entry falls back to its speech client, which is where
+// elevenlabs hangs its GET /v1/models call. A nil lister is not an error —
+// dumpCatalog then prints the bundled catalog alone.
+func openLister(entry provider.Entry, options provider.Options) (core.ModelLister, error) {
+	switch {
+	case entry.Supports(provider.CAPABILITY_MODEL_GENERATE):
+		prov, err := provider.New(entry.Name, options)
+		if err != nil {
+			return nil, err
+		}
+		lister, _ := prov.(core.ModelLister)
+		return lister, nil
+	case entry.Supports(provider.CAPABILITY_AUDIO_SPEECH):
+		speech, err := provider.NewSpeech(entry.Name, options)
+		if err != nil {
+			return nil, err
+		}
+		lister, _ := speech.(core.ModelLister)
+		return lister, nil
+	default:
+		return nil, nil
+	}
+}
+
+// joinCapabilities renders an entry's capability list for error messages.
+func joinCapabilities(capabilities []provider.Capability) string {
+	if len(capabilities) == 0 {
+		return "(none)"
+	}
+	names := make([]string, 0, len(capabilities))
+	for _, capability := range capabilities {
+		names = append(names, string(capability))
+	}
+	return strings.Join(names, ", ")
+}
+
 // dumpCatalog prints the provider's ModelSpec list. It prefers the live
 // upstream catalog (core.ModelLister) and falls back to the bundled static
 // catalog when the provider does not implement the live port or the live
-// call fails (offline, bad key). The source is reported on stderr so the
-// stdout list stays clean for piping.
+// call fails (offline, bad key). A nil lister means no client on this entry
+// can enumerate models, so only the static catalog is printed. The source is
+// reported on stderr so the stdout list stays clean for piping.
 func dumpCatalog(
 	ctx context.Context,
 	errOut, out io.Writer,
-	prov core.Provider,
+	lister core.ModelLister,
 	label string,
 	static []core.ModelSpec,
 ) error {
 	specs := static
 	source := "static"
-	if lister, ok := prov.(core.ModelLister); ok {
+	if lister != nil {
 		if live, err := lister.ListModels(ctx); err != nil {
 			fmt.Fprintf(errOut, "[provider] %s: live catalog unavailable, using static (%v)\n", label, err)
 		} else {

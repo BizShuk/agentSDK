@@ -327,14 +327,22 @@ func TestDefaultCatalogListsBothCapabilities(t *testing.T) {
 		ids = append(ids, spec.ID)
 	}
 	assert.Equal(t, []string{
-		"scribe_v1",
+		"scribe_v2",
 		"eleven_flash_v2_5",
-		"eleven_turbo_v2_5",
+		"eleven_flash_v2",
+		"eleven_v3",
 		"eleven_multilingual_v2",
+		"eleven_turbo_v2_5",
+		"eleven_turbo_v2",
+		"eleven_english_sts_v2",
+		"eleven_multilingual_sts_v2",
 	}, ids)
 	assert.Equal(t,
 		[]core.Modality{core.MODALITY_AUDIO},
 		elevenlabs.DefaultCatalog()[0].Input,
 		"the transcription model takes audio in")
 	assert.True(t, strings.HasPrefix(elevenlabs.DefaultSpeechModel, "eleven_"))
+	assert.NotContains(t, ids, "scribe_v2_realtime",
+		"the realtime model is websocket-only and the batch STT route rejects it")
+	assert.NotContains(t, ids, "scribe_v1", "deprecated scribe_v1 stays out of picker UIs")
 }

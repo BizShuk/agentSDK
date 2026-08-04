@@ -39,8 +39,12 @@
   hex 解碼、`extra_info` → `SpeechInfo`，預設 `speech-02-hd`，
   `MINIMAX_SPEECH_BASE_URL` 比照 music/video 覆寫 base；resolved base 尾段
   `/anthropic` 一律 trim——`ResolvedConfig` 不帶來源，trim 不分 env 出處）。
-  ElevenLabs adapter 擁有 `xi-api-key` header、multipart STT（`scribe_v1`）、
-  TTS + `/stream`（`eleven_flash_v2_5`、預設 voice Rachel）。
+  ElevenLabs adapter 擁有 `xi-api-key` header、multipart STT（`scribe_v2`）、
+  TTS + `/stream`（`eleven_flash_v2_5`、預設 voice Rachel）與 `GET /v1/models`
+  live catalog（`SpeechProvider.ListModels`）。該 endpoint 只列 synthesis
+  models（bare JSON array，非 `{"data":[...]}`），scribe 不在其中，因此 STT
+  static entry 於 `utils.Merge` 後補回；`scribe_v2_realtime` 是 websocket-only,
+  batch STT route 會拒收,不進 catalog。
 - Reasoning content boundary：`core.Part` 以 `PART_KIND_REASONING` 表示可攜 reasoning
   文字，`ReasoningState` 保存 opaque continuation metadata。`ModelResult.Parts` 是有序
   canonical assistant content；無法表示 metadata 的 wire path 必須明確報錯。
@@ -306,10 +310,10 @@ JSONL 對外 envelope 由 `agent/wire` 擁有，經
 | middleware preset         | `agentsdk/middleware/preset`：`Default()`（retry→timeout→budget→loopguard）、`Secure(sandbox, approval)`（再加 sandbox→approval→spotlight→sanitizer）                                                                                                                                                                                                                                                              |
 | credential                | `agentsdk/provider/credential`：`RouteID`/`Kinds`/`Names`、`NewSource`/`NewAutoSource`/`Source.Decorator()`、`Login`；唯一 import `bizshuk/auth` 之處                                                                                                                                                                                                                                                              |
 | provider registry         | `agentsdk/provider`（package `provider`，非 `registry`）：`Entry` 單獨擁有 name / metadata / static catalog / model+image+video+music+audio factories；`Names`/`Entries`/`Lookup`/`Catalog`/`Capabilities`/`New`/`NewImage`/`NewVideo`/`NewMusic`/`NewTranscriber`/`NewSpeech`/`Options.Resolve`/`ResolvedConfig`/`DEFAULT_NAME`；`env` 查詢以 `LookupEnv` 注入                                                                                                        |
-| root CLI subcommands      | `agentsdk/cmd`：`NewWizardCommand`（`wizard`/`w` 設定產生器）、`NewProviderCommand`（root cobra `provider` smoke-test CLI；打 `core.Provider.Generate` / `core.StreamProvider.Stream` 不走 Engine；`--list-models` 優先打 live `core.ModelLister`,失敗 fallback `Entry.Catalog`）                                                                                                                                  |
+| root CLI subcommands      | `agentsdk/cmd`：`NewWizardCommand`（`wizard`/`w` 設定產生器）、`NewProviderCommand`（root cobra `provider` smoke-test CLI；打 `core.Provider.Generate` / `core.StreamProvider.Stream` 不走 Engine；`--list-models` 優先打 live `core.ModelLister`,失敗 fallback `Entry.Catalog`,audio-only entry 改由 speech client 取得 lister,無 chat surface 的 prompt path 回報該 provider 實際支援的 capabilities）                                                                                                                                  |
 | authentication            | 外部 module `github.com/bizshuk/auth`：只由 `provider/credential` 消費；API 契約見該 repo                                                                                                                                                                                                                                                                                                                          |
 | proxy                     | 外部 repo `github.com/bizshuk/proxy`：本 repo 無目錄、無 require、無 import                                                                                                                                                                                                                                                                                                                                        |
-| provider adapters         | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity,elevenlabs}`：前七者實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`）；Google/Grok 另實作 `provider.ImageGenerator`，MiniMax 另實作 `provider.VideoGenerator` / `provider.MusicGenerator` / `provider.SpeechGenerator`；ElevenLabs 是 audio-only（`New` 為 nil）：`provider.Transcriber` + `provider.SpeechGenerator` + `provider.SpeechStreamer`；除 codex/antigravity/elevenlabs 外皆另實作 optional `core.ModelLister`。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal |
+| provider adapters         | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity,elevenlabs}`：前七者實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`）；Google/Grok 另實作 `provider.ImageGenerator`，MiniMax 另實作 `provider.VideoGenerator` / `provider.MusicGenerator` / `provider.SpeechGenerator`；ElevenLabs 是 audio-only（`New` 為 nil）：`provider.Transcriber` + `provider.SpeechGenerator` + `provider.SpeechStreamer`；除 codex/antigravity 外皆另實作 optional `core.ModelLister`（ElevenLabs 掛在 `*SpeechProvider` 上，非 chat client）。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal |
 
 ## 開發與驗證 (Development and Verification)
 
