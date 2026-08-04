@@ -1,0 +1,16 @@
+{
+  "name": "agentsdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Go Agentic Loop SDK task runner — declarative goal-directed control loop assembly",
+  "scripts": {
+    "dev": "go run .",
+    "test": "go test ./...",
+    "build": "go build -o bin/agentsdk .",
+    "lint": "gofmt -l . && go vet ./...",
+    "clean": "rm -rf bin",
+    "run:setup": "./scripts/run.sh",
+    "run:verify-workspace": "./scripts/verify-workspace.sh",
+    "run:list-providers": "./scripts/list-providers.sh"
+  }
+}
