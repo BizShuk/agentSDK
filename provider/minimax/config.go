@@ -42,3 +42,8 @@ const DefaultSpeechBaseURL = "https://api.minimax.io"
 // anthropicCompatSuffix is the path segment DefaultBaseURL carries and the
 // media endpoints do not.
 const anthropicCompatSuffix = "/anthropic"
+
+// DEFAULT_IMAGE_MIME labels an image part that arrived without a MIME type.
+// JPEG is the safer guess than PNG for the photographed-document traffic
+// that dominates vision prompts.
+const DEFAULT_IMAGE_MIME = "image/jpeg"

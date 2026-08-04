@@ -2,6 +2,7 @@ package minimax_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -248,6 +249,78 @@ func TestMaxTokensExplicit(t *testing.T) {
 	var sent map[string]any
 	require.NoError(t, json.Unmarshal([]byte(*seenBody), &sent))
 	assert.Equal(t, float64(1024), sent["max_tokens"])
+}
+
+func TestImagePartEncodedAsBase64Block(t *testing.T) {
+	// A dropped image part is invisible: the request still succeeds and the
+	// model answers a vision prompt from the text alone. Pin the block onto
+	// the wire so a regression fails here instead of looking like a dumb model.
+	srv, _, seenBody := newFakeMinimax(t)
+	p, err := minimax.New(minimaxConfig(srv.URL, "sk-test"))
+	require.NoError(t, err)
+
+	pixels := []byte{0xFF, 0xD8, 0xFF, 0x00, 0x01}
+	_, err = p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{
+			{Kind: core.PART_KIND_PLAIN_TEXT, Text: "what is this"},
+			{Kind: core.PART_KIND_IMAGE, Image: pixels, ImageMIME: "image/png"},
+		}}},
+	})
+	require.NoError(t, err)
+
+	var sent minimax.RequestBody
+	require.NoError(t, json.Unmarshal([]byte(*seenBody), &sent))
+	require.Len(t, sent.Messages, 1)
+	require.Len(t, sent.Messages[0].Content, 2, "text and image must both survive")
+
+	block := sent.Messages[0].Content[1]
+	assert.Equal(t, "image", block.Type)
+	require.NotNil(t, block.Source)
+	assert.Equal(t, "base64", block.Source.Type)
+	assert.Equal(t, "image/png", block.Source.MediaType)
+	assert.Equal(t, base64.StdEncoding.EncodeToString(pixels), block.Source.Data)
+}
+
+func TestImagePartDefaultsMIME(t *testing.T) {
+	// An image part with no MIME must still ship; media_type is required by
+	// the Anthropic-compat schema, so guess rather than send an empty string.
+	srv, _, seenBody := newFakeMinimax(t)
+	p, err := minimax.New(minimaxConfig(srv.URL, "sk-test"))
+	require.NoError(t, err)
+
+	_, err = p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{
+			{Kind: core.PART_KIND_IMAGE, Image: []byte{0x01}},
+		}}},
+	})
+	require.NoError(t, err)
+
+	var sent minimax.RequestBody
+	require.NoError(t, json.Unmarshal([]byte(*seenBody), &sent))
+	require.Len(t, sent.Messages[0].Content, 1)
+	require.NotNil(t, sent.Messages[0].Content[0].Source)
+	assert.Equal(t, minimax.DEFAULT_IMAGE_MIME, sent.Messages[0].Content[0].Source.MediaType)
+}
+
+func TestEmptyImagePartOmitted(t *testing.T) {
+	// A zero-length image is not a picture; sending an empty base64 source
+	// would be rejected by the API and read as a transport bug.
+	srv, _, seenBody := newFakeMinimax(t)
+	p, err := minimax.New(minimaxConfig(srv.URL, "sk-test"))
+	require.NoError(t, err)
+
+	_, err = p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{
+			{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"},
+			{Kind: core.PART_KIND_IMAGE},
+		}}},
+	})
+	require.NoError(t, err)
+
+	var sent minimax.RequestBody
+	require.NoError(t, json.Unmarshal([]byte(*seenBody), &sent))
+	require.Len(t, sent.Messages[0].Content, 1)
+	assert.Equal(t, "text", sent.Messages[0].Content[0].Type)
 }
 
 func TestDefaultCatalog(t *testing.T) {

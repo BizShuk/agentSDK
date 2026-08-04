@@ -19,6 +19,7 @@ package minimax
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -180,6 +181,25 @@ func toRequestBody(req core.ModelRequest, model string) (RequestBody, error) {
 			case core.PART_KIND_PLAIN_TEXT:
 				if c.Text != "" {
 					blocks = append(blocks, ContentParam{Type: "text", Text: c.Text})
+				}
+			case core.PART_KIND_IMAGE:
+				// core.Part.Image is raw decoded bytes, so the base64
+				// encoding happens here. Dropping the part instead would
+				// leave the model answering a vision prompt blind, which
+				// reads as a bad model rather than a missing capability.
+				if len(c.Image) > 0 {
+					mime := c.ImageMIME
+					if mime == "" {
+						mime = DEFAULT_IMAGE_MIME
+					}
+					blocks = append(blocks, ContentParam{
+						Type: "image",
+						Source: &ImageSource{
+							Type:      "base64",
+							MediaType: mime,
+							Data:      base64.StdEncoding.EncodeToString(c.Image),
+						},
+					})
 				}
 			case core.PART_KIND_REASONING:
 				if c.Text != "" || c.Reasoning != nil {

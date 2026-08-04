@@ -53,10 +53,11 @@ type MessageParam struct {
 	Content []ContentParam `json:"content"`
 }
 
-// ContentParam is one block of a message (text / tool_use / tool_result).
+// ContentParam is one block of a message (text / image / tool_use / tool_result).
 type ContentParam struct {
-	Type      string          `json:"type"` // "text" | "tool_use" | "tool_result"
+	Type      string          `json:"type"` // "text" | "image" | "tool_use" | "tool_result"
 	Text      string          `json:"text,omitempty"`
+	Source    *ImageSource    `json:"source,omitempty"`
 	Thinking  string          `json:"thinking,omitempty"`
 	Signature string          `json:"signature,omitempty"`
 	ID        string          `json:"id,omitempty"`
@@ -65,6 +66,16 @@ type ContentParam struct {
 	ToolUseID string          `json:"tool_use_id,omitempty"`
 	Content   json.RawMessage `json:"content,omitempty"`
 	IsError   bool            `json:"is_error,omitempty"`
+}
+
+// ImageSource carries the payload of an `image` content block. Anthropic's
+// format is a discriminated union on `type`; minimax accepts the base64
+// variant, which is the only one an adapter can produce from core.Part's
+// in-memory bytes without first hosting the image somewhere.
+type ImageSource struct {
+	Type      string `json:"type"`       // always "base64" here
+	MediaType string `json:"media_type"` // e.g. "image/jpeg"
+	Data      string `json:"data"`       // standard base64, no data: prefix
 }
 
 // ToolUnionParam is a single tool entry in request.tools. We keep it as
