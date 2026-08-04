@@ -253,5 +253,5 @@ go run . watch
 
 | 淘汰日期 | 功能 | 原始文件 | 說明 |
 | -------- | ---- | -------- | ---- |
-| 2026-08-04 | Logdoctor proposal / approval lifecycle | `2026-07-18-continuous-logdoctor-minimax.md` | immutable proposal + digest 與 `list` / `show` / `approve` / `reject` 子指令已於 `879e246` 隨 log-agent-v2 重構移除；`sample/logdoctor-agent` 現只保留 `analyze` 與 `watch` |
+| 2026-08-04 | Logdoctor proposal / approval lifecycle | `2026-07-18-continuous-logdoctor-minimax.md` | immutable proposal + digest 與 `list` / `show` / `approve` / `reject` 子指令已於 `879e246` 隨 log-agent-v2 重構移除；`sample/logdoctor-agent` 現只保留單一 `watch` 子指令 |
 | 2026-08-04 | `provider/openaicompat` | `2026-07-18-continuous-logdoctor-minimax.md` | 已於 `551410d` 移除；OpenAI-compatible wire 改由 `provider/protocol/openaichat` 共用 codec 承接 |
