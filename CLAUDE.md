@@ -34,7 +34,10 @@
   endpoint 不回 thought part。tool schema 由 `schema.go` 轉成 Google dialect
   （type 大寫、剔除 protobuf 沒有的 keyword），否則整個 request 會被拒。
   unsigned reasoning part 不回送（gateway 驗簽），Gemini tool call 缺簽名時補
-  `skip_thought_signature_validator`。
+  `skip_thought_signature_validator`。`ModelSpec.Reasoning` 由 `isThinkingModel(id)`
+  推導而非手寫,與 SSE／blocking 路由共用同一判斷,不會互相漂移；`ListModels`
+  丟棄 `ContextWindow`／`MaxTokens` 為 0 的項目,濾掉 gateway 的 IDE 內部 route
+  （`chat_*`／`tab_*`）——代價是新 model 需先進 `CATALOG` 才會出現在清單。
 - Provider media capabilities：`provider.ImageGenerator`、`provider.VideoGenerator`、
   `provider.MusicGenerator`、`provider.Transcriber`（STT）與
   `provider.SpeechGenerator`（TTS；optional `provider.SpeechStreamer` 回

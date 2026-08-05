@@ -77,10 +77,15 @@ const (
 	// DEFAULT_MAX_TOKENS applies when core.ModelRequest carries none.
 	DEFAULT_MAX_TOKENS = 4096
 
-	// GEMINI_MAX_OUTPUT_TOKENS is the ceiling the gateway enforces for
-	// Gemini models regardless of what the catalog advertises. Sending
-	// more is a 400, so we clamp instead.
-	GEMINI_MAX_OUTPUT_TOKENS = 16384
+	// GEMINI_MAX_OUTPUT_TOKENS is the ceiling the gateway accepts for
+	// Gemini models. Sending more is a 400, so we clamp instead.
+	//
+	// The reference proxies clamp at 16384. Probed against the live
+	// gateway that is too low: gemini-3.6-flash-high and gemini-2.5-flash
+	// both accept 65536, and only 131072 is rejected. 16384 would have
+	// silently truncated a caller who asked for the catalog's advertised
+	// limit, so the clamp and the catalog now agree on one number.
+	GEMINI_MAX_OUTPUT_TOKENS = 65536
 
 	// CLAUDE_THINKING_BUDGET is the thinking budget sent for Claude
 	// thinking models. The gateway ignores include_thoughts without a

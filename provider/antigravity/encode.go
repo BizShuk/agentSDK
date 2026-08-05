@@ -278,7 +278,9 @@ func generationConfig(req core.ModelRequest, model string) *GenerationConfig {
 		cfg.ThinkingConfig = GeminiThinkingConfig{IncludeThoughts: true}
 	}
 
-	_ = GEMINI_MAX_OUTPUT_TOKENS
+	if isGeminiModel(model) && cfg.MaxOutputTokens > GEMINI_MAX_OUTPUT_TOKENS {
+		cfg.MaxOutputTokens = GEMINI_MAX_OUTPUT_TOKENS
+	}
 	return cfg
 }
 

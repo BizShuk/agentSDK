@@ -13,56 +13,94 @@ import (
 	"github.com/bizshuk/agentsdk/provider/utils"
 )
 
+// Token limits per family. The live catalog endpoint reports none of
+// these, and the gateway is undocumented, so they are the published
+// family limits confirmed by probing the live endpoint: 65536 output is
+// accepted for Gemini and 131072 is rejected.
+const (
+	GEMINI_CONTEXT_WINDOW = 1048576
+	GEMINI_MAX_OUTPUT     = 65536
+
+	CLAUDE_CONTEXT_WINDOW = 200000
+	CLAUDE_MAX_OUTPUT     = 64000
+
+	GPT_OSS_CONTEXT_WINDOW = 128000
+	GPT_OSS_MAX_OUTPUT     = 16384
+)
+
+// catalogEntry is one bundled model's metadata.
+//
+// Reasoning is absent on purpose: it is derived from the id by
+// isThinkingModel, which is the same function that decides whether a
+// request takes the SSE path. Hand-writing the flag here let the two
+// disagree — the previous table claimed claude-sonnet-4-6 reasons while
+// the router sent it down the blocking path.
+type catalogEntry struct {
+	id     string
+	family string
+	ctx    int
+	max    int
+	input  []core.Modality
+}
+
+func geminiInput() []core.Modality {
+	return []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO}
+}
+
+func claudeInput() []core.Modality {
+	return []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE}
+}
+
+// CATALOG carries only models whose limits are actually known.
+//
+// The live endpoint serves ~24 ids. The rest are deliberately absent
+// rather than filled in from family defaults: this gateway is
+// undocumented, its tiers do not all share one window, and a guessed
+// ContextWindow is worse than no entry — a caller sizing a request
+// against a fabricated number gets a 400 it cannot explain.
+//
+// Everything not listed here is dropped by ListModels, so the opaque IDE
+// routing ids (chat_20706, tab_flash_lite_preview) and the untiered
+// variants never reach a model picker as rows of zeroes. They remain
+// callable by name via --model; they are simply not advertised.
+var CATALOG = []catalogEntry{
+	// Gemini flash tiers.
+	{"gemini-3.6-flash-high", "gemini-flash", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
+	{"gemini-3.6-flash-medium", "gemini-flash", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
+	{"gemini-3.6-flash-low", "gemini-flash", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
+	{"gemini-3.5-flash-low", "gemini-flash", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
+
+	// Gemini pro tiers.
+	{"gemini-3.1-pro-high", "gemini-pro", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
+	{"gemini-3.1-pro-low", "gemini-pro", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
+
+	// Claude family.
+	{"claude-sonnet-4-6", "claude-sonnet", CLAUDE_CONTEXT_WINDOW, CLAUDE_MAX_OUTPUT, claudeInput()},
+	{"claude-opus-4-6-thinking", "claude-opus", CLAUDE_CONTEXT_WINDOW, CLAUDE_MAX_OUTPUT, claudeInput()},
+
+	// GPT-OSS family.
+	{"gpt-oss-120b-medium", "gpt-oss", GPT_OSS_CONTEXT_WINDOW, GPT_OSS_MAX_OUTPUT, []core.Modality{core.MODALITY_TEXT}},
+}
+
 // DefaultCatalog returns the bundled Antigravity model catalog — the
 // offline fallback and the source of the metadata the live endpoint does
-// not report (family, reasoning flag, context window).
+// not report (family, reasoning flag, token limits).
 //
 // Both Claude and Gemini families are routed through the same gateway.
 // IDs are the strings the gateway accepts on the wire.
-//
-// This is a subset by design. The gateway serves ~24 ids to a live
-// account, including internal ones (chat_20706, tab_flash_lite_preview)
-// and tiers whose context limits are not published anywhere. ListModels
-// is the authority on membership; entries here exist to supply the
-// metadata that endpoint does not report, so an id is listed only when
-// its family and limits are actually known.
 func DefaultCatalog() []core.ModelSpec {
-	return []core.ModelSpec{
-		// Gemini family (Flash & Pro tiers with thinking support)
-		{ID: "gemini-3.6-flash-high", Family: "gemini-flash", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
-			ContextWindow: 1048576, MaxTokens: 65536},
-		{ID: "gemini-3.6-flash-medium", Family: "gemini-flash", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
-			ContextWindow: 1048576, MaxTokens: 65536},
-		{ID: "gemini-3.6-flash-low", Family: "gemini-flash", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
-			ContextWindow: 1048576, MaxTokens: 65536},
-		// The 3.5 tier ships -low and -extra-low only; there is no
-		// -medium or -high, verified against a live fetchAvailableModels.
-		{ID: "gemini-3.5-flash-low", Family: "gemini-flash", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
-			ContextWindow: 1048576, MaxTokens: 65536},
-		{ID: "gemini-3.1-pro-high", Family: "gemini-pro", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
-			ContextWindow: 1048576, MaxTokens: 65536},
-		{ID: "gemini-3.1-pro-low", Family: "gemini-pro", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
-			ContextWindow: 1048576, MaxTokens: 65536},
-
-		// Claude family
-		{ID: "claude-sonnet-4-6", Family: "claude-sonnet", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE},
-			ContextWindow: 200000, MaxTokens: 64000},
-		{ID: "claude-opus-4-6-thinking", Family: "claude-opus", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE},
-			ContextWindow: 200000, MaxTokens: 64000},
-
-		// GPT-OSS family
-		{ID: "gpt-oss-120b-medium", Family: "gpt-oss", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT},
-			ContextWindow: 128000, MaxTokens: 16384},
+	out := make([]core.ModelSpec, 0, len(CATALOG))
+	for _, e := range CATALOG {
+		out = append(out, core.ModelSpec{
+			ID:            e.id,
+			Family:        e.family,
+			Reasoning:     isThinkingModel(e.id),
+			Input:         e.input,
+			ContextWindow: e.ctx,
+			MaxTokens:     e.max,
+		})
 	}
+	return out
 }
 
 // modelsResponse is the fetchAvailableModels body. `models` is keyed by
@@ -108,7 +146,30 @@ func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
 	// The endpoint returns a map, so iteration order is random; a model
 	// picker that reshuffles on every call is worse than useless.
 	sort.Strings(ids)
-	return utils.Merge(ids, DefaultCatalog()), nil
+	return sized(utils.Merge(ids, DefaultCatalog())), nil
+}
+
+// sized drops entries whose token limits are unknown.
+//
+// utils.Merge keeps a live id the bundled catalog does not recognize,
+// carrying the id alone. For most adapters that is the honest answer, but
+// this gateway also serves opaque IDE routing ids (chat_20706,
+// tab_flash_lite_preview) that are not selectable chat models. They
+// surface as rows with zeroes in every column, which reads as broken
+// metadata rather than as "internal, not for you".
+//
+// The cost is real and worth stating: a model Google adds after this
+// build will not appear until CATALOG learns its limits. Membership is no
+// longer purely live.
+func sized(specs []core.ModelSpec) []core.ModelSpec {
+	out := make([]core.ModelSpec, 0, len(specs))
+	for _, s := range specs {
+		if s.ContextWindow == 0 || s.MaxTokens == 0 {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // ---------------------------------------------------------------------------

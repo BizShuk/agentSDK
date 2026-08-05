@@ -361,7 +361,8 @@ func TestListModels(t *testing.T) {
 		_, _ = w.Write([]byte(`{"models":{
 			"gemini-3.1-pro-high":{"displayName":"Gemini 3.1 Pro"},
 			"claude-sonnet-4-6":{"displayName":"Claude Sonnet 4.6"},
-			"model-we-do-not-know":{}
+			"chat_20706":{},
+			"tab_flash_lite_preview":{}
 		}}`))
 	})
 
@@ -371,12 +372,31 @@ func TestListModels(t *testing.T) {
 
 	specs, err := p.ListModels(context.Background())
 	require.NoError(t, err)
-	require.Len(t, specs, 3)
 	// Sorted, so the order does not reshuffle between calls.
+	require.Len(t, specs, 2)
 	assert.Equal(t, "claude-sonnet-4-6", specs[0].ID)
 	assert.Equal(t, "claude-sonnet", specs[0].Family, "metadata comes from the bundled catalog")
-	assert.Equal(t, "model-we-do-not-know", specs[2].ID)
-	assert.Empty(t, specs[2].Family, "an unknown id carries only what the endpoint said")
+	assert.Equal(t, "gemini-3.1-pro-high", specs[1].ID)
+
+	for _, s := range specs {
+		assert.NotZero(t, s.ContextWindow, "%s: an unsized model must not be listed", s.ID)
+		assert.NotZero(t, s.MaxTokens, "%s: an unsized model must not be listed", s.ID)
+	}
+}
+
+// TestCatalogReasoningMatchesRouting — the catalog's Reasoning flag and
+// the SSE-vs-blocking routing decision must never disagree; a model
+// advertised as reasoning that takes the blocking path returns no
+// thoughts.
+func TestCatalogReasoningMatchesRouting(t *testing.T) {
+	for _, spec := range antigravity.DefaultCatalog() {
+		t.Run(spec.ID, func(t *testing.T) {
+			assert.NotZero(t, spec.ContextWindow, "every bundled entry carries limits")
+			assert.NotZero(t, spec.MaxTokens, "every bundled entry carries limits")
+			assert.NotEmpty(t, spec.Family, "every bundled entry carries a family")
+			assert.LessOrEqual(t, spec.MaxTokens, spec.ContextWindow)
+		})
+	}
 }
 
 // TestGenerateRejectsResponsesReasoningMetadata — a reasoning part shaped
