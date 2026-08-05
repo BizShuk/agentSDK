@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/bizshuk/agentsdk/core"
@@ -16,189 +17,376 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNewRequiresAPIKey — without an explicit key or env, New() fails fast.
-func TestNewRequiresAPIKey(t *testing.T) {
-	t.Setenv("ANTIGRAVITY_API_KEY", "")
-	_, err := provider.New("antigravity", provider.Options{})
+// gateway is a fake Cloud Code endpoint. It answers loadCodeAssist with a
+// project and every generate call with the supplied body, recording what
+// it saw.
+type gateway struct {
+	*httptest.Server
+
+	mu       sync.Mutex
+	paths    []string
+	headers  http.Header
+	lastBody map[string]any
+}
+
+func newGateway(t *testing.T, respond func(w http.ResponseWriter, path string)) *gateway {
+	t.Helper()
+	g := &gateway{}
+	g.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+
+		g.mu.Lock()
+		// The colon method name lives in the path, and httptest gives it
+		// back unescaped in RawPath only when it needed escaping.
+		path := r.URL.EscapedPath()
+		g.paths = append(g.paths, path)
+		g.headers = r.Header.Clone()
+		var body map[string]any
+		_ = json.Unmarshal(raw, &body)
+		if !strings.HasSuffix(path, "loadCodeAssist") {
+			g.lastBody = body
+		}
+		g.mu.Unlock()
+
+		if strings.HasSuffix(path, "loadCodeAssist") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"cloudaicompanionProject":"proj-42"}`))
+			return
+		}
+		respond(w, path)
+	}))
+	t.Cleanup(g.Close)
+	return g
+}
+
+func (g *gateway) body() map[string]any {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.lastBody
+}
+
+func (g *gateway) visited() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]string(nil), g.paths...)
+}
+
+func (g *gateway) seenHeaders() http.Header {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.headers
+}
+
+// TestNewRequiresCredential — without an OAuth token or explicit key,
+// construction through the registry fails fast.
+func TestNewRequiresCredential(t *testing.T) {
+	t.Setenv("ANTIGRAVITY_OAUTH_TOKEN", "")
+	_, err := provider.New("antigravity", provider.Options{CredentialKind: core.CREDENTIAL_KIND_OAUTH})
 	assert.Error(t, err)
 }
 
-// TestNewWithExplicitAPIKey — resolved construction auth is accepted directly.
-func TestNewWithExplicitAPIKey(t *testing.T) {
-	p, err := antigravity.New(provider.ResolvedConfig{Auth: core.Auth{APIKey: "sk-direct"}})
-	require.NoError(t, err)
-	assert.NotNil(t, p)
+// TestAPIKeyCredentialKindRejected — the gateway is OAuth-only, so asking
+// for an api_key credential is refused during resolution rather than sent
+// upstream and refused there.
+func TestAPIKeyCredentialKindRejected(t *testing.T) {
+	_, err := provider.New("antigravity", provider.Options{CredentialKind: core.CREDENTIAL_KIND_APIKEY})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "OAuth-only")
 }
 
-// TestGenerateAgainstFakeServer — spin up an httptest server that mimics
-// the Anthropic-Messages response shape and verify Generate() round-trips.
-func TestGenerateAgainstFakeServer(t *testing.T) {
-	var (
-		gotAuth   string
-		gotAPIKey string
-		gotPath   string
-		gotBody   []byte
-	)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
-		gotAPIKey = r.Header.Get("x-api-key")
-		gotPath = r.URL.Path
-		gotBody, _ = io.ReadAll(r.Body)
+// TestGenerateNonThinkingModel — a non-thinking model takes the blocking
+// endpoint, and the Cloud Code envelope is assembled as the gateway
+// expects.
+func TestGenerateNonThinkingModel(t *testing.T) {
+	g := newGateway(t, func(w http.ResponseWriter, _ string) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"id": "msg_test",
-			"type": "message",
-			"role": "assistant",
-			"model": "claude-sonnet-5",
-			"stop_reason": "end_turn",
-			"content": [{"type": "text", "text": "hello back"}],
-			"usage": {"input_tokens": 7, "output_tokens": 3}
-		}`))
-	}))
-	defer srv.Close()
+		_, _ = w.Write([]byte(`{"response":{
+			"candidates":[{"content":{"parts":[{"text":"hello back"}]},"finishReason":"STOP"}],
+			"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":3,"totalTokenCount":10}
+		}}`))
+	})
 
-	t.Setenv("ANTIGRAVITY_API_KEY", "sk-from-env")
-	t.Setenv("ANTIGRAVITY_BASE_URL", srv.URL)
+	t.Setenv("ANTIGRAVITY_OAUTH_TOKEN", "ya29.from-env")
+	t.Setenv("ANTIGRAVITY_BASE_URL", g.URL)
 
-	p, err := provider.New("antigravity", provider.Options{})
+	p, err := provider.New("antigravity", provider.Options{Model: "gemini-2.5-flash"})
 	require.NoError(t, err)
 
 	res, err := p.Generate(context.Background(), core.ModelRequest{
 		MaxTokens: 128,
 		Messages: []core.Message{
+			{Role: core.ROLE_SYSTEM, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "be terse"}}},
 			{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hello"}}},
 		},
 	})
 	require.NoError(t, err)
-	// baseURL is the test server (no /v1), so the path is /messages.
-	// The default gateway URL embeds /v1, so production sends /v1/messages.
-	assert.Equal(t, "/messages", gotPath)
+
 	assert.Equal(t, "hello back", res.Text)
 	assert.Equal(t, "end_turn", res.StopReason)
 	assert.Equal(t, 7, res.Usage.PromptTokens)
 	assert.Equal(t, 3, res.Usage.CompletionTokens)
 	assert.Equal(t, 10, res.Usage.TotalTokens)
 
-	// Body sanity: model + max_tokens + a message made it across.
-	var sent map[string]any
-	require.NoError(t, json.Unmarshal(gotBody, &sent))
-	assert.Equal(t, "gemini-3.6-flash-high", sent["model"])
-	assert.Equal(t, float64(128), sent["max_tokens"])
-	msgs, ok := sent["messages"].([]any)
-	require.True(t, ok)
-	assert.NotEmpty(t, msgs)
+	assert.Equal(t,
+		[]string{"/v1internal:loadCodeAssist", "/v1internal:generateContent"},
+		g.visited())
 
-	// Default auth is the API-key path.
-	assert.Empty(t, gotAuth, "API-key mode must not send an Authorization header")
-	assert.Equal(t, "sk-from-env", gotAPIKey)
+	sent := g.body()
+	assert.Equal(t, "gemini-2.5-flash", sent["model"])
+	assert.Equal(t, "proj-42", sent["project"], "project comes from loadCodeAssist")
+	assert.Equal(t, "agent", sent["requestType"])
+
+	inner := sent["request"].(map[string]any)
+	contents := inner["contents"].([]any)
+	require.Len(t, contents, 1, "system message is hoisted out of contents")
+	assert.Equal(t, "user", contents[0].(map[string]any)["role"])
+
+	// System text is hoisted verbatim — no client persona is prepended.
+	sys := inner["systemInstruction"].(map[string]any)["parts"].([]any)
+	require.Len(t, sys, 1)
+	assert.Equal(t, "be terse", sys[0].(map[string]any)["text"])
+
+	gen := inner["generationConfig"].(map[string]any)
+	assert.Equal(t, float64(128), gen["maxOutputTokens"])
+	assert.Nil(t, gen["thinkingConfig"], "non-thinking model asks for no thoughts")
 }
 
-// TestBearerHeaderFromOAuth — resolved OAuth auth carries Authorization:
-// Bearer <token>, not x-api-key.
-func TestBearerHeaderFromOAuth(t *testing.T) {
-	var gotAuth, gotAPIKey string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
-		gotAPIKey = r.Header.Get("x-api-key")
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"id": "msg_oauth",
-			"type": "message",
-			"role": "assistant",
-			"model": "claude-sonnet-5",
-			"stop_reason": "end_turn",
-			"content": [{"type": "text", "text": "ok"}],
-			"usage": {"input_tokens": 1, "output_tokens": 1}
-		}`))
-	}))
-	defer srv.Close()
+// TestGenerateThinkingModelUsesStream — the blocking endpoint omits
+// thoughts, so a thinking model must be served over SSE and folded back.
+func TestGenerateThinkingModelUsesStream(t *testing.T) {
+	g := newGateway(t, func(w http.ResponseWriter, _ string) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, strings.Join([]string{
+			`data: {"response":{"candidates":[{"content":{"parts":[{"thought":true,"text":"inspect","thoughtSignature":"sig-out"}]}}]}}`,
+			``,
+			`data: {"response":{"candidates":[{"content":{"parts":[{"text":"done"}]}}]}}`,
+			``,
+			`data: {"response":{"candidates":[{"content":{"parts":[]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":2,"thoughtsTokenCount":5,"totalTokenCount":11}}}`,
+			``,
+			``,
+		}, "\n"))
+	})
 
 	p, err := antigravity.New(provider.ResolvedConfig{
-		BaseURL: srv.URL,
-		Auth:    core.Auth{Bearer: "ya29.fake-bearer-token"},
+		BaseURL: g.URL,
+		Model:   "claude-opus-4-6-thinking",
+		Auth:    core.Auth{Bearer: "ya29.token"},
 	})
 	require.NoError(t, err)
 
-	_, err = p.Generate(context.Background(), core.ModelRequest{
-		MaxTokens: 64,
+	res, err := p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{
-			{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "ping"}}},
+			{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "think"}}},
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "Bearer ya29.fake-bearer-token", gotAuth)
-	assert.Empty(t, gotAPIKey, "OAuth mode must not send x-api-key")
+
+	assert.Contains(t, g.visited(), "/v1internal:streamGenerateContent")
+	require.Len(t, res.Parts, 2)
+	assert.Equal(t, core.PART_KIND_REASONING, res.Parts[0].Kind)
+	assert.Equal(t, "inspect", res.Parts[0].Text)
+	require.NotNil(t, res.Parts[0].Reasoning)
+	assert.Equal(t, "sig-out", res.Parts[0].Reasoning.Signature)
+	assert.Equal(t, "done", res.Text)
+	assert.Equal(t, "end_turn", res.StopReason)
+	// Thinking tokens are billed output and are folded into the
+	// completion count rather than dropped.
+	assert.Equal(t, 7, res.Usage.CompletionTokens)
 }
 
-func TestThinkingRoundTrip(t *testing.T) {
-	var requestBody map[string]any
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&requestBody))
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-5",
-			"stop_reason":"end_turn",
-			"content":[{"type":"thinking","thinking":"inspect","signature":"sig-out"},{"type":"text","text":"done"}],
-			"usage":{"input_tokens":1,"output_tokens":2}
-		}`))
-	}))
-	defer srv.Close()
+// TestStreamToolCallOutranksFinishReason — Gemini reports finishReason
+// STOP for a turn that ended in a tool call, and that frame arrives after
+// the call itself. The later frame must not overwrite the verdict.
+func TestStreamToolCallOutranksFinishReason(t *testing.T) {
+	raw := strings.Join([]string{
+		`data: {"response":{"candidates":[{"content":{"parts":[{"functionCall":{"name":"get_weather","args":{"city":"Taipei"}}}]}}]}}`,
+		``,
+		`data: {"response":{"candidates":[{"content":{"parts":[]},"finishReason":"STOP"}]}}`,
+		``,
+		``,
+	}, "\n")
+
+	chunks, stop := antigravity.ParseStream(context.Background(), strings.NewReader(raw))
+	res := antigravity.FoldStream(chunks, stop)
+
+	assert.Equal(t, "tool_use", res.StopReason)
+	require.Len(t, res.ToolCalls, 1)
+	assert.Equal(t, "get_weather", res.ToolCalls[0].Name)
+}
+
+// TestHeadersCarryClientIdentity — the gateway 403s a request that does
+// not look like the Antigravity client.
+func TestHeadersCarryClientIdentity(t *testing.T) {
+	g := newGateway(t, func(w http.ResponseWriter, _ string) {
+		_, _ = w.Write([]byte(`{"response":{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}}`))
+	})
 
 	p, err := antigravity.New(provider.ResolvedConfig{
-		BaseURL: srv.URL,
-		Auth:    core.Auth{APIKey: "k"},
+		BaseURL: g.URL,
+		Model:   "claude-opus-4-6-thinking",
+		Auth:    core.Auth{Bearer: "ya29.fake"},
 	})
 	require.NoError(t, err)
-	result, err := p.Generate(context.Background(), core.ModelRequest{
-		Messages: []core.Message{{
-			Role: core.ROLE_ASSISTANT,
-			Parts: []core.Part{{
-				Kind:      core.PART_KIND_REASONING,
-				Text:      "previous",
-				Reasoning: &core.ReasoningState{Signature: "sig-in"},
-			}},
+	_, err = p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "ping"}}}},
+	})
+	require.NoError(t, err)
+
+	h := g.seenHeaders()
+	assert.Equal(t, "Bearer ya29.fake", h.Get("Authorization"))
+	assert.Equal(t, "antigravity", h.Get("X-Client-Name"))
+	assert.NotEmpty(t, h.Get("X-Client-Version"))
+	assert.NotEmpty(t, h.Get("x-goog-api-client"))
+	assert.NotEmpty(t, h.Get("X-Machine-Session-Id"))
+	assert.Equal(t, "interleaved-thinking-2025-05-14", h.Get("anthropic-beta"),
+		"claude thinking models need interleaved thinking")
+}
+
+// TestGenerateRequiresToken — no credential at all is an error before any
+// request leaves the process.
+func TestGenerateRequiresToken(t *testing.T) {
+	p, err := antigravity.New(provider.ResolvedConfig{BaseURL: "https://example.invalid"})
+	require.NoError(t, err)
+	_, err = p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"}}}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "OAuth access token")
+}
+
+// TestToolRoundTrip — declarations reach the gateway in Google's schema
+// dialect and a functionCall comes back as a core tool call.
+func TestToolRoundTrip(t *testing.T) {
+	g := newGateway(t, func(w http.ResponseWriter, _ string) {
+		_, _ = w.Write([]byte(`{"response":{"candidates":[{"content":{"parts":[
+			{"functionCall":{"name":"read_file","args":{"path":"a.txt"}}}
+		]},"finishReason":"STOP"}]}}`))
+	})
+
+	p := antigravity.NewForHosts([]string{g.URL}, provider.ResolvedConfig{
+		Model: "gemini-2.5-flash",
+		Auth:  core.Auth{Bearer: "t"},
+	}).WithProjectID("proj-pinned")
+
+	res, err := p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "read it"}}}},
+		Tools: []core.ToolSpec{{
+			Name:        "read.file",
+			Description: "read a file",
+			Parameters: json.RawMessage(`{
+				"type":"object",
+				"$schema":"https://json-schema.org/draft/2020-12/schema",
+				"additionalProperties":false,
+				"properties":{"path":{"type":"string"}},
+				"required":["path","missing"]
+			}`),
 		}},
 	})
 	require.NoError(t, err)
 
-	messages := requestBody["messages"].([]any)
-	content := messages[0].(map[string]any)["content"].([]any)
-	assert.Equal(t, "thinking", content[0].(map[string]any)["type"])
-	assert.Equal(t, "sig-in", content[0].(map[string]any)["signature"])
-	require.Len(t, result.Parts, 2)
-	assert.Equal(t, core.PART_KIND_REASONING, result.Parts[0].Kind)
-	require.NotNil(t, result.Parts[0].Reasoning)
-	assert.Equal(t, "sig-out", result.Parts[0].Reasoning.Signature)
-	assert.Equal(t, "done", result.Text)
+	assert.NotContains(t, g.visited(), "/v1internal:loadCodeAssist",
+		"a pinned project skips discovery")
+
+	decl := g.body()["request"].(map[string]any)["tools"].([]any)[0].(map[string]any)["functionDeclarations"].([]any)[0].(map[string]any)
+	assert.Equal(t, "read_file", decl["name"], "dots are not a legal function name")
+
+	params := decl["parameters"].(map[string]any)
+	assert.Equal(t, "OBJECT", params["type"], "Google's dialect uppercases types")
+	assert.NotContains(t, params, "$schema")
+	assert.NotContains(t, params, "additionalProperties")
+	assert.Equal(t, []any{"path"}, params["required"], "undeclared required names are dropped")
+
+	require.Len(t, res.ToolCalls, 1)
+	assert.Equal(t, "read_file", res.ToolCalls[0].Name)
+	assert.Equal(t, "read_file", res.ToolCalls[0].ID, "Gemini omits ids; the name stands in")
+	assert.Equal(t, "tool_use", res.StopReason)
 }
 
-func TestStreamPreservesThinkingAndSignature(t *testing.T) {
-	stream := strings.NewReader(strings.Join([]string{
-		`data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"inspect"}}`,
-		``,
-		`data: {"type":"content_block_delta","delta":{"type":"signature_delta","signature":"sig"}}`,
-		``,
-		`data: {"type":"message_stop"}`,
-		``,
-	}, "\n") + "\n")
-	chunks, _ := antigravity.ParseStream(context.Background(), stream)
-	var got []core.ModelChunk
-	for chunk := range chunks {
-		got = append(got, chunk)
-	}
-	require.Len(t, got, 3)
-	assert.Equal(t, core.PART_KIND_REASONING, got[0].Kind)
-	assert.Equal(t, "inspect", got[0].Text)
-	require.NotNil(t, got[1].Reasoning)
-	assert.Equal(t, "sig", got[1].Reasoning.Signature)
-	assert.True(t, got[2].Done)
-}
+// TestHostFallback — a 404 on the daily channel moves to production; the
+// request body is unchanged.
+func TestHostFallback(t *testing.T) {
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"error":{"code":404,"message":"not found here"}}`, http.StatusNotFound)
+	}))
+	defer down.Close()
 
-func TestGenerateRejectsResponsesReasoningMetadata(t *testing.T) {
-	p, err := antigravity.New(provider.ResolvedConfig{Auth: core.Auth{APIKey: "k"}})
+	var reached bool
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		reached = true
+		_, _ = w.Write([]byte(`{"response":{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}}`))
+	}))
+	defer up.Close()
+
+	p := antigravity.NewForHosts([]string{down.URL, up.URL}, provider.ResolvedConfig{
+		Model: "gemini-2.5-flash",
+		Auth:  core.Auth{Bearer: "t"},
+	}).WithProjectID("proj")
+
+	res, err := p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"}}}},
+	})
 	require.NoError(t, err)
+	assert.True(t, reached, "fallback host must be tried")
+	assert.Equal(t, "ok", res.Text)
+}
 
-	_, err = p.Generate(context.Background(), core.ModelRequest{
+// TestNonRetryableStatusStopsImmediately — a 400 is about the request, so
+// trying the next host would only waste a round-trip.
+func TestNonRetryableStatusStopsImmediately(t *testing.T) {
+	var hits int
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"code":400,"message":"contents must not be empty"}}`))
+	}))
+	defer bad.Close()
+
+	p := antigravity.NewForHosts([]string{bad.URL, bad.URL}, provider.ResolvedConfig{
+		Model: "gemini-2.5-flash",
+		Auth:  core.Auth{Bearer: "t"},
+	}).WithProjectID("proj")
+
+	_, err := p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"}}}},
+	})
+	require.Error(t, err)
+	assert.Equal(t, 1, hits)
+	assert.Contains(t, err.Error(), "contents must not be empty")
+}
+
+// TestListModels — membership comes from the live endpoint, metadata from
+// the bundled catalog.
+func TestListModels(t *testing.T) {
+	g := newGateway(t, func(w http.ResponseWriter, _ string) {
+		_, _ = w.Write([]byte(`{"models":{
+			"gemini-3.1-pro-high":{"displayName":"Gemini 3.1 Pro"},
+			"claude-sonnet-4-6":{"displayName":"Claude Sonnet 4.6"},
+			"model-we-do-not-know":{}
+		}}`))
+	})
+
+	p := antigravity.NewForHosts([]string{g.URL}, provider.ResolvedConfig{
+		Auth: core.Auth{Bearer: "t"},
+	}).WithProjectID("proj")
+
+	specs, err := p.ListModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, specs, 3)
+	// Sorted, so the order does not reshuffle between calls.
+	assert.Equal(t, "claude-sonnet-4-6", specs[0].ID)
+	assert.Equal(t, "claude-sonnet", specs[0].Family, "metadata comes from the bundled catalog")
+	assert.Equal(t, "model-we-do-not-know", specs[2].ID)
+	assert.Empty(t, specs[2].Family, "an unknown id carries only what the endpoint said")
+}
+
+// TestGenerateRejectsResponsesReasoningMetadata — a reasoning part shaped
+// for the OpenAI Responses API cannot be encoded as a thought signature.
+func TestGenerateRejectsResponsesReasoningMetadata(t *testing.T) {
+	p := antigravity.NewForHosts([]string{"https://example.invalid"}, provider.ResolvedConfig{
+		Auth: core.Auth{Bearer: "t"},
+	}).WithProjectID("proj")
+
+	_, err := p.Generate(context.Background(), core.ModelRequest{
 		Messages: []core.Message{{
 			Role: core.ROLE_ASSISTANT,
 			Parts: []core.Part{{
@@ -212,47 +400,43 @@ func TestGenerateRejectsResponsesReasoningMetadata(t *testing.T) {
 	assert.Contains(t, err.Error(), "Responses continuation metadata")
 }
 
-// TestRequestBodyValidate — covers the four Validate() failure modes.
-func TestRequestBodyValidate(t *testing.T) {
+// TestValidate covers the shape errors the gateway would answer with a
+// bare 400.
+func TestValidate(t *testing.T) {
+	content := []antigravity.Content{{Role: "user", Parts: []antigravity.Part{{Text: "hi"}}}}
 	cases := []struct {
 		name string
-		body antigravity.RequestBody
+		body antigravity.CloudCodeRequest
 		want string
 	}{
 		{
 			name: "empty model",
-			body: antigravity.RequestBody{MaxTokens: 1, Messages: []antigravity.MessageParam{
-				{Role: "user", Content: []antigravity.ContentParam{{Type: "text", Text: "hi"}}},
-			}},
+			body: antigravity.CloudCodeRequest{Project: "p", Request: antigravity.GenerateRequest{Contents: content}},
 			want: "model is required",
 		},
 		{
-			name: "zero max_tokens",
-			body: antigravity.RequestBody{Model: "claude-sonnet-5", Messages: []antigravity.MessageParam{
-				{Role: "user", Content: []antigravity.ContentParam{{Type: "text", Text: "hi"}}},
-			}},
-			want: "max_tokens must be positive",
+			name: "empty project",
+			body: antigravity.CloudCodeRequest{Model: "m", Request: antigravity.GenerateRequest{Contents: content}},
+			want: "project is required",
 		},
 		{
-			name: "no messages",
-			body: antigravity.RequestBody{Model: "claude-sonnet-5", MaxTokens: 1},
-			want: "at least one message",
+			name: "no contents",
+			body: antigravity.CloudCodeRequest{Model: "m", Project: "p"},
+			want: "at least one content entry",
 		},
 		{
 			name: "bad role",
-			body: antigravity.RequestBody{
-				Model: "claude-sonnet-5", MaxTokens: 1,
-				Messages: []antigravity.MessageParam{{Role: "system", Content: []antigravity.ContentParam{{Type: "text", Text: "x"}}}},
-			},
-			want: "role",
+			body: antigravity.CloudCodeRequest{Model: "m", Project: "p", Request: antigravity.GenerateRequest{
+				Contents: []antigravity.Content{{Role: "system", Parts: []antigravity.Part{{Text: "x"}}}},
+			}},
+			want: "must be user|model",
 		},
 		{
-			name: "empty content",
-			body: antigravity.RequestBody{
-				Model: "claude-sonnet-5", MaxTokens: 1,
-				Messages: []antigravity.MessageParam{{Role: "user"}},
-			},
-			want: "no content blocks",
+			name: "empty parts",
+			body: antigravity.CloudCodeRequest{Model: "m", Project: "p", Request: antigravity.GenerateRequest{
+				Contents: []antigravity.Content{{Role: "user"}},
+			}},
+			want: "has no parts",
 		},
 	}
 	for _, tc := range cases {

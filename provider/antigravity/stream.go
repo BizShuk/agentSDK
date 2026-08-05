@@ -1,41 +1,28 @@
 package antigravity
 
-// SSE parser for the Antigravity /v1/messages stream. The wire shape mirrors
-// Anthropic's streaming Messages API:
+// SSE parser for /v1internal:streamGenerateContent?alt=sse.
 //
-//	event: message_start
-//	data: {"type":"message_start","message":{...}}
+// Every frame is a complete GenerateResponse in the same envelope the
+// blocking endpoint uses — there is no delta vocabulary, no event names,
+// and no terminal event. The stream simply ends:
 //
-//	event: content_block_start
-//	data: {"type":"content_block_start","index":0,"content_block":{...}}
+//	data: {"response":{"candidates":[{"content":{"parts":[{"text":"Hi"}]}}]}}
 //
-//	event: content_block_delta
-//	data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}
+//	data: {"response":{"candidates":[{"content":{"parts":[{"thought":true,
+//	      "text":"…","thoughtSignature":"…"}]}}]}}
 //
-//	event: content_block_stop
-//	data: {"type":"content_block_stop","index":0}
+//	data: {"response":{"candidates":[{"content":{"parts":[]},
+//	      "finishReason":"STOP"}],"usageMetadata":{…}}}
 //
-//	event: message_delta
-//	data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{...}}
-//
-//	event: message_stop
-//	data: {"type":"message_stop"}
-//
-//	event: ping
-//	data: {"type":"ping"}
-//
-//	event: error
-//	data: {"type":"error","error":{"type":"...","message":"..."}}
-//
-// provider/protocol/sse owns frame boundaries. We read the complete `data`
-// payload and keep Antigravity terminal and JSON semantics local to this
-// package. Unknown events are skipped, not failed.
+// provider/protocol/sse owns frame boundaries; the terminal semantics
+// below stay local to this package. A frame that fails to decode is
+// skipped, not fatal — a truncated or malformed frame mid-stream should
+// not discard the text already delivered.
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 
@@ -43,45 +30,18 @@ import (
 	"github.com/bizshuk/agentsdk/provider/protocol/sse"
 )
 
-// StreamEvent is one SSE event from the Antigravity stream. The fields are
-// intentionally optional — different events populate different subsets.
-type StreamEvent struct {
-	Type         string        `json:"type"`
-	Index        int           `json:"index,omitempty"`
-	ContentBlock *ContentBlock `json:"content_block,omitempty"`
-	Delta        *StreamDelta  `json:"delta,omitempty"`
-	Message      *Response     `json:"message,omitempty"`
-	Usage        *Usage        `json:"usage,omitempty"`
-	Error        *StreamError  `json:"error,omitempty"`
-}
-
-// StreamDelta is the per-event delta payload.
-type StreamDelta struct {
-	Type       string `json:"type,omitempty"`
-	Text       string `json:"text,omitempty"`
-	Thinking   string `json:"thinking,omitempty"`
-	Signature  string `json:"signature,omitempty"`
-	StopReason string `json:"stop_reason,omitempty"`
-}
-
-// StreamError is the error event payload.
-type StreamError struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
-}
-
-// StreamStop is the terminal metadata emitted by the chunk channel. The
-// runtime folds it into ModelResult.Usage / StopReason.
+// StreamStop is the terminal metadata the chunk channel cannot carry. The
+// caller reads it once the channel is drained; runtime folds it into
+// ModelResult.Usage / StopReason.
 type StreamStop struct {
 	StopReason string
-	Usage      Usage
+	Usage      core.TokenUsage
 }
 
-// ParseStream reads SSE from r and feeds core.ModelChunk events into the
-// returned channel. The terminal chunk carries Done=true.
-//
-// Returns the chunk channel and a function to retrieve the terminal
-// metadata once the channel is drained.
+// ParseStream reads SSE from r and feeds core.ModelChunk values into the
+// returned channel. The terminal chunk carries Done=true and is emitted
+// only on a clean end of stream — a transport error ends the channel
+// without it, so a caller can tell a finished turn from a broken one.
 func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *StreamStop) {
 	out := make(chan core.ModelChunk, 16)
 	stop := &StreamStop{}
@@ -89,6 +49,13 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 	go func() {
 		defer close(out)
 		decoder := sse.NewDecoder(r)
+
+		// A turn that called a tool ends "tool_use" whatever the
+		// finishReason says. Gemini reports STOP for such a turn, and
+		// that frame arrives AFTER the functionCall frame — without this
+		// flag the later frame would overwrite the verdict and the turn
+		// would read as finished.
+		sawToolUse := false
 
 		for {
 			if ctx.Err() != nil {
@@ -105,60 +72,33 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 			if payload == "" || payload == "[DONE]" {
 				continue
 			}
-			var ev StreamEvent
-			if err := json.Unmarshal([]byte(payload), &ev); err != nil {
-				continue // ignore malformed lines
+			body, err := Unwrap([]byte(payload))
+			if err != nil {
+				continue // malformed frame — keep what we already sent
 			}
-			switch ev.Type {
-			case "content_block_delta":
-				chunk, ok := reasoningAwareChunk(ev.Delta)
-				if !ok {
-					continue
+			if body.UsageMetadata != nil {
+				stop.Usage = toUsage(body.UsageMetadata)
+			}
+			if len(body.Candidates) == 0 {
+				continue
+			}
+			candidate := body.Candidates[0]
+			if candidate.FinishReason != "" && !sawToolUse {
+				stop.StopReason = StopReason(candidate.FinishReason, nil)
+			}
+			for _, chunk := range toChunks(candidate.Content.Parts) {
+				if chunk.Kind == core.PART_KIND_TOOL_USE {
+					sawToolUse = true
+					stop.StopReason = "tool_use"
 				}
 				select {
 				case out <- chunk:
 				case <-ctx.Done():
 					return
 				}
-			case "content_block_stop":
-				if ev.ContentBlock != nil && ev.ContentBlock.Type == "tool_use" {
-					select {
-					case out <- core.ModelChunk{
-						Kind: core.PART_KIND_TOOL_USE,
-						ToolUse: &core.ToolCall{
-							ID:   ev.ContentBlock.ID,
-							Name: ev.ContentBlock.Name,
-							Args: decodeArgs(ev.ContentBlock.Input),
-						},
-					}:
-					case <-ctx.Done():
-						return
-					}
-				}
-			case "message_delta":
-				if ev.Delta != nil && ev.Delta.StopReason != "" {
-					stop.StopReason = ev.Delta.StopReason
-				}
-				if ev.Usage != nil {
-					stop.Usage = *ev.Usage
-				}
-			case "error":
-				if ev.Error != nil {
-					select {
-					case out <- core.ModelChunk{
-						Kind: core.PART_KIND_PLAIN_TEXT,
-						Text: fmt.Sprintf("[antigravity error: %s]", ev.Error.Message),
-						Done: true,
-					}:
-					case <-ctx.Done():
-						return
-					}
-					return
-				}
 			}
 		}
 
-		// Terminal sentinel.
 		select {
 		case out <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Done: true}:
 		case <-ctx.Done():
@@ -168,32 +108,109 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 	return out, stop
 }
 
-func reasoningAwareChunk(delta *StreamDelta) (core.ModelChunk, bool) {
-	if delta == nil {
-		return core.ModelChunk{}, false
+// toChunks projects one frame's parts onto the chunk vocabulary. A
+// thought part yields up to two chunks — the text, then its signature —
+// because core.ModelChunk carries either text or reasoning state, and the
+// signature must survive for the next turn's continuation.
+func toChunks(parts []Part) []core.ModelChunk {
+	var out []core.ModelChunk
+	for _, p := range parts {
+		switch {
+		case p.FunctionCall != nil:
+			call := core.ToolCall{
+				ID:   p.FunctionCall.ID,
+				Name: p.FunctionCall.Name,
+				Args: p.FunctionCall.Args,
+			}
+			if call.ID == "" {
+				call.ID = p.FunctionCall.Name
+			}
+			out = append(out, core.ModelChunk{Kind: core.PART_KIND_TOOL_USE, ToolUse: &call})
+
+		case p.Thought:
+			if p.Text != "" {
+				out = append(out, core.ModelChunk{Kind: core.PART_KIND_REASONING, Text: p.Text})
+			}
+			if p.ThoughtSignature != "" {
+				out = append(out, core.ModelChunk{
+					Kind:      core.PART_KIND_REASONING,
+					Reasoning: &core.ReasoningState{Signature: p.ThoughtSignature},
+				})
+			}
+
+		case p.Text != "":
+			out = append(out, core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: p.Text})
+		}
 	}
-	switch delta.Type {
-	case "text_delta":
-		return core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: delta.Text}, delta.Text != ""
-	case "thinking_delta":
-		return core.ModelChunk{Kind: core.PART_KIND_REASONING, Text: delta.Thinking}, delta.Thinking != ""
-	case "signature_delta":
-		return core.ModelChunk{
-			Kind:      core.PART_KIND_REASONING,
-			Reasoning: &core.ReasoningState{Signature: delta.Signature},
-		}, delta.Signature != ""
-	default:
-		return core.ModelChunk{}, false
-	}
+	return out
 }
 
-func decodeArgs(raw json.RawMessage) map[string]any {
-	if len(raw) == 0 {
+// FoldStream drains a chunk channel back into a single ModelResult.
+//
+// It exists because the blocking endpoint does not return thought parts:
+// the gateway only emits reasoning over SSE. Generate therefore calls the
+// streaming endpoint for thinking models and folds the result here, so
+// callers get the same ModelResult either way.
+func FoldStream(chunks <-chan core.ModelChunk, stop *StreamStop) core.ModelResult {
+	var parts []core.Part
+
+	appendText := func(kind core.PartKind, text string) {
+		if n := len(parts); n > 0 && parts[n-1].Kind == kind && parts[n-1].ToolUse == nil {
+			parts[n-1].Text += text
+			return
+		}
+		parts = append(parts, core.Part{Kind: kind, Text: text})
+	}
+
+	for chunk := range chunks {
+		switch chunk.Kind {
+		case core.PART_KIND_TOOL_USE:
+			if chunk.ToolUse != nil {
+				call := *chunk.ToolUse
+				parts = append(parts, core.Part{Kind: core.PART_KIND_TOOL_USE, ToolUse: &call})
+			}
+		case core.PART_KIND_REASONING:
+			if chunk.Reasoning != nil {
+				// A signature-only chunk closes the reasoning part it
+				// belongs to rather than opening a new one.
+				if n := len(parts); n > 0 && parts[n-1].Kind == core.PART_KIND_REASONING {
+					parts[n-1].Reasoning = &core.ReasoningState{Signature: chunk.Reasoning.Signature}
+					continue
+				}
+				parts = append(parts, core.Part{
+					Kind:      core.PART_KIND_REASONING,
+					Reasoning: &core.ReasoningState{Signature: chunk.Reasoning.Signature},
+				})
+				continue
+			}
+			if chunk.Text != "" {
+				appendText(core.PART_KIND_REASONING, chunk.Text)
+			}
+		default:
+			if chunk.Text != "" {
+				appendText(core.PART_KIND_PLAIN_TEXT, chunk.Text)
+			}
+		}
+	}
+
+	out := core.ModelResult{Parts: parts}
+	if stop != nil {
+		out.StopReason = stop.StopReason
+		out.Usage = stop.Usage
+	}
+	if out.StopReason == "" {
+		out.StopReason = StopReason("", parts)
+	}
+	return out.NormalizeContent()
+}
+
+// decodeInline turns a base64 inlineData payload back into bytes. An
+// undecodable payload yields nil rather than an error: the rest of the
+// response is still worth delivering.
+func decodeInline(data string) []byte {
+	raw, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
 		return nil
 	}
-	var m map[string]any
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil
-	}
-	return m
+	return raw
 }

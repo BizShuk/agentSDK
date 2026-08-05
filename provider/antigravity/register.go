@@ -1,19 +1,29 @@
 package antigravity
 
 import (
+	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/provider"
 )
 
-// Compile-time: ensure *Provider satisfies provider.Adapter.
-var _ provider.Adapter = (*Provider)(nil)
+// Compile-time: ensure *Provider satisfies provider.Adapter and the
+// optional live-catalog capability.
+var (
+	_ provider.Adapter = (*Provider)(nil)
+	_ core.ModelLister = (*Provider)(nil)
+)
 
 func init() {
 	provider.Register(provider.Entry{
 		Name: "antigravity",
 		Metadata: provider.Metadata{
-			Label:              "Antigravity",
-			Note:               "Antigravity gateway",
-			APIKeyEnv:          []string{APIKeyEnvVar},
+			Label: "Antigravity",
+			Note:  "Google Cloud Code v1internal gateway (Gemini + Claude), OAuth only",
+			// No APIKeyEnv: the gateway takes a Google OAuth access
+			// token and nothing else, so an api_key credential kind is
+			// rejected during resolution rather than sent and refused
+			// upstream. An explicitly supplied Options.APIKey still
+			// reaches the adapter, for deployments fronted by a local
+			// proxy.
 			OAuthEnv:           []string{OAuthEnvVar},
 			BaseURLEnv:         BaseURLEnvVar,
 			CredentialRequired: true,

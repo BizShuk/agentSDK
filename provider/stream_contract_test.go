@@ -82,7 +82,7 @@ func TestAnthropicStreamDecodesMultilineData(t *testing.T) {
 
 func TestAntigravityStreamRejectsPartialFrame(t *testing.T) {
 	raw := antigravityDeltaFrame +
-		"data: {\"type\":\"message_stop\"}\n"
+		"data: {\"response\":{\"candidates\":[]}}\n"
 
 	chunks := drainChunks(t, parseAntigravityStream(context.Background(), strings.NewReader(raw)))
 
@@ -117,9 +117,11 @@ const (
 	anthropicTerminalFrame = "event: message_stop\n" +
 		"data: {\"type\":\"message_stop\"}\n\n"
 
-	antigravityDeltaFrame    = "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"before error\"}}\n\n"
-	antigravityTerminalFrame = "event: message_stop\n" +
-		"data: {\"type\":\"message_stop\"}\n\n"
+	// Cloud Code streams whole GenerateResponse values, not deltas, and
+	// closes without a terminal event — the last frame is simply the one
+	// carrying finishReason.
+	antigravityDeltaFrame    = "data: {\"response\":{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"before error\"}]}}]}}\n\n"
+	antigravityTerminalFrame = "data: {\"response\":{\"candidates\":[{\"content\":{\"parts\":[]},\"finishReason\":\"STOP\"}]}}\n\n"
 
 	codexDeltaFrame    = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"before error\"}\n\n"
 	codexTerminalFrame = "event: response.completed\n" +

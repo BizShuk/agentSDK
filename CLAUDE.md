@@ -21,6 +21,20 @@
 - Provider protocol codecs：`provider/protocol/sse` 只處理完整 SSE framing，不解讀
   provider terminal semantics；Google／Ollama 共用 `openaichat`，Google／Grok 共用
   `openaiimage`，其餘 vendor payload DTO 保持 local。
+- Antigravity wire：走 Google Cloud Code `v1internal`（`:generateContent`／
+  `:streamGenerateContent?alt=sse`／`:fetchAvailableModels`／`:loadCodeAssist`），
+  body 是 Cloud Code envelope 包 Gemini `GenerateContent`；Gemini 與 Claude 共用同
+  一個 envelope，family 由 model id 偵測（thinking config 大小寫、tool-call
+  signature、output-token ceiling 三者依 family 分歧）。credential 只有 OAuth
+  Bearer（`Metadata.APIKeyEnv` 為空，api_key kind 在 resolve 階段就被拒）。
+  host chain 預設 daily → prod，`ANTIGRAVITY_BASE_URL` 一旦指定即取代整條 chain；
+  只有 403/404/5xx 與 transport error 會換 host。project id 依序取
+  `WithProjectID` → `ANTIGRAVITY_PROJECT_ID` → `loadCodeAssist`（每個 Provider 最多
+  一次）→ sentinel。thinking model 的 `Generate` 走 SSE 再 fold，因為 blocking
+  endpoint 不回 thought part。tool schema 由 `schema.go` 轉成 Google dialect
+  （type 大寫、剔除 protobuf 沒有的 keyword），否則整個 request 會被拒。
+  unsigned reasoning part 不回送（gateway 驗簽），Gemini tool call 缺簽名時補
+  `skip_thought_signature_validator`。
 - Provider media capabilities：`provider.ImageGenerator`、`provider.VideoGenerator`、
   `provider.MusicGenerator`、`provider.Transcriber`（STT）與
   `provider.SpeechGenerator`（TTS；optional `provider.SpeechStreamer` 回
@@ -123,7 +137,7 @@ agentsdk/
 │   │   └── openaiimage/              # Google/Grok 共用 /images/generations JSON codec + bounded response/error
 │   ├── utils/                        # provider 共用 utilities：live model catalog helper（Fetch/DecodeIDList/Merge）
 │   ├── anthropic/                    # anthropic-sdk-go adapter
-│   ├── antigravity/                  # adapter：Google Cloud Antigravity OAuth
+│   ├── antigravity/                  # adapter：Google Cloud Code v1internal（Gemini + Claude），OAuth-only
 │   ├── codex/                        # adapter：OpenAI Codex OAuth
 │   ├── elevenlabs/                   # adapter：ElevenLabs STT/TTS（audio-only，New 為 nil、無 chat surface）
 │   ├── google/                       # stdlib HTTP adapter
@@ -326,7 +340,7 @@ JSONL 對外 envelope 由 `agent/wire` 擁有，經
 | root CLI subcommands      | `agentsdk/cmd`：`NewWizardCommand`（`wizard`/`w` 設定產生器）、`NewProviderCommand`（root cobra `provider` smoke-test CLI；打 `core.Provider.Generate` / `core.StreamProvider.Stream` 不走 Engine；`--list-models` 優先打 live `core.ModelLister`,失敗 fallback `Entry.Catalog`,audio-only entry 改由 speech client 取得 lister,無 chat surface 的 prompt path 回報該 provider 實際支援的 capabilities）                                                                                                                                  |
 | authentication            | 外部 module `github.com/bizshuk/auth`：只由 `provider/credential` 消費；API 契約見該 repo                                                                                                                                                                                                                                                                                                                          |
 | proxy                     | 外部 repo `github.com/bizshuk/proxy`：本 repo 無目錄、無 require、無 import                                                                                                                                                                                                                                                                                                                                        |
-| provider adapters         | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity,elevenlabs}`：前七者實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`）；Google/Grok/MiniMax 另實作 `provider.ImageGenerator`（前兩者走 `openaiimage` codec，MiniMax 是自有 `/v1/image_generation` transport），MiniMax 另實作 `provider.VideoGenerator` / `provider.MusicGenerator` / `provider.SpeechGenerator`；ElevenLabs 是 audio-only（`New` 為 nil）：`provider.Transcriber` + `provider.SpeechGenerator` + `provider.SpeechStreamer`；ElevenLabs 與 MiniMax 的 `*SpeechProvider` 另實作 `provider.VoiceLister`；vision 輸入（`PART_KIND_IMAGE`）由全部 chat adapter 編碼進 request——anthropic/antigravity 用 `image` source block，grok 與 `openaichat` codec（google/ollama）用 `image_url` content array，codex 用 `input_image`，minimax 用 content blocks；除 codex/antigravity 外皆另實作 optional `core.ModelLister`（ElevenLabs 掛在 `*SpeechProvider` 上，非 chat client）。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal |
+| provider adapters         | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity,elevenlabs}`：前七者實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`）；Google/Grok/MiniMax 另實作 `provider.ImageGenerator`（前兩者走 `openaiimage` codec，MiniMax 是自有 `/v1/image_generation` transport），MiniMax 另實作 `provider.VideoGenerator` / `provider.MusicGenerator` / `provider.SpeechGenerator`；ElevenLabs 是 audio-only（`New` 為 nil）：`provider.Transcriber` + `provider.SpeechGenerator` + `provider.SpeechStreamer`；ElevenLabs 與 MiniMax 的 `*SpeechProvider` 另實作 `provider.VoiceLister`；vision 輸入（`PART_KIND_IMAGE`）由全部 chat adapter 編碼進 request——anthropic 用 `image` source block，antigravity 用 Gemini `inlineData`，grok 與 `openaichat` codec（google/ollama）用 `image_url` content array，codex 用 `input_image`，minimax 用 content blocks；除 codex 外皆另實作 optional `core.ModelLister`（ElevenLabs 掛在 `*SpeechProvider` 上，非 chat client；antigravity 走 `/v1internal:fetchAvailableModels`）。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal |
 
 ## 開發與驗證 (Development and Verification)
 
