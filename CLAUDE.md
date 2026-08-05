@@ -43,6 +43,14 @@
   `sse.NewBoundedDecoder(r, MAX_STREAM_FRAME_BYTES)` 取代預設 1MiB 上限;
   `core.ModelChunk` 也因此新增 `Image`／`ImageMIME`——原本 `Kind` 可宣告
   `PART_KIND_IMAGE` 卻無欄位承載,image 會被靜默丟棄。
+  `provider.ImageGenerator` 由 `antigravity.ImageProvider` 以`同一個 chat
+  surface` 實作(gateway 沒有影像端點,與 google/grok 的 `openaiimage`、MiniMax 的
+  `/v1/image_generation` 機制不同),預設 model `gemini-3.1-flash-image`,
+  無 `ImageBaseURLEnv`;`Provider.generateWith` 是共用 transport 的 per-request
+  model 縫,讓 image 與 chat 共用 session／project cache。`Size`/`Quality`/
+  `Background` 等 chat surface 無法表達的欄位一律`明確拒收`不靜默忽略,
+  `SubjectReferences` 則原生支援(i2i 就是同一則訊息多一個 `inlineData` part,
+  但只收 inline bytes、拒收 URL),`Count` 以重複請求滿足並以 `MAX_IMAGE_COUNT` 設限。
 - Provider media capabilities：`provider.ImageGenerator`、`provider.VideoGenerator`、
   `provider.MusicGenerator`、`provider.Transcriber`（STT）與
   `provider.SpeechGenerator`（TTS；optional `provider.SpeechStreamer` 回

@@ -74,6 +74,16 @@ var CATALOG = []catalogEntry{
 	{"gemini-3.1-pro-high", "gemini-pro", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
 	{"gemini-3.1-pro-low", "gemini-pro", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
 
+	// Image-output Gemini, and the default of the ImageGenerator
+	// capability. It answers an ordinary chat turn with an inlineData
+	// part, so it is listed here rather than in a separate image catalog.
+	//
+	// The limits follow the Gemini family; MaxTokens is nominal for a
+	// model whose output is a picture, and was not probed separately
+	// because every probe of this model spends image quota that takes
+	// days to reset.
+	{"gemini-3.1-flash-image", "gemini-image", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
+
 	// Claude family.
 	{"claude-sonnet-4-6", "claude-sonnet", CLAUDE_CONTEXT_WINDOW, CLAUDE_MAX_OUTPUT, claudeInput()},
 	{"claude-opus-4-6-thinking", "claude-opus", CLAUDE_CONTEXT_WINDOW, CLAUDE_MAX_OUTPUT, claudeInput()},

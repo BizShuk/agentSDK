@@ -229,7 +229,9 @@ func TestNewBuildsAProvider(t *testing.T) {
 }
 
 func TestImageCapabilitiesAreExplicit(t *testing.T) {
-	for _, name := range []string{"google", "grok", "minimax"} {
+	// antigravity has no image endpoint; it reaches the capability through
+	// its own chat surface, which is exactly what the Entry factory is for.
+	for _, name := range []string{"google", "grok", "minimax", "antigravity"} {
 		t.Run(name, func(t *testing.T) {
 			entry, ok := provider.Lookup(name)
 			require.True(t, ok)
@@ -237,7 +239,7 @@ func TestImageCapabilitiesAreExplicit(t *testing.T) {
 			assert.Contains(t, entry.Capabilities(), provider.CAPABILITY_IMAGE_GENERATE)
 		})
 	}
-	for _, name := range []string{"anthropic", "antigravity", "codex", "ollama"} {
+	for _, name := range []string{"anthropic", "codex", "ollama"} {
 		t.Run(name, func(t *testing.T) {
 			entry, ok := provider.Lookup(name)
 			require.True(t, ok)

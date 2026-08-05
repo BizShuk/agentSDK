@@ -6,10 +6,12 @@ import (
 )
 
 // Compile-time: ensure *Provider satisfies provider.Adapter and the
-// optional live-catalog capability.
+// optional live-catalog capability, and that the image capability is
+// reachable through the registry's shared contract.
 var (
-	_ provider.Adapter = (*Provider)(nil)
-	_ core.ModelLister = (*Provider)(nil)
+	_ provider.Adapter        = (*Provider)(nil)
+	_ core.ModelLister        = (*Provider)(nil)
+	_ provider.ImageGenerator = (*ImageProvider)(nil)
 )
 
 func init() {
@@ -30,6 +32,11 @@ func init() {
 		},
 		New: func(cfg provider.ResolvedConfig) (provider.Adapter, error) {
 			return New(cfg)
+		},
+		// No ImageBaseURLEnv: image generation runs on the same
+		// v1internal host as chat, so it resolves the same base URL.
+		NewImage: func(cfg provider.ResolvedConfig) (provider.ImageGenerator, error) {
+			return NewImageGenerator(cfg)
 		},
 		Catalog: DefaultCatalog,
 	})

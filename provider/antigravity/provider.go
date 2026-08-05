@@ -133,13 +133,23 @@ func (p *Provider) WithProjectID(id string) *Provider {
 // asking it for a reasoning model would return an answer with its
 // reasoning — and the signature the next turn needs — missing.
 func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.ModelResult, error) {
-	body, err := p.buildBody(ctx, req)
+	return p.generateWith(ctx, req, p.model)
+}
+
+// generateWith runs one turn against an explicit model.
+//
+// The model is a parameter rather than only a field because the image
+// capability drives this same chat surface with its own model id, and it
+// must reuse this client's session id, project cache and host chain — a
+// second Provider would re-run loadCodeAssist and break prompt caching.
+func (p *Provider) generateWith(ctx context.Context, req core.ModelRequest, model string) (core.ModelResult, error) {
+	body, err := p.buildBody(ctx, req, model)
 	if err != nil {
 		return core.ModelResult{}, err
 	}
 
-	if isThinkingModel(p.model) {
-		resp, err := p.dispatch(ctx, PATH_STREAM, body, req.Auth, "text/event-stream")
+	if isThinkingModel(model) {
+		resp, err := p.dispatch(ctx, PATH_STREAM, body, req.Auth, "text/event-stream", model)
 		if err != nil {
 			return core.ModelResult{}, err
 		}
@@ -148,7 +158,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 		return FoldStream(chunks, stop), nil
 	}
 
-	raw, err := p.send(ctx, PATH_GENERATE, body, req.Auth, "")
+	raw, err := p.send(ctx, PATH_GENERATE, body, req.Auth, "", model)
 	if err != nil {
 		return core.ModelResult{}, err
 	}
@@ -161,11 +171,11 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 
 // Stream implements core.StreamProvider.
 func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan core.ModelChunk, error) {
-	body, err := p.buildBody(ctx, req)
+	body, err := p.buildBody(ctx, req, p.model)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := p.dispatch(ctx, PATH_STREAM, body, req.Auth, "text/event-stream")
+	resp, err := p.dispatch(ctx, PATH_STREAM, body, req.Auth, "text/event-stream", p.model)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +200,7 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 
 // buildBody resolves the project, assembles the envelope, validates it,
 // and marshals it once so every fallback attempt reuses the same bytes.
-func (p *Provider) buildBody(ctx context.Context, req core.ModelRequest) ([]byte, error) {
+func (p *Provider) buildBody(ctx context.Context, req core.ModelRequest, model string) ([]byte, error) {
 	// Discovery runs under the caller's context and is cached after the
 	// first hit; a pinned id skips it entirely.
 	project, err := p.ProjectID(ctx, req.Auth)
@@ -201,7 +211,7 @@ func (p *Provider) buildBody(ctx context.Context, req core.ModelRequest) ([]byte
 	if requestID == "" {
 		requestID = uuid.NewString()
 	}
-	envelope, err := buildRequest(req, p.model, project, p.sessionID, "agent-"+requestID)
+	envelope, err := buildRequest(req, model, project, p.sessionID, "agent-"+requestID)
 	if err != nil {
 		return nil, err
 	}
@@ -219,18 +229,19 @@ func (p *Provider) buildBody(ctx context.Context, req core.ModelRequest) ([]byte
 // transport
 // ---------------------------------------------------------------------------
 
-// post marshals body and returns the decoded response bytes.
+// post marshals body and returns the decoded response bytes. Discovery
+// calls carry no model, so they pass the client's own.
 func (p *Provider) post(ctx context.Context, path string, body any, override core.Auth, accept string) ([]byte, error) {
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("antigravity: marshal: %w", err)
 	}
-	return p.send(ctx, path, raw, override, accept)
+	return p.send(ctx, path, raw, override, accept, p.model)
 }
 
 // send performs the request and buffers the response body.
-func (p *Provider) send(ctx context.Context, path string, raw []byte, override core.Auth, accept string) ([]byte, error) {
-	resp, err := p.dispatch(ctx, path, raw, override, accept)
+func (p *Provider) send(ctx context.Context, path string, raw []byte, override core.Auth, accept, model string) ([]byte, error) {
+	resp, err := p.dispatch(ctx, path, raw, override, accept, model)
 	if err != nil {
 		return nil, err
 	}
@@ -245,14 +256,14 @@ func (p *Provider) send(ctx context.Context, path string, raw []byte, override c
 // are the shapes "this channel does not serve you" takes. A 400 or 429 is
 // about the request or the account, and retrying it elsewhere would just
 // spend the quota twice.
-func (p *Provider) dispatch(ctx context.Context, path string, raw []byte, override core.Auth, accept string) (*http.Response, error) {
+func (p *Provider) dispatch(ctx context.Context, path string, raw []byte, override core.Auth, accept, model string) (*http.Response, error) {
 	var lastErr error
 	for _, host := range p.hosts {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, host+path, bytes.NewReader(raw))
 		if err != nil {
 			return nil, err
 		}
-		if err := p.applyHeaders(req, override, accept); err != nil {
+		if err := p.applyHeaders(req, override, accept, model); err != nil {
 			return nil, err
 		}
 		resp, err := p.client.Do(req)
@@ -297,7 +308,7 @@ func statusError(host string, code int, body []byte) error {
 //
 // override is the per-call core.ModelRequest.Auth, merged on top of the
 // credential bound at construction; a zero override changes nothing.
-func (p *Provider) applyHeaders(req *http.Request, override core.Auth, accept string) error {
+func (p *Provider) applyHeaders(req *http.Request, override core.Auth, accept, model string) error {
 	a := p.auth.Merge(override)
 	token := a.Token()
 	if token == "" {
@@ -313,7 +324,7 @@ func (p *Provider) applyHeaders(req *http.Request, override core.Auth, accept st
 	if accept != "" {
 		req.Header.Set("Accept", accept)
 	}
-	if isClaudeModel(p.model) && isThinkingModel(p.model) {
+	if isClaudeModel(model) && isThinkingModel(model) {
 		req.Header.Set("anthropic-beta", INTERLEAVED_THINKING_BETA)
 	}
 	for k, v := range a.Headers {
