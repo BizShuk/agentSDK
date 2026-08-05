@@ -14,21 +14,44 @@ import "github.com/bizshuk/agentsdk/core"
 // extended thinking / chain-of-thought output.
 func DefaultCatalog() []core.ModelSpec {
 	return []core.ModelSpec{
-		// Claude family (Anthropic-Messages path).
-		{ID: "claude-opus-4-8", Family: "claude-opus", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE},
-			ContextWindow: 200000, MaxTokens: 32000},
-		{ID: "claude-sonnet-5", Family: "claude-sonnet", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE},
-			ContextWindow: 200000, MaxTokens: 8192},
+		// Gemini family (Flash & Pro tiers with thinking support)
+		{ID: "gemini-3.6-flash-high", Family: "gemini-flash", Reasoning: true,
+			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
+			ContextWindow: 1048576, MaxTokens: 65536},
+		{ID: "gemini-3.6-flash-medium", Family: "gemini-flash", Reasoning: true,
+			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
+			ContextWindow: 1048576, MaxTokens: 65536},
+		{ID: "gemini-3.6-flash-low", Family: "gemini-flash", Reasoning: true,
+			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
+			ContextWindow: 1048576, MaxTokens: 65536},
+		{ID: "gemini-3.5-flash-high", Family: "gemini-flash", Reasoning: true,
+			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
+			ContextWindow: 1048576, MaxTokens: 65536},
+		{ID: "gemini-3.5-flash-medium", Family: "gemini-flash", Reasoning: true,
+			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
+			ContextWindow: 1048576, MaxTokens: 65536},
+		{ID: "gemini-3.5-flash-low", Family: "gemini-flash", Reasoning: true,
+			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
+			ContextWindow: 1048576, MaxTokens: 65536},
+		{ID: "gemini-3.1-pro-high", Family: "gemini-pro", Reasoning: true,
+			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
+			ContextWindow: 1048576, MaxTokens: 65536},
+		{ID: "gemini-3.1-pro-low", Family: "gemini-pro", Reasoning: true,
+			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
+			ContextWindow: 1048576, MaxTokens: 65536},
 
-		// Gemini family (often served via the OpenAI-compat or
-		// Anthropic-compat path through the same gateway).
-		{ID: "gemini-2.5-pro", Family: "gemini-pro", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
-			ContextWindow: 1000000, MaxTokens: 8192},
-		{ID: "gemini-2.0-flash", Family: "gemini-flash", Reasoning: false,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO},
-			ContextWindow: 1000000, MaxTokens: 8192},
+		// Claude family
+		{ID: "claude-sonnet-4-6", Family: "claude-sonnet", Reasoning: true,
+			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE},
+			ContextWindow: 200000, MaxTokens: 64000},
+		{ID: "claude-opus-4-6-thinking", Family: "claude-opus", Reasoning: true,
+			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE},
+			ContextWindow: 200000, MaxTokens: 64000},
+
+		// GPT-OSS family
+		{ID: "gpt-oss-120b-medium", Family: "gpt-oss", Reasoning: true,
+			Input:         []core.Modality{core.MODALITY_TEXT},
+			ContextWindow: 128000, MaxTokens: 16384},
 	}
 }
+

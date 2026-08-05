@@ -32,7 +32,7 @@ import (
 	"github.com/bizshuk/agentsdk/provider"
 )
 
-const defaultModel = "claude-sonnet-5"
+const defaultModel = "gemini-3.6-flash-high"
 
 // Provider implements core.Provider against the Antigravity gateway.
 type Provider struct {

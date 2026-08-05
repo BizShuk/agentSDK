@@ -82,7 +82,7 @@ func TestGenerateAgainstFakeServer(t *testing.T) {
 	// Body sanity: model + max_tokens + a message made it across.
 	var sent map[string]any
 	require.NoError(t, json.Unmarshal(gotBody, &sent))
-	assert.Equal(t, "claude-sonnet-5", sent["model"])
+	assert.Equal(t, "gemini-3.6-flash-high", sent["model"])
 	assert.Equal(t, float64(128), sent["max_tokens"])
 	msgs, ok := sent["messages"].([]any)
 	require.True(t, ok)
