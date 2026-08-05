@@ -103,6 +103,18 @@ const (
 
 	// MAX_BODY_BYTES caps a buffered JSON response.
 	MAX_BODY_BYTES = 8 << 20
+
+	// MAX_STREAM_FRAME_BYTES raises the per-frame budget of the shared
+	// SSE decoder, whose 1 MiB default is too small here.
+	//
+	// Cloud Code does not chunk an image across frames: an image model
+	// returns the whole picture as one base64 inlineData part in a single
+	// frame. A measured gemini-3.1-flash-image reply was 1,940,896 bytes
+	// in frame 1 — over the default, so the decoder errored and the turn
+	// came back empty with no error to explain it. 8 MiB is still a
+	// bound, just one sized for the payload this endpoint actually
+	// sends.
+	MAX_STREAM_FRAME_BYTES = 8 << 20
 )
 
 // Cloud Code client metadata enums. The gateway takes these as numbers,

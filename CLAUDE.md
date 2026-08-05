@@ -38,6 +38,11 @@
   推導而非手寫,與 SSE／blocking 路由共用同一判斷,不會互相漂移；`ListModels`
   丟棄 `ContextWindow`／`MaxTokens` 為 0 的項目,濾掉 gateway 的 IDE 內部 route
   （`chat_*`／`tab_*`）——代價是新 model 需先進 `CATALOG` 才會出現在清單。
+  image generation（`gemini-*-flash-image`）整張圖以單一 base64 `inlineData`
+  part 放在`一個` SSE frame,實測達 `1.9MB`,故 antigravity 用
+  `sse.NewBoundedDecoder(r, MAX_STREAM_FRAME_BYTES)` 取代預設 1MiB 上限;
+  `core.ModelChunk` 也因此新增 `Image`／`ImageMIME`——原本 `Kind` 可宣告
+  `PART_KIND_IMAGE` 卻無欄位承載,image 會被靜默丟棄。
 - Provider media capabilities：`provider.ImageGenerator`、`provider.VideoGenerator`、
   `provider.MusicGenerator`、`provider.Transcriber`（STT）與
   `provider.SpeechGenerator`（TTS；optional `provider.SpeechStreamer` 回

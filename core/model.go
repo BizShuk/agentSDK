@@ -40,7 +40,17 @@ type ModelChunk struct {
 	Text      string          `json:"text,omitempty"`
 	Reasoning *ReasoningState `json:"reasoning,omitempty"`
 	ToolUse   *ToolCall       `json:"tool_use,omitempty"`
-	Done      bool            `json:"done"`
+
+	// Image carries decoded bytes for a PART_KIND_IMAGE chunk, mirroring
+	// Part.Image. Without it a chunk could announce PART_KIND_IMAGE in
+	// Kind and carry nothing — which is what happened: an image-
+	// generating model streaming its result had the image silently
+	// dropped, because the stream vocabulary could not express a value
+	// its own Kind enum already named.
+	Image     []byte `json:"image,omitempty"`
+	ImageMIME string `json:"image_mime,omitempty"`
+
+	Done bool `json:"done"`
 }
 
 // ModelResult is the final, folded result of one model call.

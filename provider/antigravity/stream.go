@@ -48,7 +48,7 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 
 	go func() {
 		defer close(out)
-		decoder := sse.NewDecoder(r)
+		decoder := sse.NewBoundedDecoder(r, MAX_STREAM_FRAME_BYTES)
 
 		// A turn that called a tool ends "tool_use" whatever the
 		// finishReason says. Gemini reports STOP for such a turn, and
@@ -138,6 +138,19 @@ func toChunks(parts []Part) []core.ModelChunk {
 				})
 			}
 
+		case p.InlineData != nil:
+			// Image-generating models (gemini-*-flash-image) return their
+			// output here, and they are Gemini 3+, so Generate reaches
+			// them through the SSE path — dropping this case loses the
+			// entire answer.
+			if raw := decodeInline(p.InlineData.Data); len(raw) > 0 {
+				out = append(out, core.ModelChunk{
+					Kind:      core.PART_KIND_IMAGE,
+					Image:     raw,
+					ImageMIME: p.InlineData.MIMEType,
+				})
+			}
+
 		case p.Text != "":
 			out = append(out, core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Text: p.Text})
 		}
@@ -168,6 +181,14 @@ func FoldStream(chunks <-chan core.ModelChunk, stop *StreamStop) core.ModelResul
 			if chunk.ToolUse != nil {
 				call := *chunk.ToolUse
 				parts = append(parts, core.Part{Kind: core.PART_KIND_TOOL_USE, ToolUse: &call})
+			}
+		case core.PART_KIND_IMAGE:
+			if len(chunk.Image) > 0 {
+				parts = append(parts, core.Part{
+					Kind:      core.PART_KIND_IMAGE,
+					Image:     chunk.Image,
+					ImageMIME: chunk.ImageMIME,
+				})
 			}
 		case core.PART_KIND_REASONING:
 			if chunk.Reasoning != nil {

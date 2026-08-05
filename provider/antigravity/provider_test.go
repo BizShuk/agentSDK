@@ -1,7 +1,9 @@
 package antigravity_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -212,6 +214,61 @@ func TestStreamToolCallOutranksFinishReason(t *testing.T) {
 	assert.Equal(t, "tool_use", res.StopReason)
 	require.Len(t, res.ToolCalls, 1)
 	assert.Equal(t, "get_weather", res.ToolCalls[0].Name)
+}
+
+// TestStreamCarriesGeneratedImage — an image model returns its whole
+// picture as one base64 inlineData part in a single SSE frame, and image
+// models are Gemini 3+, so Generate reaches them through the stream.
+//
+// This covers two defects that each silently produced an empty turn: the
+// chunk vocabulary had no image field, and the frame was larger than the
+// shared SSE decoder's 1 MiB default. A measured live reply was 1.9 MB,
+// so the fixture is deliberately over that default.
+func TestStreamCarriesGeneratedImage(t *testing.T) {
+	payload := bytes.Repeat([]byte{0xff, 0xd8, 0xff, 0xe0}, 400_000) // ~1.6 MB
+	encoded := base64.StdEncoding.EncodeToString(payload)
+	require.Greater(t, len(encoded), 1<<20, "fixture must exceed the default frame cap")
+
+	raw := `data: {"response":{"candidates":[{"content":{"parts":[` +
+		`{"inlineData":{"mimeType":"image/jpeg","data":"` + encoded + `"}}]}}]}}` + "\n\n" +
+		`data: {"response":{"candidates":[{"content":{"parts":[]},"finishReason":"STOP"}]}}` + "\n\n"
+
+	chunks, stop := antigravity.ParseStream(context.Background(), strings.NewReader(raw))
+	res := antigravity.FoldStream(chunks, stop)
+
+	require.Len(t, res.Parts, 1)
+	assert.Equal(t, core.PART_KIND_IMAGE, res.Parts[0].Kind)
+	assert.Equal(t, "image/jpeg", res.Parts[0].ImageMIME)
+	assert.Equal(t, payload, res.Parts[0].Image)
+	assert.Equal(t, "end_turn", res.StopReason)
+}
+
+// TestGenerateEncodesImageInput — vision input rides as inlineData, and a
+// part the adapter cannot encode would leave the model answering blind.
+func TestGenerateEncodesImageInput(t *testing.T) {
+	g := newGateway(t, func(w http.ResponseWriter, _ string) {
+		_, _ = w.Write([]byte(`{"response":{"candidates":[{"content":{"parts":[{"text":"Red"}]}}]}}`))
+	})
+
+	png := []byte{0x89, 0x50, 0x4e, 0x47}
+	p := antigravity.NewForHosts([]string{g.URL}, provider.ResolvedConfig{
+		Model: "gemini-2.5-flash",
+		Auth:  core.Auth{Bearer: "t"},
+	}).WithProjectID("proj")
+
+	_, err := p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{
+			{Kind: core.PART_KIND_IMAGE, Image: png, ImageMIME: "image/png"},
+			{Kind: core.PART_KIND_PLAIN_TEXT, Text: "what colour?"},
+		}}},
+	})
+	require.NoError(t, err)
+
+	parts := g.body()["request"].(map[string]any)["contents"].([]any)[0].(map[string]any)["parts"].([]any)
+	require.Len(t, parts, 2)
+	inline := parts[0].(map[string]any)["inlineData"].(map[string]any)
+	assert.Equal(t, "image/png", inline["mimeType"])
+	assert.Equal(t, base64.StdEncoding.EncodeToString(png), inline["data"])
 }
 
 // TestHeadersCarryClientIdentity — the gateway 403s a request that does
