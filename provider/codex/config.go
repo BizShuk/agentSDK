@@ -1,9 +1,6 @@
 package codex
 
-import (
-	"fmt"
-	"runtime"
-)
+import "github.com/bizshuk/agentsdk/provider/utils"
 
 // Codex configuration is OAuth-first — most users authenticate via ChatGPT Plus/Pro
 // credentials resolved by provider/credential. The API key path is provided
@@ -26,25 +23,32 @@ const (
 	// the chatgpt.com boundary — there is no api.openai.com alias.
 	DefaultBaseURL = "https://chatgpt.com/backend-api"
 
+	// PATH_RESPONSES is the Responses-shaped generation endpoint. It is not
+	// an alias of OpenAI's public /v1/responses: the request is rejected if
+	// it carries max_output_tokens, and store must be false.
+	PATH_RESPONSES = "/codex/responses"
+
 	// CodexOriginator identifies requests made through the Codex adapter.
 	CodexOriginator = "codex_cli_rs"
 
 	// CodexVersion is the version string the chatgpt.com endpoint expects.
-	CodexVersion = "0.125.0"
+	// It must be at least as new as the version upstream enforces for the
+	// newest models — gpt-5.6-sol answers 400 to an older one.
+	CodexVersion = "0.144.1"
+)
+
+// Client identity headers. The endpoint gates on these alongside the
+// bearer token, and answers 400 for an unrecognised originator/version pair.
+const (
+	OriginatorHeader = "originator"
+	VersionHeader    = "version"
+
+	// AccountIDHeader selects which ChatGPT account a multi-account token
+	// bills against. Absent, the endpoint picks the token's default.
+	AccountIDHeader = "ChatGPT-Account-ID"
 )
 
 // CodexUserAgent builds the User-Agent the endpoint expects.
 func CodexUserAgent() string {
-	platform := "linux"
-	switch runtime.GOOS {
-	case "darwin":
-		platform = "macos"
-	case "windows":
-		platform = "windows"
-	}
-	architecture := "x86_64"
-	if runtime.GOARCH == "arm64" {
-		architecture = "arm64"
-	}
-	return fmt.Sprintf("%s/%s (%s; %s)", CodexOriginator, CodexVersion, platform, architecture)
+	return utils.CLIUserAgent(CodexOriginator, CodexVersion)
 }

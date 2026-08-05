@@ -13,8 +13,8 @@
 // Codex CLI:
 //
 //	originator: codex_cli_rs
-//	version:    0.125.0
-//	User-Agent: codex_cli_rs/0.125.0 (<platform>; <arch>)
+//	version:    <CodexVersion>
+//	User-Agent: codex_cli_rs/<CodexVersion> (<platform>; <arch>)
 //
 // File layout:
 //

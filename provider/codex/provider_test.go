@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -115,9 +116,9 @@ func TestCodexHeaders(t *testing.T) {
 		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "x"}}}},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "codex_cli_rs", gotOriginator)
-	assert.Equal(t, "0.125.0", gotVersion)
-	assert.Contains(t, gotUA, "codex_cli_rs/0.125.0")
+	assert.Equal(t, codex.CodexOriginator, gotOriginator)
+	assert.Equal(t, codex.CodexVersion, gotVersion)
+	assert.Contains(t, gotUA, codex.CodexOriginator+"/"+codex.CodexVersion)
 	assert.Contains(t, gotUA, "; ")
 	assert.Equal(t, "acc-xyz", gotAccountID)
 }
@@ -351,10 +352,11 @@ func TestRequestBodyValidate(t *testing.T) {
 
 func TestCodexUserAgentFormat(t *testing.T) {
 	ua := codex.CodexUserAgent()
-	assert.True(t, strings.HasPrefix(ua, "codex_cli_rs/0.125.0"))
+	prefix := codex.CodexOriginator + "/" + codex.CodexVersion
+	assert.True(t, strings.HasPrefix(ua, prefix))
 	assert.Contains(t, ua, "; ")
 	// Platform / arch separators must be the literal "(" and ")".
-	assert.Regexp(t, `^codex_cli_rs/0\.125\.0 \([a-z]+; [a-z0-9_]+\)$`, ua)
+	assert.Regexp(t, `^`+regexp.QuoteMeta(prefix)+` \([a-z]+; [a-z0-9_]+\)$`, ua)
 }
 
 func TestGeneratePropagatesHTTPError(t *testing.T) {

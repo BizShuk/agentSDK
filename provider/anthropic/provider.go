@@ -56,7 +56,7 @@ func New(cfg provider.ResolvedConfig) (*Provider, error) {
 		auth:     cfg.Auth,
 		httpDoer: http.DefaultClient,
 		endpoint: resolveEndpoint(cfg.BaseURL),
-		apiVer:   "2023-06-01",
+		apiVer:   APIVersion,
 	}, nil
 }
 
@@ -198,7 +198,7 @@ func (p *Provider) applyAuthHeaders(req *http.Request, override core.Auth) {
 // base. Empty base falls back to the public Anthropic endpoint.
 func resolveEndpoint(base string) string {
 	if base == "" {
-		return "https://api.anthropic.com/v1/messages"
+		return DefaultBaseURL + PATH_MESSAGES
 	}
-	return base + "/v1/messages"
+	return base + PATH_MESSAGES
 }

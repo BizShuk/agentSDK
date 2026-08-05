@@ -13,3 +13,28 @@ const (
 	OAuthBetaHeader = "anthropic-beta"
 	OAuthBetaValue  = "oauth-2025-04-20"
 )
+
+// DirectBrowserAccessHeader opts a request out of Anthropic's
+// browser-origin refusal. The OAuth surface answers 403 without it because
+// it assumes any bearer-token caller is a first-party web client.
+const (
+	DirectBrowserAccessHeader = "anthropic-dangerous-direct-browser-access"
+	DirectBrowserAccessValue  = "true"
+)
+
+// APIVersionHeader and APIVersion pin the Messages wire contract. Anthropic
+// dates its breaking changes rather than versioning the path, so every
+// request must name the contract it was written against.
+const (
+	APIVersionHeader = "anthropic-version"
+	APIVersion       = "2023-06-01"
+)
+
+// DefaultBaseURL is the public Anthropic API root.
+const DefaultBaseURL = "https://api.anthropic.com"
+
+// Endpoint paths on the Messages surface.
+const (
+	PATH_MESSAGES     = "/v1/messages"
+	PATH_COUNT_TOKENS = "/v1/messages/count_tokens"
+)

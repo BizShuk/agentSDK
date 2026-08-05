@@ -58,7 +58,7 @@ func New(cfg provider.ResolvedConfig) (*Provider, error) {
 		baseURL:     strings.TrimRight(cfg.BaseURL, "/"),
 		auth:        cfg.Auth,
 		model:       cfg.Model,
-		imageModel:  defaultImageModel,
+		imageModel:  DefaultImageModel,
 		client:      &http.Client{Timeout: 120 * time.Second},
 		imageClient: &http.Client{Timeout: 3 * time.Minute},
 	}, nil

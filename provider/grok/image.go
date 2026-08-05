@@ -11,8 +11,6 @@ import (
 	"github.com/bizshuk/agentsdk/provider/protocol/openaiimage"
 )
 
-const defaultImageModel = "grok-imagine-image-quality"
-
 // NewImage returns xAI's OpenAI-compatible image generator.
 func NewImage(cfg provider.ResolvedConfig) (*Provider, error) {
 	imageModel := strings.TrimSpace(cfg.Model)

@@ -328,7 +328,7 @@ func translateTools(specs []core.ToolSpec) []Tool {
 
 // endpoint is the upstream path appended to baseURL.
 func (p *Provider) endpoint() string {
-	return p.baseURL + "/codex/responses"
+	return p.baseURL + PATH_RESPONSES
 }
 
 // applyHeaders sets the Codex identity headers plus auth. The set
@@ -336,8 +336,8 @@ func (p *Provider) endpoint() string {
 //
 //   - Content-Type
 //   - originator: codex_cli_rs
-//   - version:    0.125.0
-//   - User-Agent: codex_cli_rs/0.125.0 (<platform>; <arch>)
+//   - version:    <CodexVersion>
+//   - User-Agent: codex_cli_rs/<CodexVersion> (<platform>; <arch>)
 //   - ChatGPT-Account-ID (when set)
 //   - Authorization: Bearer <token>  (oauth or api key path)
 //
@@ -346,8 +346,8 @@ func (p *Provider) endpoint() string {
 func (p *Provider) applyHeaders(req *http.Request, override core.Auth) {
 	a := p.auth.Merge(override)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("originator", CodexOriginator)
-	req.Header.Set("version", CodexVersion)
+	req.Header.Set(OriginatorHeader, CodexOriginator)
+	req.Header.Set(VersionHeader, CodexVersion)
 	req.Header.Set("User-Agent", CodexUserAgent())
 	// Codex sends both credential classes in the same header.
 	if tok := a.Token(); tok != "" {
