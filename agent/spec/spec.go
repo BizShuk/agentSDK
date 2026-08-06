@@ -15,7 +15,8 @@
 //	layer 2 variant — a named field inside the block picks the
 //	                  implementation: empty string = that feature's default
 //
-// See plans/2026-07-22-agent-skeleton-config-opt-in.md.
+// See plans/2026-08-06-Refresh.md (absorbed
+// 2026-07-22-agent-skeleton-config-opt-in.md).
 package spec
 
 // Config is the whole declarative surface. Every field is serializable;

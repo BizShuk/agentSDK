@@ -7,6 +7,33 @@
 日期優先沿用來源文字；來源未標日期時，採該項目首次出現於 Git history 的日期。
 本檔記錄歷史事實，識別符可能已在後續重構中改名或移除。
 
+## 2026-08-06
+
+### 正典文件範疇清理 (Canonical docs scope cleanup)
+
+- provider adapter 的 wire 細節（antigravity Cloud Code envelope、MiniMax 五個
+  surface、ElevenLabs audio-only、Google Live / Codex Realtime handshake、vision
+  編碼形狀）由 `CLAUDE.md` 移入 `docs/providers.md`；`CLAUDE.md` 只留 capability
+  boundary 規則。
+- `provider` / `wizard` / sample / benchmark 的指令目錄由 `CLAUDE.md` 與
+  `README.md` 移入 `docs/cli.md`，正典文件只留 quick start 與指標。
+- `README.md` 的靜態 provider capability 矩陣刪除，改指向
+  `go run . provider --list`：該表已與實際不符（antigravity image 支援未反映，
+  live / translate 兩欄從未存在）。
+- `技術棧` 表的版本 pin 移除（真相是 `go.mod`）；外部 `bizshuk/proxy` 的
+  dependency 列移除。
+- 修正陳述：root binary 掛的是 `cmd.ProviderCmd` / `wizard.WizardCmd`
+  package-level var，不是 `NewProviderCommand()` / `NewWizardCommand()`；
+  `tmp/` 下不存在 `auth2api` / `cliproxyapi`。
+
+### 歷史事實（自 `CLAUDE.md` 搬入）
+
+- MiniMax 曾宣告的 `MINIMAX_OAUTH_TOKEN` 因無對應 OAuth flow、也無 auth route
+  而移除；credential kind 是 entry 內的軸，不另立 provider entry。
+- `core/` 的檔名曾使用 `input`、`effect`、`step`、`thinking`、`port` 等需先讀
+  內容才能理解的名稱，後改為直接對應公開詞彙。
+- `provider/sample` 已整併進 `cmd/provider/`。
+
 ## 2026-08-03
 
 ### Audio capability（STT/TTS）+ ElevenLabs / MiniMax speech adapters
@@ -205,7 +232,8 @@
 
 ### Agent skeleton `M1`–`M7`
 
-計畫：[`plans/2026-07-22-agent-skeleton-config-opt-in.md`](../plans/2026-07-22-agent-skeleton-config-opt-in.md)。
+計畫：[`plans/2026-08-06-Refresh.md`](../plans/2026-08-06-Refresh.md)（原
+`2026-07-22-agent-skeleton-config-opt-in.md`，已整併）。
 
 - `M1`：`agent/spec` 提供 `Config`、八個 feature blocks、`Choice` metadata、
   tier expansion、validation 與 JSON encoding。
@@ -243,7 +271,8 @@
 
 ### Harness/UX skeleton
 
-計畫歷史：[`plans/2026-08-03-refresh.md`](../plans/2026-08-03-refresh.md)。
+計畫歷史：[`plans/2026-08-06-Refresh.md`](../plans/2026-08-06-Refresh.md)（原
+`2026-08-03-refresh.md`，已整併）。
 來源調查：[`docs/memory/2026-07-19-agent-client-feature-catalog.md`](memory/2026-07-19-agent-client-feature-catalog.md)。
 
 - `sample/code-agent` 接上 TUI、wire、hooks、permission、session、skills、commands、

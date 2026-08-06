@@ -6,107 +6,35 @@ Go Agentic Loop SDK：以`宣告式設定`組裝目標導向控制迴圈 (Goal-d
 
 五大支柱對應到頂層 package,架構即文件:
 
-| 支柱        | 套件                       | 角色                                                                                         |
+| 支柱 | 套件 | 角色 |
 | ----------- | -------------------------- | -------------------------------------------------------------------------------------------- |
-| 1. 認知架構 | `core` (ObservationSource) | 觀察來源 port (Observations channel)                                                          |
-| 2. 系統韌性 | `memory/`                  | Window / Compactor / Checkpoint                                                               |
-| 3. 工具生態 | `tool/`                    | `core.Tool` / RawMessage converter / Registry / allowlist-aware 內建工具 factory / Sandbox   |
-| 4. 推理     | `reasoning/`               | `NewRule` + 6 種 DecisionRule (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router) |
-| 5. 組裝     | `agent/` + `agent/spec/`   | 宣告式 `Config` → 7 stage pipeline → `*agent.Engine`；`prompt/` 管進 context window 的內容   |
+| 1. 認知架構 | `core` (ObservationSource) | 觀察來源 port (Observations channel) |
+| 2. 系統韌性 | `memory/` | Window / Compactor / Checkpoint |
+| 3. 工具生態 | `tool/` | `core.Tool` / RawMessage converter / Registry / allowlist-aware 內建工具 factory / Sandbox |
+| 4. 推理 | `reasoning/` | `NewRule` + 6 種 DecisionRule (ReAct / Planner-Executor / Executor-Critic / CoT / Reflexion / Router) |
+| 5. 組裝 | `agent/` + `agent/spec/` | 宣告式 `Config` → 7 stage pipeline → `*agent.Engine`；`prompt/` 管進 context window 的內容 |
 
 `core/` 是純狀態機 (state + event + instruction + reasoning),只依賴 stdlib,連 gosdk 都不 import。root module 的 `runtime/loop.go` 是 shell,負責 dispatch instructions 到綁定的 port (model / tools / store / notifier)。
 
-圖片、影片、音樂、語音 (TTS) 與轉錄 (STT) 分別是 `provider.ImageGenerator`、
-`provider.VideoGenerator`、`provider.MusicGenerator`、`provider.SpeechGenerator`、
-`provider.Transcriber` optional capability，不進 agent runtime 的 `core.Provider`。
-caller 必須明確走 `NewImage`、`NewVideo`、`NewMusic`、`NewSpeech` 或
-`NewTranscriber`；不支援的 adapter 回傳可用
-`errors.Is(err, provider.ErrUnsupportedCapability)` 判斷的錯誤：
+完整目錄樹、每個 package 的 ownership 與架構不變式由 [`CLAUDE.md`](CLAUDE.md)
+單一擁有，本檔不維護第二份。
 
-### Provider Capabilities
+### 多模態能力 (Multimodal Capabilities)
 
-| Provider     | Chat | Vision read | Image | Video | Music | Speech (TTS) | STT | Voice list | Live catalog |
-| ------------ | ---- | ----------- | ----- | ----- | ----- | ------------ | --- | ---------- | ------------ |
-| `anthropic`  | V    | V           | -     | -     | -     | -            | -   | -          | V            |
-| `antigravity`| V    | V           | -     | -     | -     | -            | -   | -          | -            |
-| `codex`      | V    | V           | -     | -     | -     | -            | -   | -          | -            |
-| `elevenlabs` | -    | -           | -     | -     | -     | V (+stream)  | V   | V          | V            |
-| `google`     | V    | V           | V     | -     | -     | -            | -   | -          | V            |
-| `grok`       | V    | V           | V     | -     | -     | -            | -   | -          | V            |
-| `minimax`    | V    | V           | V     | V     | V     | V            | -   | V          | V            |
-| `ollama`     | V    | V           | -     | -     | -     | -            | -   | -          | V            |
+圖片、影片、音樂、語音 (TTS)、轉錄 (STT)、realtime live session 與翻譯都是
+`provider` layer 的 optional capability，`不`進 agent runtime 的 `core.Provider`——
+runtime 只需要 blocking `Generate`。caller 明確走 `provider.NewImage` / `NewVideo` /
+`NewMusic` / `NewSpeech` / `NewTranscriber` / `NewLive` / `NewTranslate`；不支援的
+adapter 回傳可用 `errors.Is(err, provider.ErrUnsupportedCapability)` 判斷的錯誤。
 
-- `Vision read`：chat request 可攜帶 image part（各 adapter 編成自家 wire 形狀）
-- `Image`：MiniMax 同時支援 t2i 與 i2i（`ImageRequest.SubjectReferences`）
-- `Voice list`：`provider.VoiceLister`，從 `NewSpeech` 回傳值以 type assertion 取得
-- `Live catalog`：`core.ModelLister`；沒有的 provider 讀 static `Entry.Catalog`
+哪個 provider 支援哪些 surface 由 registry 產生，不在文件裡維護靜態副本：
 
-### Capability Interfaces
-
-每個 capability 一個小 interface；optional capability 不併進 `core.Provider`，
-不支援的 provider 在 factory 回 typed `ErrUnsupportedCapability`：
-
-| Capability       | Interface                  | Method                                                      | 取得方式                        |
-| ---------------- | -------------------------- | ----------------------------------------------------------- | ------------------------------- |
-| Chat (blocking)  | `core.Provider`            | `Generate(ctx, ModelRequest) (ModelResult, error)`          | `provider.New`                  |
-| Chat (streaming) | `core.StreamProvider`      | `Stream(ctx, ModelRequest) (<-chan ModelChunk, error)`      | 同上（`Adapter` = 兩者合體）    |
-| Live catalog     | `core.ModelLister`         | `ListModels(ctx) ([]ModelSpec, error)`                      | type assertion                  |
-| Image (t2i/i2i)  | `provider.ImageGenerator`  | `GenerateImage(ctx, ImageRequest) (ImageResult, error)`     | `provider.NewImage`             |
-| Video            | `provider.VideoGenerator`  | `MaxPromptLength() int`；`GenerateVideo(ctx, VideoRequest) (VideoResult, error)` | `provider.NewVideo` |
-| Music            | `provider.MusicGenerator`  | `GenerateMusic(ctx, MusicRequest) (MusicResult, error)`     | `provider.NewMusic`             |
-| Speech (TTS)     | `provider.SpeechGenerator` | `GenerateSpeech(ctx, SpeechRequest) (SpeechResult, error)`  | `provider.NewSpeech`            |
-| Speech streaming | `provider.SpeechStreamer`  | `StreamSpeech(ctx, SpeechRequest) (io.ReadCloser, error)`   | `NewSpeech` 值 type assertion   |
-| Voice list       | `provider.VoiceLister`     | `ListVoices(ctx, VoiceListRequest) (VoiceListResult, error)` | `NewSpeech` 值 type assertion  |
-| Transcribe (STT) | `provider.Transcriber`     | `Transcribe(ctx, TranscribeRequest) (TranscribeResult, error)` | `provider.NewTranscriber`    |
-
-streaming 與 voice list 這類「同一 client 的附加能力」以 type assertion 發現，
-credential decorator 包裝後仍保留。
-
-```go
-generator, err := provider.NewImage("grok", provider.Options{})
-if err != nil {
-	return err
-}
-result, err := generator.GenerateImage(ctx, provider.ImageRequest{
-	Prompt:         "新加坡雨夜的電影感街景",
-	ResponseFormat: "b64_json",
-})
+```bash
+go run . provider --list      # provider × capability × auth env
 ```
 
-binary 仍需 blank-import 目標 adapter（或 `provider/all`）讓它註冊。URL result 可能是
-短效連結；要持久化時由 caller 複製資產。
-
-MiniMax 的 video adapter 支援 text / image / startend / subject 四種 mode，負責
-asynchronous polling、authenticated download 與 MP4 verification；caller 提供
-`VideoRequest.OutputPath`，完成後取得 `VideoResult.Path`。
-
-MiniMax 的 music adapter 提供 non-streaming text-to-music 與 cover generation。
-以下是 user-supplied Python request 的 Go 等價寫法：
-
-```go
-generator, err := provider.NewMusic("minimax", provider.Options{})
-if err != nil {
-	return err
-}
-result, err := generator.GenerateMusic(ctx, provider.MusicRequest{
-	Model:        "music-cover",
-	AudioURL:     "https://example.com/original-song.mp3",
-	Prompt:       "Jazz, smooth, late night lounge, saxophone",
-	OutputFormat: "url",
-	AudioSetting: provider.MusicAudioSetting{
-		SampleRate: 44100,
-		Bitrate:    256000,
-		Format:     "mp3",
-	},
-})
-```
-
-`result.Audio.URL` 是短效連結；需要 durable asset 時由 caller 及時下載保存。
-
-`agentsdk provider` 子指令（`go run . provider --list`）直接展示 provider、auth mode 與
-`chat / image / music / speech / transcribe` API type matrix，`--type` 可直接打各 surface。speech synthesis、
-transcription 與 audio-chat 是三個不同 contract，分別走 `SpeechGenerator`、
-`Transcriber` 與（尚未有 adapter 支援的）audio-chat。
+每個 capability 的 interface 與方法簽名、各 adapter 的 endpoint 與 wire 細節見
+[`docs/providers.md`](docs/providers.md)；指令用法見 [`docs/cli.md`](docs/cli.md)。
 
 ## 怎麼用 (Getting Started)
 
@@ -193,55 +121,29 @@ go run . w --list model.provider # 列出單一欄位的選項
 | `WithSink` / `WithNotifier` | 呈現與通知的實作 |
 | `WithCustomize` | 最終逃生艙：拿到組好的 `*agent.Engine` 再改 |
 
-## 模組結構
-
-五大支柱對應到頂層 package（見上表）。完整目錄樹、每個 package 的 ownership 與
-架構不變式由 [`CLAUDE.md`](CLAUDE.md) 擁有，不在此重複——重複的兩份樹已經開始分岔。
-
-
 ## 執行範例
 
-`sample/code-agent` — 全能力組合，以宣告 `agent.Config` 取代手工接線：
+| Sample | 展示什麼 |
+| ------ | -------- |
+| `sample/code-agent` | 全能力組合：TUI / print / stream-json / session 續跑，以宣告 `agent.Config` 取代手工接線 |
+| `sample/log-agent-v2` | scheduler 建立 batch 後透過 `agent.WithListener` 進入完整 agent lifecycle |
+| `sample/logdoctor-agent` | 比較用的精簡 `agent.OnceStream` 路徑 |
+| `sample/skeleton-agent` | `wizard --print-go` 輸出的單檔對應範本 |
+| `sample/demo-*` | memory / middleware / reasoning strategy 的單一元件展示 |
 
 ```bash
 cd sample/code-agent
-go run . --fake -p "看看這個專案"   # print 模式
-go run . --fake --json -p "test"   # stream-json envelope
-go run . --fake --sessions         # session 列表
-go run . --fake                     # 互動 TUI
+go run . --fake -p "看看這個專案"   # 不打 provider 的 print 模式
 ```
 
-`sample/log-agent-v2` — scheduler 先建立 batch，再透過 `agent.WithListener`
-進入完整 agent lifecycle：
-
-```bash
-export MINIMAX_API_KEY=...
-go run ./sample/log-agent-v2 --interval 1m
-```
-
-第一次掃描會先等待一分鐘；每個非空 batch 都使用新的 `agent.Run`，成功後才
-提交 cursor。完整行為見
-[`sample/log-agent-v2/README.md`](sample/log-agent-v2/README.md)。
-
-`sample/logdoctor-agent` — 比較用的精簡 `agent.OnceStream` 路徑：
-
-```bash
-cd sample/logdoctor-agent
-export MINIMAX_API_KEY=...
-go run . watch
-```
-
-診斷 Markdown 寫入 stdout；canonical `core.StreamEvent` JSONL 寫入 stderr：
-
-```json
-{"kind":"run_start","run_id":"once-..."}
-{"kind":"message","run_id":"once-...","turn":1,"text":"# Diagnosis\n..."}
-{"kind":"run_end","run_id":"once-...","status":"completed"}
-```
+各 sample 的完整 flag 與環境變數見 [`docs/cli.md`](docs/cli.md)。
 
 ## 規格與歷史
 
 - 現行技術契約：[`CLAUDE.md`](CLAUDE.md)
+- Provider adapter 能力與 wire 細節：[`docs/providers.md`](docs/providers.md)
+- 指令參考：[`docs/cli.md`](docs/cli.md)
+- 領域術語：[`docs/terminology.md`](docs/terminology.md)
 - 歷史變更與已完成里程碑：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)
 - 尚未完成的工作：[`README.todo`](README.todo)
 - 已實作規格：

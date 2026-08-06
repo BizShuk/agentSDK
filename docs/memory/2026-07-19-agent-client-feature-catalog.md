@@ -125,7 +125,7 @@ Monorepo 分四個 package，依賴方向嚴格單向：`coding-agent → agent-
 
 ## 7. agentsdk 元件銜接（as-built，2026-07-19 skeleton）
 
-依本目錄同日落地的實際銜接；模組設計歷史見 [`plans/2026-08-03-refresh.md`](../../plans/2026-08-03-refresh.md)。
+依本目錄同日落地的實際銜接；模組設計歷史見 [`plans/2026-08-06-Refresh.md`](../../plans/2026-08-06-Refresh.md)（原 `2026-08-03-refresh.md`，已整併）。
 
 ### 7.1 組裝銜接（composition root 做 DI；harness package 只依賴 core）
 

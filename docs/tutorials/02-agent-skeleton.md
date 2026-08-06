@@ -589,7 +589,7 @@ agent.WithCustomize(func(e *runtime.Engine) error {
 ## 後續閱讀
 
 - [`docs/tutorials/01-getting-started.md`](01-getting-started.md)：core / runtime / reasoning / tool 的底層概觀
-- [`plans/2026-07-22-agent-skeleton-config-opt-in.md`](../../plans/2026-07-22-agent-skeleton-config-opt-in.md)：骨架的設計權衡與決策紀錄
+- [`plans/2026-08-06-Refresh.md`](../../plans/2026-08-06-Refresh.md)：骨架的設計權衡與決策紀錄（原 `2026-07-22-agent-skeleton-config-opt-in.md`，已整併）
 - [`docs/terminology.md`](../terminology.md)：本教學出現的所有術語的單一定義
 - `agent/spec/spec_test.go`：所有不變式的測試（62 個 subtest）
 - `sample/code-agent/cmd/compose.go`：101 行的完整應用案例
