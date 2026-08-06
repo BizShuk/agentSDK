@@ -1,17 +1,20 @@
-package svc
+package provider
 
 import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/bizshuk/agentsdk/provider"
-	_ "github.com/bizshuk/agentsdk/provider/all"
 )
 
 // Music executes a non-streaming music-generation request against the target
 // provider.
 func Music(ctx context.Context, req Request, out io.Writer) error {
+	if strings.TrimSpace(req.Prompt) == "" {
+		return fmt.Errorf("prompt is required")
+	}
 	generator, err := provider.NewMusic(req.Provider, req.Options)
 	if err != nil {
 		return err

@@ -68,7 +68,7 @@ go run ./benchmark/cmd -provider minimax -model all      # chat×3, image×2, vi
 每個 model 跑哪種 kind 由 `benchmark.KindsOf` 對照 (`-list` 可預覽);
 無法驅動的 model 報 `skip`, 單一 model 失敗不會中斷整個 sweep。
 
-credential env 對照可用 `go run ./provider/sample --list` 檢視完整
+credential env 對照可用 `go run . provider --list` 檢視完整
 provider × capability × auth-env matrix。
 
 ## Result layout

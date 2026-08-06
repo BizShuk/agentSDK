@@ -34,5 +34,6 @@ type Metadata struct {
 	VideoBaseURLEnv    string
 	MusicBaseURLEnv    string
 	SpeechBaseURLEnv   string
+	LiveBaseURLEnv     string
 	CredentialRequired bool
 }

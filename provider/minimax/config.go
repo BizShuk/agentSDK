@@ -8,9 +8,6 @@ package minimax
 // APIKeyEnvVar is the standard env var for a minimax API key.
 const APIKeyEnvVar = "MINIMAX_API_KEY"
 
-// OAuthEnvVar is the standard env var for a minimax OAuth access token.
-const OAuthEnvVar = "MINIMAX_OAUTH_TOKEN"
-
 // BaseURLEnvVar lets operators point at a self-hosted or proxy-fronted
 // minimax endpoint without recompiling.
 const BaseURLEnvVar = "MINIMAX_BASE_URL"

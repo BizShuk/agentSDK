@@ -87,14 +87,51 @@
   models（bare JSON array，非 `{"data":[...]}`），scribe 不在其中，因此 STT
   static entry 於 `utils.Merge` 後補回；`scribe_v2_realtime` 是 websocket-only,
   batch STT route 會拒收,不進 catalog。
+- Provider realtime capabilities：`provider.LiveConnector`（`ConnectLive` 開啟
+  bidirectional realtime session，回 `LiveSession`：`SendText`／`SendAudio`／
+  `Receive`／`Close`，`LiveEvent` 一個 frame 可同時攜 text、audio chunk、
+  transcript 與 `TurnComplete`——caller 必須消費全部欄位）與
+  `provider.Translator`（blocking `Translate` fold 一個 turn；optional
+  `provider.TranslateStreamer` 以 channel 回增量 chunk，type assertion 發現，
+  `WithTranslateDecorator` 保留能力）。`Entry.NewLive` / `provider.NewLive`、
+  `Entry.NewTranslate` / `provider.NewTranslate` 是一致建構路徑
+  （`CAPABILITY_LIVE`／`CAPABILITY_TRANSLATE`），兩者共用
+  `Metadata.LiveBaseURLEnv` base override——每個註冊的 translator 都騎在同一條
+  realtime socket 上。live credential 在 connect 時解析一次（websocket
+  handshake 驗證後 session 終身有效），不逐 message 解析。第二個實作是 codex：
+  OpenAI Realtime API websocket（`wss://api.openai.com/v1/realtime?model=…`，
+  `CODEX_LIVE_BASE_URL` 覆寫，預設 model `gpt-realtime`）——這是 codex entry 唯
+  一真實使用 `OPENAI_API_KEY` 的 surface（chat surface 的 chatgpt.com backend
+  只收 OAuth），因此 adapter 對 Bearer-only credential `明確拒收`並要求
+  api_key；`ThinkingLevel`／`Translation` 因 gpt-realtime 無對應 knob 一律明確
+  拒收。handshake 是 `session.update` → `session.updated`（GA session shape：
+  `output_modalities`、`audio.input.transcription`、`audio.output.voice`），
+  `SendText` = `conversation.item.create` + `response.create`，`SendAudio` =
+  `input_audio_buffer.append`（24kHz PCM）；input transcript 只映射
+  `…transcription.completed` 不映射 delta（同時映射會讓 caller 每句收兩次），
+  `response.done` → `TurnComplete`，`speech_started` → `Interrupted`，server
+  `error` event 直接令 Receive 失敗。首個實作是 google：
+  Gemini Live API `BidiGenerateContent` websocket（`coder/websocket`；
+  `GOOGLE_LIVE_BASE_URL` 覆寫，API key 走 `?key=` query、OAuth Bearer 走
+  `Authorization` header，read limit 提為 16MiB 承載 inline PCM）。dialogue
+  預設 model `gemini-3.1-flash-live-preview`（`thinkingLevel`、prebuilt voice、
+  input/output transcription 皆映射進 setup），translation 是同一條 socket 加
+  `generationConfig.translationConfig`，預設 model
+  `gemini-3.5-live-translate-preview`；兩個 live model 刻意`不`進
+  `DefaultCatalog`——它們沒有 REST chat surface，進 catalog 會讓 benchmark/gen
+  產生打不通的套件。
 - Reasoning content boundary：`core.Part` 以 `PART_KIND_REASONING` 表示可攜 reasoning
   文字，`ReasoningState` 保存 opaque continuation metadata。`ModelResult.Parts` 是有序
   canonical assistant content；無法表示 metadata 的 wire path 必須明確報錯。
-- `provider/sample` 是 root module 內的 package-local executable；`--list` 產生
-  provider × chat/image/music/speech/transcribe × auth-env matrix。
-  Chat/image/music 分別走 `provider.New` / `NewImage` / `NewMusic`；
-  speech/transcribe 走 `provider.NewSpeech` / `NewTranscriber`
-  （TTS/STT 直接存取），不支援的 provider 回 typed `ErrUnsupportedCapability`。
+- `cmd/provider/` 是 `provider` 子指令的 per-type handler package（原
+  `provider/sample` 已整併刪除）：一檔一 type（chat/image/music/speech/
+  transcribe）+ matrix.go + catalog.go；cobra wiring、flags 與 dispatch 留在
+  `cmd/provider.go`（集合式 cmd package）。`--type` 選 API surface（預設
+  chat），`--list` 產生 provider × chat/image/music/speech/transcribe/live/
+  translate × auth-env matrix；handler 各自建 client（`provider.New` /
+  `NewImage` / `NewMusic` / `NewSpeech` / `NewTranscriber`），不支援的
+  provider 回 typed `ErrUnsupportedCapability`。package 名為 `provider`，
+  import 端以 `providercli` alias 與 SDK `provider` 區分。
 - 外部依賴：`auth` 是 go.mod require 的外部 module，只被 `provider/credential` 使用；`proxy` 完全在外部 repo。`tmp/auth2api` 與 `tmp/cliproxyapi` 僅供格式研究，不是 runtime dependency。
 
 ## 專案結構 (Project Structure)
@@ -110,7 +147,8 @@ agentsdk/
 ├── cmd/                              # root cobra subcommands
 │   ├── agent/                        # agent 相關子指令
 │   │   └── wizard/                   # `wizard`/`w` 設定產生器（逐階段 wizard prompt，產出 agent.Config）
-│   └── provider.go                   # `provider` smoke-test（直接打 core.Provider.Generate / core.StreamProvider.Stream）
+│   ├── provider.go                   # `provider` 手動測試指令：flags + dispatch（不走 Agent/Engine/harness）
+│   └── provider/                     # per-type handlers：chat.go / image.go / music.go / speech.go / transcribe.go + matrix.go / catalog.go
 ├── agent/                            # 組裝層：Config → 7 stage pipeline → Engine；agent.go 集中公開契約
 │   ├── cli/                          # process host：OpenForCLI/Main/Run、signal、slog、os.Exit
 │   ├── spec/                         # 宣告層：Config/Choice/tier 展開/驗證（只 import core，可獨立被讀取）
@@ -140,13 +178,13 @@ agentsdk/
 ├── provider/                         # registry、credential bridge、protocol codecs 與七個 adapters
 │   ├── capability.go                 # model/image/video/music/audio capability discovery + typed unsupported error
 │   ├── image.go / video.go / music.go / speech.go / transcribe.go / error.go # media contracts、request/result、auth wrappers、structured API error
+│   ├── live.go / translate.go        # realtime session（LiveConnector/LiveSession/LiveEvent）與 translation（Translator + optional TranslateStreamer）contracts
 │   ├── registry.go                   # Entry 是 name / metadata / static catalog / factories 的唯一真相 + DEFAULT_NAME
 │   ├── registry_options.go           # Options（unresolved）→ ResolvedConfig（construction input）；集中 env / credential class resolution
 │   ├── adapter.go                    # Adapter = core.Provider + core.StreamProvider；discovery data 不進 runtime client
 │   ├── decorator.go                  # Decorator = func(ctx) (core.Auth, error)：model/image/video/music 每次 request 共用解析規則
 │   ├── credential/                   # 全 repo 唯一 import bizshuk/auth 之處：(name, kind) → auth route id 對照、Decorator 實作、Login 委派
 │   ├── all/                          # meta-package：blank-import 全部 adapter 的便利入口
-│   ├── sample/                       # provider/auth/chat-image-music-audio capability matrix + direct access CLI（含 config/、svc/）
 │   ├── protocol/
 │   │   ├── sse/                      # stdlib-only 完整 SSE frame decoder / writer；不含 provider terminal semantics
 │   │   ├── openaichat/               # Google/Ollama 共用 request/response codec + Frame → ModelChunk
@@ -156,7 +194,7 @@ agentsdk/
 │   ├── antigravity/                  # adapter：Google Cloud Code v1internal（Gemini + Claude），OAuth-only
 │   ├── codex/                        # adapter：OpenAI Codex OAuth
 │   ├── elevenlabs/                   # adapter：ElevenLabs STT/TTS（audio-only，New 為 nil、無 chat surface）
-│   ├── google/                       # stdlib HTTP adapter
+│   ├── google/                       # stdlib HTTP adapter + Gemini Live API websocket（live/translate）
 │   ├── grok/                         # adapter：xAI Grok
 │   ├── minimax/                      # adapter：MiniMax model HTTP/SSE + video/music/speech generation transport
 │   └── ollama/                       # adapter：本地 Ollama endpoint
@@ -199,7 +237,7 @@ agentsdk/
 | State/schema           | `testify v1.11.1`、`invopop/jsonschema v0.14.0`   | table-driven tests、`core.Tool` RawMessage Call、反射式 JSON Schema                                                                    |
 | IDs/telemetry          | `google/uuid v1.6.0`、OpenTelemetry `v1.44.0`     | request ID、transform warning/loss metrics                                                                                             |
 | Anthropic adapter      | `anthropics/anthropic-sdk-go v1.50.2`             | 只由 `provider/anthropic` package 引入                                                                                                 |
-| Google adapter         | Go stdlib `net/http`                              | `provider/google` 使用 shared OpenAI-compatible codecs                                                                                 |
+| Google adapter         | Go stdlib `net/http`、`coder/websocket v1.8.15`   | `provider/google` 使用 shared OpenAI-compatible codecs；Live API（live/translate）走 BidiGenerateContent websocket                     |
 | Shared protocol codecs | `net/http` + JSON + SSE                           | `provider/protocol/{sse,openaichat,openaiimage}`，不承接 vendor terminal semantics                                                     |
 | Terminal UI            | Go stdlib only                                    | `sample/code-agent/tui`（zero-dep）；differential rendering、CSI 2026、不用 alternate screen；不屬 SDK 表面                            |
 
@@ -288,7 +326,8 @@ agentsdk/
 - `prompt/source` 擁有內建 Sources，透過 `SkillProvider` interface 接 skill registry；
   discovery roots 由 `agent` 組裝，`prompt/source` 不 import `skill` 或 `agent`。
 - 頂層 `sample/demo-*` 是單一 SDK 元件展示，`sample/*-agent` 是完整 agent；
-  `provider/sample` 是 package-local provider API example。
+  provider API 的手動測試一律走 `agentsdk provider` 子指令（`cmd/` 是手動測試
+  的集合式 package，不另立平行 sample CLI）。
 - `benchmark/` 是 root module 內的 provider-model capability benchmark：root
   package 擁有 `run → iterate cases → query → store` flow 與預定義 case sets
   （chat/image/speech/transcribe/video/music），每個 `benchmark/pkg/<provider-model>`
@@ -313,10 +352,16 @@ agentsdk/
   （`runtime.Caller` 定位本套件源碼）提供，與巢狀深度無關。credential 只走
   `os.Getenv`，不掛 gosdk/viper。
 - `provider.Metadata` 分別宣告 `OAuthEnv` / `APIKeyEnv`，image / video / music /
-  speech endpoint 可另以 `ImageBaseURLEnv` / `VideoBaseURLEnv` /
-  `MusicBaseURLEnv` / `SpeechBaseURLEnv` 宣告 override；
+  speech / live endpoint 可另以 `ImageBaseURLEnv` / `VideoBaseURLEnv` /
+  `MusicBaseURLEnv` / `SpeechBaseURLEnv` / `LiveBaseURLEnv` 宣告 override；
   `Options.CredentialKind` 的 `auto` / `api_key` / `oauth` 使用
   `core.CREDENTIAL_KIND_*`，`Resolve` 產生 canonical `ResolvedConfig`。
+  Credential entry 規則：每個 provider entry `必須`宣告 `APIKeyEnv`；`OAuthEnv`
+  只給真的有 OAuth flow 的特定 provider（anthropic／codex／grok／antigravity）。
+  不為單一 credential kind 另立新 entry——kind 是 entry 內的軸
+  （`spec.Model.CredentialKind`），不是 provider 身分。唯一例外是 antigravity：
+  Cloud Code gateway 在 wire 層只收 OAuth Bearer，無 `APIKeyEnv`。MiniMax 曾有
+  的 `MINIMAX_OAUTH_TOKEN` 因無對應 OAuth flow 也無 auth route 已移除。
 
 - 外部 `bizshuk/auth` 的消費邊界：只有 `provider/credential` 可 import 它（由
   `TestAuthImportedOnlyByProviderCredential` 把關），並擁有
@@ -380,12 +425,12 @@ JSONL 對外 envelope 由 `agent/wire` 擁有，經
 | agent lifecycle           | `agentsdk/agent`：`Run`、`Host`、`Interactive`、`Pause`/`Resume`、`WithRoundTimeout`；`agentsdk/agent/cli`：`Main`/`Run`、`OpenForCLI`/`MustOpenForCLI`                                                                                                                                                                                                                                                            |
 | middleware preset         | `agentsdk/middleware/preset`：`Default()`（retry→timeout→budget→loopguard）、`Secure(sandbox, approval)`（再加 sandbox→approval→spotlight→sanitizer）                                                                                                                                                                                                                                                              |
 | credential                | `agentsdk/provider/credential`：`RouteID`/`Kinds`/`Names`、`NewSource`/`NewAutoSource`/`Source.Decorator()`、`Login`；唯一 import `bizshuk/auth` 之處                                                                                                                                                                                                                                                              |
-| provider registry         | `agentsdk/provider`（package `provider`，非 `registry`）：`Entry` 單獨擁有 name / metadata / static catalog / model+image+video+music+audio factories；`Names`/`Entries`/`Lookup`/`Catalog`/`Capabilities`/`New`/`NewImage`/`NewVideo`/`NewMusic`/`NewTranscriber`/`NewSpeech`/`Options.Resolve`/`ResolvedConfig`/`DEFAULT_NAME`；`env` 查詢以 `LookupEnv` 注入                                                                                                        |
+| provider registry         | `agentsdk/provider`（package `provider`，非 `registry`）：`Entry` 單獨擁有 name / metadata / static catalog / model+image+video+music+audio factories；`Names`/`Entries`/`Lookup`/`Catalog`/`Capabilities`/`New`/`NewImage`/`NewVideo`/`NewMusic`/`NewTranscriber`/`NewSpeech`/`NewLive`/`NewTranslate`/`Options.Resolve`/`ResolvedConfig`/`DEFAULT_NAME`；`env` 查詢以 `LookupEnv` 注入                                                                                                        |
 | capability benchmark      | `agentsdk/benchmark`：`Target`、`Case`/`Kind`、六組 case sets（`ChatCases`/`ImageCases`/`SpeechCases`/`TranscribeCases`/`VideoCases`/`MusicCases`）與 `WithModel`、`Main`/`Run`/`RunPair`/`Root`/`PairSlug`、`CatalogSpecs`/`KindsOf`、`Record`；`benchmark/gen` 產生 `benchmark/pkg/<provider-model>` 全部子套件（每個 runnable DefaultCatalog model 一個，現 84 個）+ `benchmark/cmd` flag runner（`-provider`/`-model`（`all` = 全 catalog sweep）/`-kinds`/`-list`），結果為 `pkg/<pair-slug>/tmp/<session-id>/case-NN-<name>/`（meta.json + outputs）+ session `summary.json`                                        |
-| root CLI subcommands      | `agentsdk/cmd`：`NewWizardCommand`（`wizard`/`w` 設定產生器）、`NewProviderCommand`（root cobra `provider` smoke-test CLI；打 `core.Provider.Generate` / `core.StreamProvider.Stream` 不走 Engine；`--list-models` 優先打 live `core.ModelLister`,失敗 fallback `Entry.Catalog`,audio-only entry 改由 speech client 取得 lister,無 chat surface 的 prompt path 回報該 provider 實際支援的 capabilities）                                                                                                                                  |
+| root CLI subcommands      | `agentsdk/cmd`：`wizard.WizardCmd`（`wizard`/`w` 設定產生器）、`cmd.ProviderCmd`（root cobra `provider` 手動測試 CLI，不走 Engine；`--type` 選 chat/image/music/speech/transcribe，per-type handler 在 `cmd/provider` package：`Chat`/`Image`/`Music`/`Speech`/`Transcribe`/`WriteMatrix`/`Catalog`/`JoinCapabilities` + `Request`；`--list` 印 capability matrix；`--list-models` 優先打 live `core.ModelLister`,失敗 fallback `Entry.Catalog`,audio-only entry 改由 speech client 取得 lister,無 chat surface 的 prompt path 回報該 provider 實際支援的 capabilities）                                                                                                                                  |
 | authentication            | 外部 module `github.com/bizshuk/auth`：只由 `provider/credential` 消費；API 契約見該 repo                                                                                                                                                                                                                                                                                                                          |
 | proxy                     | 外部 repo `github.com/bizshuk/proxy`：本 repo 無目錄、無 require、無 import                                                                                                                                                                                                                                                                                                                                        |
-| provider adapters         | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity,elevenlabs}`：前七者實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`）；Google/Grok/MiniMax 另實作 `provider.ImageGenerator`（前兩者走 `openaiimage` codec，MiniMax 是自有 `/v1/image_generation` transport），MiniMax 另實作 `provider.VideoGenerator` / `provider.MusicGenerator` / `provider.SpeechGenerator`；ElevenLabs 是 audio-only（`New` 為 nil）：`provider.Transcriber` + `provider.SpeechGenerator` + `provider.SpeechStreamer`；ElevenLabs 與 MiniMax 的 `*SpeechProvider` 另實作 `provider.VoiceLister`；vision 輸入（`PART_KIND_IMAGE`）由全部 chat adapter 編碼進 request——anthropic 用 `image` source block，antigravity 用 Gemini `inlineData`，grok 與 `openaichat` codec（google/ollama）用 `image_url` content array，codex 用 `input_image`，minimax 用 content blocks；除 codex 外皆另實作 optional `core.ModelLister`（ElevenLabs 掛在 `*SpeechProvider` 上，非 chat client；antigravity 走 `/v1internal:fetchAvailableModels`）。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal |
+| provider adapters         | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity,elevenlabs}`：前七者實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`）；Google/Grok/MiniMax 另實作 `provider.ImageGenerator`（前兩者走 `openaiimage` codec，MiniMax 是自有 `/v1/image_generation` transport），Google 另以 Gemini Live API websocket 實作 `provider.LiveConnector`（`LiveProvider`）與 `provider.Translator`+`provider.TranslateStreamer`（`TranslateProvider`，騎同一條 live socket），Codex 另以 OpenAI Realtime API websocket 實作 `provider.LiveConnector`（api_key-only），MiniMax 另實作 `provider.VideoGenerator` / `provider.MusicGenerator` / `provider.SpeechGenerator`；ElevenLabs 是 audio-only（`New` 為 nil）：`provider.Transcriber` + `provider.SpeechGenerator` + `provider.SpeechStreamer`；ElevenLabs 與 MiniMax 的 `*SpeechProvider` 另實作 `provider.VoiceLister`；vision 輸入（`PART_KIND_IMAGE`）由全部 chat adapter 編碼進 request——anthropic 用 `image` source block，antigravity 用 Gemini `inlineData`，grok 與 `openaichat` codec（google/ollama）用 `image_url` content array，codex 用 `input_image`，minimax 用 content blocks；除 codex 外皆另實作 optional `core.ModelLister`（ElevenLabs 掛在 `*SpeechProvider` 上，非 chat client；antigravity 走 `/v1internal:fetchAvailableModels`）。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal |
 
 ## 開發與驗證 (Development and Verification)
 
@@ -424,6 +469,9 @@ go run . provider --list-models --provider minimax
 go run . provider "ping" --provider minimax
 go run . provider --stream "say hi in one word" --provider minimax
 go run . provider "ping" --provider minimax --json | jq
+go run . provider --list                                     # capability matrix
+go run . provider "a paper fox" --provider google --type image
+go run . provider --provider elevenlabs --type transcribe --audio-file ./clip.mp3
 ```
 
 `wizard` 子指令（產生 `agent.Config`，不打 provider、不驗憑證）：

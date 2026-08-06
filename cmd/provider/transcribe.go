@@ -1,4 +1,4 @@
-package svc
+package provider
 
 import (
 	"context"
@@ -9,13 +9,15 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/provider"
-	_ "github.com/bizshuk/agentsdk/provider/all"
 )
 
 // Transcribe executes a speech-to-text request against the target provider.
 // A local --audio-file is uploaded as bytes; --audio-url is handed to the
 // provider to fetch.
 func Transcribe(ctx context.Context, req Request, out io.Writer) error {
+	if strings.TrimSpace(req.AudioFile) == "" && strings.TrimSpace(req.AudioURL) == "" {
+		return fmt.Errorf("transcribe requires --audio-file or --audio-url")
+	}
 	audio, err := readAudioSource(req)
 	if err != nil {
 		return err

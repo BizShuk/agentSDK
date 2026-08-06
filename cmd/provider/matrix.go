@@ -1,4 +1,4 @@
-package main
+package provider
 
 import (
 	"fmt"
@@ -9,22 +9,26 @@ import (
 	"github.com/bizshuk/agentsdk/provider"
 )
 
-func writeProviderMatrix(out io.Writer) error {
+// WriteMatrix renders the provider × capability × auth-env table behind the
+// --list flag.
+func WriteMatrix(out io.Writer) error {
 	writer := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-	header := "PROVIDER\tCHAT\tIMAGE\tMUSIC\tSPEECH\tTRANSCRIBE\tAUTH ENV"
+	header := "PROVIDER\tCHAT\tIMAGE\tMUSIC\tSPEECH\tTRANSCRIBE\tLIVE\tTRANSLATE\tAUTH ENV"
 	if _, err := fmt.Fprintln(writer, header); err != nil {
 		return fmt.Errorf("write provider matrix header: %w", err)
 	}
 	for _, entry := range provider.Entries() {
 		if _, err := fmt.Fprintf(
 			writer,
-			"%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			entry.Name,
 			yesNo(entry.Supports(provider.CAPABILITY_MODEL_GENERATE)),
 			yesNo(entry.Supports(provider.CAPABILITY_IMAGE_GENERATE)),
 			yesNo(entry.Supports(provider.CAPABILITY_MUSIC_GENERATE)),
 			yesNo(entry.Supports(provider.CAPABILITY_AUDIO_SPEECH)),
 			yesNo(entry.Supports(provider.CAPABILITY_AUDIO_TRANSCRIBE)),
+			yesNo(entry.Supports(provider.CAPABILITY_LIVE)),
+			yesNo(entry.Supports(provider.CAPABILITY_TRANSLATE)),
 			authEnvironmentSummary(entry.Metadata),
 		); err != nil {
 			return fmt.Errorf("write provider matrix row: %w", err)

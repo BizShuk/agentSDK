@@ -1,16 +1,19 @@
-package svc
+package provider
 
 import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/bizshuk/agentsdk/provider"
-	_ "github.com/bizshuk/agentsdk/provider/all"
 )
 
 // Image executes an image generation request against the target provider.
 func Image(ctx context.Context, req Request, out io.Writer) error {
+	if strings.TrimSpace(req.Prompt) == "" {
+		return fmt.Errorf("prompt is required")
+	}
 	generator, err := provider.NewImage(req.Provider, req.Options)
 	if err != nil {
 		return err

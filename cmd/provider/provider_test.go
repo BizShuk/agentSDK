@@ -1,4 +1,4 @@
-package svc
+package provider
 
 import (
 	"bytes"
@@ -13,14 +13,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/provider"
+	_ "github.com/bizshuk/agentsdk/provider/all"
 )
 
 func TestChat(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{
-			"choices":[{"message":{"role":"assistant","content":"hello from svc chat"},"finish_reason":"stop"}],
+			"choices":[{"message":{"role":"assistant","content":"hello from handler chat"},"finish_reason":"stop"}],
 			"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}
 		}`)
 	}))
@@ -43,8 +45,45 @@ func TestChat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Chat: %v", err)
 	}
-	if !strings.Contains(out.String(), "hello from svc chat") {
+	if !strings.Contains(out.String(), "hello from handler chat") {
 		t.Errorf("output = %q, want model text", out.String())
+	}
+}
+
+type streamStub struct {
+	chunks []core.ModelChunk
+}
+
+func (s streamStub) Generate(context.Context, core.ModelRequest) (core.ModelResult, error) {
+	return core.ModelResult{}, nil
+}
+
+func (s streamStub) Stream(context.Context, core.ModelRequest) (<-chan core.ModelChunk, error) {
+	ch := make(chan core.ModelChunk, len(s.chunks))
+	for _, chunk := range s.chunks {
+		ch <- chunk
+	}
+	close(ch)
+	return ch, nil
+}
+
+func TestRunStreamRejectsMissingTerminalChunk(t *testing.T) {
+	var out bytes.Buffer
+	err := runStream(
+		context.Background(),
+		streamStub{chunks: []core.ModelChunk{{
+			Kind: core.PART_KIND_PLAIN_TEXT,
+			Text: "partial",
+		}}},
+		core.ModelRequest{},
+		&out,
+		false,
+	)
+	if err == nil || !strings.Contains(err.Error(), "stream closed before terminal chunk") {
+		t.Fatalf("error = %v, want terminal-chunk failure", err)
+	}
+	if out.String() != "partial" {
+		t.Errorf("output = %q, want partial text", out.String())
 	}
 }
 
@@ -52,7 +91,7 @@ func TestImage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{
-			"data":[{"url":"https://example.test/svc.png"}],
+			"data":[{"url":"https://example.test/handler.png"}],
 			"usage":{"cost_in_usd_ticks":100}
 		}`)
 	}))
@@ -75,8 +114,15 @@ func TestImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Image: %v", err)
 	}
-	if !strings.Contains(out.String(), "https://example.test/svc.png") {
+	if !strings.Contains(out.String(), "https://example.test/handler.png") {
 		t.Errorf("output = %q, want image URL", out.String())
+	}
+}
+
+func TestImageRequiresPrompt(t *testing.T) {
+	err := Image(context.Background(), Request{Provider: "grok"}, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "prompt is required") {
+		t.Fatalf("error = %v, want prompt is required", err)
 	}
 }
 
@@ -84,7 +130,7 @@ func TestMusic(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{
-			"data":{"audio":"https://example.test/svc.mp3","status":2},
+			"data":{"audio":"https://example.test/handler.mp3","status":2},
 			"base_resp":{"status_code":0}
 		}`)
 	}))
@@ -113,7 +159,7 @@ func TestMusic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Music: %v", err)
 	}
-	if !strings.Contains(out.String(), "https://example.test/svc.mp3") {
+	if !strings.Contains(out.String(), "https://example.test/handler.mp3") {
 		t.Errorf("output = %q, want music URL", out.String())
 	}
 }
@@ -124,7 +170,7 @@ func TestSpeech(t *testing.T) {
 			t.Errorf("output_format = %q, want mp3_44100_128", got)
 		}
 		w.Header().Set("Content-Type", "audio/mpeg")
-		_, _ = w.Write([]byte("svc-audio-bytes"))
+		_, _ = w.Write([]byte("cli-audio-bytes"))
 	}))
 	t.Cleanup(server.Close)
 
@@ -155,7 +201,7 @@ func TestSpeech(t *testing.T) {
 func TestTranscribe(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"language_code":"en","text":"hello from svc"}`)
+		_, _ = io.WriteString(w, `{"language_code":"en","text":"hello from handler"}`)
 	}))
 	t.Cleanup(server.Close)
 
@@ -176,7 +222,7 @@ func TestTranscribe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Transcribe: %v", err)
 	}
-	if !strings.Contains(out.String(), "hello from svc") {
+	if !strings.Contains(out.String(), "hello from handler") {
 		t.Errorf("output = %q, want the transcript", out.String())
 	}
 }
@@ -215,6 +261,13 @@ func TestTranscribeUploadsALocalFile(t *testing.T) {
 	}
 }
 
+func TestTranscribeRequiresAnAudioSource(t *testing.T) {
+	err := Transcribe(context.Background(), Request{Provider: "elevenlabs"}, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "requires --audio-file or --audio-url") {
+		t.Fatalf("error = %v, want audio source requirement", err)
+	}
+}
+
 func TestSpeechRejectsUnsupportedProvider(t *testing.T) {
 	err := Speech(context.Background(), Request{
 		Provider: "google",
@@ -249,5 +302,57 @@ func TestWriteJSON(t *testing.T) {
 	}
 	if decoded["foo"] != "bar" {
 		t.Errorf("decoded = %v, want foo: bar", decoded)
+	}
+}
+
+func TestWriteMatrixShowsTypeAndAuthSupport(t *testing.T) {
+	var out bytes.Buffer
+	if err := WriteMatrix(&out); err != nil {
+		t.Fatalf("WriteMatrix: %v", err)
+	}
+	text := out.String()
+
+	for _, want := range []string{
+		"PROVIDER",
+		"google",
+		"GOOGLE_API_KEY",
+		"grok",
+		"XAI_API_KEY",
+		"minimax",
+		"MINIMAX_API_KEY",
+		"elevenlabs",
+		"ELEVENLABS_API_KEY",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("matrix missing %q:\n%s", want, text)
+		}
+	}
+
+	// chat, image, music, speech, transcribe, live, translate — in header order.
+	want := map[string][7]string{
+		"google":     {"yes", "yes", "no", "no", "no", "yes", "yes"},
+		"codex":      {"yes", "no", "no", "no", "no", "yes", "no"},
+		"minimax":    {"yes", "yes", "yes", "yes", "no", "no", "no"},
+		"elevenlabs": {"no", "no", "no", "yes", "yes", "no", "no"},
+	}
+	seen := map[string]bool{}
+	for _, line := range strings.Split(text, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 8 {
+			continue
+		}
+		expected, ok := want[fields[0]]
+		if !ok {
+			continue
+		}
+		seen[fields[0]] = true
+		if got := [7]string(fields[1:8]); got != expected {
+			t.Errorf("%s capability row = %v, want %v", fields[0], got, expected)
+		}
+	}
+	for name := range want {
+		if !seen[name] {
+			t.Errorf("matrix missing %s row:\n%s", name, text)
+		}
 	}
 }

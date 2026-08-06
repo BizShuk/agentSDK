@@ -103,8 +103,8 @@ result, err := generator.GenerateMusic(ctx, provider.MusicRequest{
 
 `result.Audio.URL` 是短效連結；需要 durable asset 時由 caller 及時下載保存。
 
-可執行的 [`provider/sample`](provider/sample/README.md) 直接展示 provider、auth mode 與
-`chat / image / music / speech / transcribe` API type matrix。speech synthesis、
+`agentsdk provider` 子指令（`go run . provider --list`）直接展示 provider、auth mode 與
+`chat / image / music / speech / transcribe` API type matrix，`--type` 可直接打各 surface。speech synthesis、
 transcription 與 audio-chat 是三個不同 contract，分別走 `SpeechGenerator`、
 `Transcriber` 與（尚未有 adapter 支援的）audio-chat。
 

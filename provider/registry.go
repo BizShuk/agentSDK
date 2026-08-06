@@ -56,6 +56,8 @@ type Entry struct {
 	NewMusic       MusicFactory
 	NewTranscriber TranscriberFactory
 	NewSpeech      SpeechFactory
+	NewLive        LiveFactory
+	NewTranslate   TranslateFactory
 	Catalog        func() []core.ModelSpec
 }
 
@@ -96,7 +98,9 @@ func (e Entry) hasFactory() bool {
 		e.NewVideo != nil ||
 		e.NewMusic != nil ||
 		e.NewTranscriber != nil ||
-		e.NewSpeech != nil
+		e.NewSpeech != nil ||
+		e.NewLive != nil ||
+		e.NewTranslate != nil
 }
 
 // Names lists the registered provider names, sorted.
@@ -292,6 +296,54 @@ func NewSpeech(name string, o Options) (SpeechGenerator, error) {
 	return WithSpeechDecorator(e.Name, generator, decorator), nil
 }
 
+// NewLive builds the named provider's realtime-session capability using the
+// same credential resolution and request-time decorator precedence as New.
+func NewLive(name string, o Options) (LiveConnector, error) {
+	e, err := lookup(name)
+	if err != nil {
+		return nil, err
+	}
+	if e.NewLive == nil {
+		return nil, &UnsupportedCapabilityError{
+			Provider:   e.Name,
+			Capability: CAPABILITY_LIVE,
+		}
+	}
+	resolved, decorator, err := resolveLiveOptions(e, o)
+	if err != nil {
+		return nil, err
+	}
+	connector, err := e.NewLive(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s: live: %w", e.Name, err)
+	}
+	return WithLiveDecorator(e.Name, connector, decorator), nil
+}
+
+// NewTranslate builds the named provider's translation capability using the
+// same credential resolution and request-time decorator precedence as New.
+func NewTranslate(name string, o Options) (Translator, error) {
+	e, err := lookup(name)
+	if err != nil {
+		return nil, err
+	}
+	if e.NewTranslate == nil {
+		return nil, &UnsupportedCapabilityError{
+			Provider:   e.Name,
+			Capability: CAPABILITY_TRANSLATE,
+		}
+	}
+	resolved, decorator, err := resolveLiveOptions(e, o)
+	if err != nil {
+		return nil, err
+	}
+	translator, err := e.NewTranslate(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s: translate: %w", e.Name, err)
+	}
+	return WithTranslateDecorator(e.Name, translator, decorator), nil
+}
+
 func lookup(name string) (Entry, error) {
 	e, ok := Lookup(name)
 	if !ok {
@@ -336,6 +388,18 @@ func resolveSpeechOptions(e Entry, o Options) (ResolvedConfig, Decorator, error)
 	metadata := e.Metadata
 	if metadata.SpeechBaseURLEnv != "" {
 		metadata.BaseURLEnv = metadata.SpeechBaseURLEnv
+	}
+	return resolveOptionsWithMetadata(e, o, metadata)
+}
+
+// resolveLiveOptions applies the realtime-endpoint base URL override. It
+// serves both NewLive and NewTranslate: every registered translator rides the
+// same realtime socket, so a separate translate override would name the same
+// host twice.
+func resolveLiveOptions(e Entry, o Options) (ResolvedConfig, Decorator, error) {
+	metadata := e.Metadata
+	if metadata.LiveBaseURLEnv != "" {
+		metadata.BaseURLEnv = metadata.LiveBaseURLEnv
 	}
 	return resolveOptionsWithMetadata(e, o, metadata)
 }

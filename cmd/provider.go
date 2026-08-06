@@ -1,29 +1,33 @@
 // Package cmd hosts the cobra subcommands mounted by the root agentsdk
-// binary. provider.go wires the "provider" subcommand — a thin smoke-test
-// CLI that calls core.Provider.Generate or core.StreamProvider.Stream
-// directly, with no Agent, Engine, or harness in the path.
+// binary. provider.go wires the "provider" subcommand — a manual-test CLI
+// over the provider layer with no Agent, Engine, or harness in the path.
+// The per-type handlers (chat, image, music, speech, transcribe) live in
+// cmd/provider; this file owns flags and dispatch.
 package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/bizshuk/agentsdk/core"
+	providercli "github.com/bizshuk/agentsdk/cmd/provider"
 	"github.com/bizshuk/agentsdk/provider"
 	_ "github.com/bizshuk/agentsdk/provider/all"
 	gosdkconfig "github.com/bizshuk/gosdk/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"os"
 )
+
+// DEFAULT_PROVIDER_TIMEOUT bounds one manual-test request; media generation
+// (music, speech) routinely needs more than a chat round-trip.
+const DEFAULT_PROVIDER_TIMEOUT = 2 * time.Minute
 
 var (
 	ProviderName           string
+	ProviderType           string
 	ProviderModel          string
 	ProviderAPIKey         string
 	ProviderBaseURL        string
@@ -33,6 +37,19 @@ var (
 	ProviderAsJSON         bool
 	ProviderListModels     bool
 	ProviderCredentialKind string
+	ProviderTimeout        time.Duration
+
+	ProviderLyrics       string
+	ProviderAudioURL     string
+	ProviderAudioFile    string
+	ProviderVoice        string
+	ProviderSpeechFormat string
+	ProviderLanguage     string
+	ProviderDiarize      bool
+	ProviderOutputFormat string
+	ProviderSampleRate   int
+	ProviderBitrate      int
+	ProviderAudioFormat  string
 )
 
 // ProviderCmd is the package-level "provider" subcommand.
@@ -48,23 +65,26 @@ var ProviderCmd = &cobra.Command{
 	Use:   "provider [flags] <prompt>",
 	Short: "Run a single prompt against a provider, bypassing the agent loop",
 	Long: strings.TrimSpace(`
-provider is the minimal smoke-test CLI for the provider adapter family.
-It calls core.Provider.Generate (or core.StreamProvider.Stream with --stream) directly —
-no Agent, Engine, tools, or harness — so any provider regression is
-exposed immediately.
+provider is the manual-test CLI for the provider adapter family.
+It calls the provider layer directly — no Agent, Engine, tools, or
+harness — so any provider regression is exposed immediately. --type
+selects the API surface; chat is the default.
 
 Examples:
 
   provider "ping" --provider minimax
   provider "summarize X" --provider anthropic --model claude-sonnet-5
   provider "summarize X" -m claude-sonnet-5 --provider anthropic     # -m 是 --model 短名
-  provider "summarize X" --provider google --model gemini-3-flash-preview
-  provider "hello" --provider grok --model grok-4
   provider "hello" --provider ollama --base-url http://localhost:11434/v1
   provider --stream "stream me a haiku" --provider anthropic
+  provider "a paper fox" --provider google --type image
+  provider "Jazz, smooth, late night lounge" --provider minimax --type music \
+    --model music-cover --audio-url https://example.com/song.mp3
+  provider "早安，新加坡" --provider elevenlabs --type speech --speech-format mp3_44100_128
+  provider --provider elevenlabs --type transcribe --audio-file ./clip.mp3 --diarize
   provider --list-models --provider google
-  provider --list-models --provider ollama    # lists the models your server actually pulled
   provider --list-providers
+  provider --list                          # provider × capability × auth-env matrix
 `),
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -84,6 +104,9 @@ Examples:
 			fmt.Fprintln(out, strings.Join(provider.Names(), ", "))
 			return nil
 		}
+		if list, _ := cmd.Flags().GetBool("list"); list {
+			return providercli.WriteMatrix(out)
+		}
 
 		entry, ok := provider.Lookup(ProviderName)
 		if !ok {
@@ -101,59 +124,76 @@ Examples:
 
 		// Catalog listing is a discovery surface, not a chat call: an
 		// audio-only provider (elevenlabs) still ships a static Catalog and
-		// a live one. model_generate is therefore not a precondition here —
-		// the client is only built to reach the live core.ModelLister.
+		// a live one.
 		if ProviderListModels {
-			var static []core.ModelSpec
-			if entry.Catalog != nil {
-				static = entry.Catalog()
-			}
-			lister, err := openLister(entry, options)
-			if err != nil {
-				// A client that will not build (missing credential, bad
-				// base URL) fails the same way a failed live call does:
-				// discovery still answers from the bundled catalog.
-				fmt.Fprintf(errOut,
-					"[provider] %s: live catalog unavailable, using static (%v)\n", label, err)
-			}
-			return dumpCatalog(cmd.Context(), errOut, out, lister, label, static)
+			return providercli.Catalog(cmd.Context(), entry, options, errOut, out)
 		}
 
-		if !entry.Supports(provider.CAPABILITY_MODEL_GENERATE) {
-			return fmt.Errorf("provider %s has no chat surface; supported capabilities: %s",
-				label, joinCapabilities(entry.Capabilities()))
+		if ProviderTimeout <= 0 {
+			return fmt.Errorf("timeout must be greater than zero")
 		}
+		ctx, cancel := context.WithTimeout(cmd.Context(), ProviderTimeout)
+		defer cancel()
 
-		prov, err := provider.New(ProviderName, options)
-		if err != nil {
-			return err
+		request := providercli.Request{
+			Provider:     ProviderName,
+			Prompt:       strings.TrimSpace(strings.Join(args, " ")),
+			JSON:         ProviderAsJSON,
+			Options:      options,
+			System:       ProviderSystem,
+			MaxTokens:    ProviderMaxTokens,
+			Stream:       ProviderStream,
+			Lyrics:       ProviderLyrics,
+			OutputFormat: ProviderOutputFormat,
+			SampleRate:   ProviderSampleRate,
+			Bitrate:      ProviderBitrate,
+			AudioFormat:  ProviderAudioFormat,
+			Voice:        ProviderVoice,
+			SpeechFormat: ProviderSpeechFormat,
+			AudioURL:     ProviderAudioURL,
+			AudioFile:    ProviderAudioFile,
+			Language:     ProviderLanguage,
+			Diarize:      ProviderDiarize,
 		}
-
-		prompt := strings.TrimSpace(strings.Join(args, " "))
-		if prompt == "" {
-			return fmt.Errorf("prompt is required (or pass --list-models / --list-providers)")
-		}
-
-		req := buildRequest(prompt, ProviderSystem, ProviderMaxTokens)
 
 		model := ProviderModel
 		if model == "" {
 			model = "default"
 		}
-		fmt.Fprintf(errOut, "[provider] %s | model=%s | stream=%v\n",
-			label, model, ProviderStream)
+		fmt.Fprintf(errOut, "[provider] %s | model=%s | type=%s | stream=%v\n",
+			label, model, ProviderType, ProviderStream)
 
-		if ProviderStream {
-			return runStream(cmd.Context(), prov, req, out, ProviderAsJSON)
+		switch ProviderType {
+		case "chat":
+			if !entry.Supports(provider.CAPABILITY_MODEL_GENERATE) {
+				return fmt.Errorf("provider %s has no chat surface; supported capabilities: %s",
+					label, providercli.JoinCapabilities(entry.Capabilities()))
+			}
+			if request.Prompt == "" {
+				return fmt.Errorf("prompt is required (or pass --list-models / --list-providers)")
+			}
+			return providercli.Chat(ctx, request, out)
+		case "image":
+			return providercli.Image(ctx, request, out)
+		case "music":
+			return providercli.Music(ctx, request, out)
+		case "speech":
+			return providercli.Speech(ctx, request, out)
+		case "transcribe":
+			return providercli.Transcribe(ctx, request, out)
+		default:
+			return fmt.Errorf("type %q must be chat, image, music, speech, or transcribe",
+				ProviderType)
 		}
-		return runGenerate(cmd.Context(), prov, req, out, ProviderAsJSON)
 	},
 }
 
 func init() {
 	flags := ProviderCmd.Flags()
 	flags.StringVar(&ProviderName, "provider", provider.DEFAULT_NAME,
-		"Provider family (minimax | anthropic | google | grok | ollama; case-insensitive).")
+		"Provider family (case-insensitive); use --list to see linked providers.")
+	flags.StringVar(&ProviderType, "type", "chat",
+		"API type: chat | image | music | speech | transcribe.")
 	flags.StringVarP(&ProviderModel, "model", "m", "",
 		"Model id (alias -m); empty = adapter flagship default. "+
 			"Use --list-models to see the provider's catalog.")
@@ -167,28 +207,56 @@ func init() {
 		"Base URL override; empty = resolved from .env / shell env / "+
 			"adapter default. Same precedence as --api-key.")
 	flags.StringVar(&ProviderSystem, "system", "",
-		"Optional system message prepended to the prompt.")
+		"Optional system message prepended to the prompt (chat only).")
 	flags.IntVar(&ProviderMaxTokens, "max-tokens", 0,
-		"max_tokens for the request; 0 = adapter default.")
+		"max_tokens for the request; 0 = adapter default (chat only).")
 	flags.BoolVar(&ProviderStream, "stream", false,
-		"Use SSE Stream instead of blocking Generate.")
+		"Use SSE Stream instead of blocking Generate (chat only).")
 	flags.BoolVar(&ProviderAsJSON, "json", false,
-		"Print the full ModelResult / chunk stream as JSON lines.")
+		"Print the full response as JSON.")
 	flags.BoolVar(&ProviderListModels, "list-models", false,
-		"Print the provider's static catalog and exit.")
+		"Print the provider's model catalog and exit.")
 	flags.Bool("list-providers", false,
 		"Print the registered provider names and exit.")
+	flags.Bool("list", false,
+		"Print the provider × capability × auth-env matrix and exit.")
 	flags.StringVar(&ProviderCredentialKind, "credential-kind", "auto",
 		"Credential preference: auto | api_key | oauth. "+
 			"auto = OAuth outranks API key when both env are set (legacy precedence, current behavior). "+
 			"api_key = strict: only the API key env is consulted; missing env → startup error. "+
 			"oauth = strict: only the OAuth env is consulted; missing env → startup error. "+
 			"Matches agent/spec.Model.CredentialKind and core.CREDENTIAL_KIND_* constants.")
+	flags.DurationVar(&ProviderTimeout, "timeout", DEFAULT_PROVIDER_TIMEOUT,
+		"Request timeout.")
+
+	flags.StringVar(&ProviderLyrics, "lyrics", "",
+		"Music lyrics; use newline characters between lines.")
+	flags.StringVar(&ProviderAudioURL, "audio-url", "",
+		"Audio URL: music cover reference, or the clip to transcribe.")
+	flags.StringVar(&ProviderAudioFile, "audio-file", "",
+		"Local audio file to upload for transcription.")
+	flags.StringVar(&ProviderVoice, "voice", "",
+		"Speech voice id; empty uses the provider default.")
+	flags.StringVar(&ProviderSpeechFormat, "speech-format", "",
+		"Speech output encoding, e.g. mp3_44100_128 | pcm_16000.")
+	flags.StringVar(&ProviderLanguage, "language", "",
+		"ISO-639 language hint for transcription.")
+	flags.BoolVar(&ProviderDiarize, "diarize", false,
+		"Attribute transcribed words to speakers.")
+	flags.StringVar(&ProviderOutputFormat, "output-format", "url",
+		"Music response encoding: url | hex.")
+	flags.IntVar(&ProviderSampleRate, "sample-rate", 44100,
+		"Music sample rate in Hz.")
+	flags.IntVar(&ProviderBitrate, "bitrate", 256000,
+		"Music bitrate in bits per second.")
+	flags.StringVar(&ProviderAudioFormat, "audio-format", "mp3",
+		"Generated music format (mp3 | wav | pcm), or the transcribe source format.")
 }
 
 // ResetFlags resets ProviderCmd flag state for clean test execution.
 func ResetFlags() {
 	ProviderName = provider.DEFAULT_NAME
+	ProviderType = "chat"
 	ProviderModel = ""
 	ProviderAPIKey = ""
 	ProviderBaseURL = ""
@@ -198,20 +266,24 @@ func ResetFlags() {
 	ProviderAsJSON = false
 	ProviderListModels = false
 	ProviderCredentialKind = "auto"
+	ProviderTimeout = DEFAULT_PROVIDER_TIMEOUT
+	ProviderLyrics = ""
+	ProviderAudioURL = ""
+	ProviderAudioFile = ""
+	ProviderVoice = ""
+	ProviderSpeechFormat = ""
+	ProviderLanguage = ""
+	ProviderDiarize = false
+	ProviderOutputFormat = "url"
+	ProviderSampleRate = 44100
+	ProviderBitrate = 256000
+	ProviderAudioFormat = "mp3"
 
 	ProviderCmd.Flags().VisitAll(func(f *pflag.Flag) {
 		f.Changed = false
 		_ = f.Value.Set(f.DefValue)
 	})
 }
-
-// ---------------------------------------------------------------------------
-// provider registry
-// ---------------------------------------------------------------------------
-
-// The name → adapter mapping lives in provider, shared with the
-// agent composition layer so a config file and this CLI cannot disagree
-// about which providers exist or how their credentials resolve.
 
 // ---------------------------------------------------------------------------
 // gosdk config wiring
@@ -224,7 +296,7 @@ func ResetFlags() {
 // so envLookup falls through to OS env when no .env override exists.
 //
 // We deliberately do NOT enable gosdkconfig.WithWatch — provider is a
-// one-shot CLI, the process exits after one Generate.
+// one-shot CLI, the process exits after one request.
 func bootGosdkConfig() error {
 	gosdkconfig.Default(gosdkconfig.WithAppName("agentsdk"))
 	if gosdkconfig.GetAppName() == "" {
@@ -248,166 +320,4 @@ func envLookup(key string) string {
 		return v
 	}
 	return os.Getenv(key)
-}
-
-// ---------------------------------------------------------------------------
-// request building
-// ---------------------------------------------------------------------------
-
-// buildRequest turns a CLI prompt into a single-turn core.ModelRequest.
-// The system message is optional; parts default to plain text.
-func buildRequest(prompt, system string, maxTokens int) core.ModelRequest {
-	msgs := []core.Message{}
-	if sys := strings.TrimSpace(system); sys != "" {
-		msgs = append(msgs, core.Message{
-			Role:  core.ROLE_SYSTEM,
-			Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: sys}},
-			Ts:    time.Now().UTC(),
-		})
-	}
-	msgs = append(msgs, core.Message{
-		Role:  core.ROLE_USER,
-		Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: prompt}},
-		Ts:    time.Now().UTC(),
-	})
-	return core.ModelRequest{Messages: msgs, MaxTokens: maxTokens}
-}
-
-// ---------------------------------------------------------------------------
-// dispatch
-// ---------------------------------------------------------------------------
-
-func runGenerate(ctx context.Context, prov core.Provider, req core.ModelRequest,
-	out io.Writer, asJSON bool,
-) error {
-	res, err := prov.Generate(ctx, req)
-	if err != nil {
-		return fmt.Errorf("generate: %w", err)
-	}
-	if asJSON {
-		raw, err := json.Marshal(res)
-		if err != nil {
-			return fmt.Errorf("marshal result: %w", err)
-		}
-		fmt.Fprintln(out, string(raw))
-		return nil
-	}
-	if res.Text != "" {
-		fmt.Fprintln(out, res.Text)
-	}
-	fmt.Fprintf(out, "[stop=%s tokens=%d/%d]\n",
-		res.StopReason, res.Usage.PromptTokens, res.Usage.CompletionTokens)
-	return nil
-}
-
-func runStream(ctx context.Context, prov core.StreamProvider, req core.ModelRequest,
-	out io.Writer, asJSON bool,
-) error {
-	ch, err := prov.Stream(ctx, req)
-	if err != nil {
-		return fmt.Errorf("stream: %w", err)
-	}
-	sawDone := false
-	enc := json.NewEncoder(out)
-	for c := range ch {
-		if c.Done {
-			sawDone = true
-		}
-		if asJSON {
-			if err := enc.Encode(c); err != nil {
-				return err
-			}
-			continue
-		}
-		if c.Done {
-			continue
-		}
-		if c.Kind == core.PART_KIND_PLAIN_TEXT && c.Text != "" {
-			fmt.Fprint(out, c.Text)
-		}
-	}
-	if !sawDone {
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("stream interrupted: %w", err)
-		}
-		return fmt.Errorf("stream closed before terminal chunk")
-	}
-	if asJSON {
-		return nil
-	}
-	fmt.Fprintln(out)
-	return nil
-}
-
-// openLister builds whichever client on this entry can enumerate models
-// live, or returns nil when none can. The chat surface is preferred; an
-// audio-only entry falls back to its speech client, which is where
-// elevenlabs hangs its GET /v1/models call. A nil lister is not an error —
-// dumpCatalog then prints the bundled catalog alone.
-func openLister(entry provider.Entry, options provider.Options) (core.ModelLister, error) {
-	switch {
-	case entry.Supports(provider.CAPABILITY_MODEL_GENERATE):
-		prov, err := provider.New(entry.Name, options)
-		if err != nil {
-			return nil, err
-		}
-		lister, _ := prov.(core.ModelLister)
-		return lister, nil
-	case entry.Supports(provider.CAPABILITY_AUDIO_SPEECH):
-		speech, err := provider.NewSpeech(entry.Name, options)
-		if err != nil {
-			return nil, err
-		}
-		lister, _ := speech.(core.ModelLister)
-		return lister, nil
-	default:
-		return nil, nil
-	}
-}
-
-// joinCapabilities renders an entry's capability list for error messages.
-func joinCapabilities(capabilities []provider.Capability) string {
-	if len(capabilities) == 0 {
-		return "(none)"
-	}
-	names := make([]string, 0, len(capabilities))
-	for _, capability := range capabilities {
-		names = append(names, string(capability))
-	}
-	return strings.Join(names, ", ")
-}
-
-// dumpCatalog prints the provider's ModelSpec list. It prefers the live
-// upstream catalog (core.ModelLister) and falls back to the bundled static
-// catalog when the provider does not implement the live port or the live
-// call fails (offline, bad key). A nil lister means no client on this entry
-// can enumerate models, so only the static catalog is printed. The source is
-// reported on stderr so the stdout list stays clean for piping.
-func dumpCatalog(
-	ctx context.Context,
-	errOut, out io.Writer,
-	lister core.ModelLister,
-	label string,
-	static []core.ModelSpec,
-) error {
-	specs := static
-	source := "static"
-	if lister != nil {
-		if live, err := lister.ListModels(ctx); err != nil {
-			fmt.Fprintf(errOut, "[provider] %s: live catalog unavailable, using static (%v)\n", label, err)
-		} else {
-			specs = live
-			source = "live"
-		}
-	}
-	if len(specs) == 0 {
-		fmt.Fprintf(out, "%s: (empty catalog)\n", label)
-		return nil
-	}
-	fmt.Fprintf(out, "%s catalog (%d models, %s):\n", label, len(specs), source)
-	for _, s := range specs {
-		fmt.Fprintf(out, "  %-40s family=%-18s reasoning=%v ctx=%d max=%d\n",
-			s.ID, s.Family, s.Reasoning, s.ContextWindow, s.MaxTokens)
-	}
-	return nil
 }

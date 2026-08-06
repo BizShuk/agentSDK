@@ -28,6 +28,23 @@ const (
 	// it carries max_output_tokens, and store must be false.
 	PATH_RESPONSES = "/codex/responses"
 
+	// LiveBaseURLEnvVar overrides the realtime websocket endpoint used by
+	// the Live API surface.
+	LiveBaseURLEnvVar = "CODEX_LIVE_BASE_URL"
+
+	// DefaultLiveBaseURL is the OpenAI Realtime API websocket. Unlike the
+	// chat surface this lives on api.openai.com and accepts standard API
+	// keys — the one surface where APIKeyEnvVar is not a placeholder.
+	DefaultLiveBaseURL = "wss://api.openai.com/v1/realtime"
+
+	// DefaultLiveModel is the GA realtime speech model.
+	DefaultLiveModel = "gpt-realtime"
+
+	// DefaultInputTranscriptionModel transcribes user audio when the
+	// session asks for input transcripts; the realtime session config
+	// requires an explicit model name.
+	DefaultInputTranscriptionModel = "whisper-1"
+
 	// CodexOriginator identifies requests made through the Codex adapter.
 	CodexOriginator = "codex_cli_rs"
 
