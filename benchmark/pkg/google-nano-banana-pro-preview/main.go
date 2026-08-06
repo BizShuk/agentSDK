@@ -9,8 +9,5 @@ import (
 )
 
 func main() {
-	benchmark.Main(
-		benchmark.Target{Provider: "google", Model: "nano-banana-pro-preview"},
-		benchmark.WithModel("nano-banana-pro-preview", benchmark.ImageCases()),
-	)
+	benchmark.Main("google", "nano-banana-pro-preview")
 }

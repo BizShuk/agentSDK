@@ -9,8 +9,5 @@ import (
 )
 
 func main() {
-	benchmark.Main(
-		benchmark.Target{Provider: "minimax", Model: "music-3.0"},
-		benchmark.WithModel("music-3.0", benchmark.MusicCases()),
-	)
+	benchmark.Main("minimax", "music-3.0")
 }

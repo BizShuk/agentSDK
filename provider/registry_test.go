@@ -235,16 +235,16 @@ func TestImageCapabilitiesAreExplicit(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			entry, ok := provider.Lookup(name)
 			require.True(t, ok)
-			assert.True(t, entry.Supports(provider.CAPABILITY_IMAGE_GENERATE))
-			assert.Contains(t, entry.Capabilities(), provider.CAPABILITY_IMAGE_GENERATE)
+			assert.True(t, entry.Supports(provider.CAPABILITY_IMAGE))
+			assert.Contains(t, entry.Capabilities(), provider.CAPABILITY_IMAGE)
 		})
 	}
 	for _, name := range []string{"anthropic", "codex", "ollama"} {
 		t.Run(name, func(t *testing.T) {
 			entry, ok := provider.Lookup(name)
 			require.True(t, ok)
-			assert.False(t, entry.Supports(provider.CAPABILITY_IMAGE_GENERATE))
-			assert.NotContains(t, entry.Capabilities(), provider.CAPABILITY_IMAGE_GENERATE)
+			assert.False(t, entry.Supports(provider.CAPABILITY_IMAGE))
+			assert.NotContains(t, entry.Capabilities(), provider.CAPABILITY_IMAGE)
 		})
 	}
 }
@@ -252,15 +252,15 @@ func TestImageCapabilitiesAreExplicit(t *testing.T) {
 func TestVideoCapabilitiesAreExplicit(t *testing.T) {
 	entry, ok := provider.Lookup("minimax")
 	require.True(t, ok)
-	assert.True(t, entry.Supports(provider.CAPABILITY_VIDEO_GENERATE))
-	assert.Contains(t, entry.Capabilities(), provider.CAPABILITY_VIDEO_GENERATE)
+	assert.True(t, entry.Supports(provider.CAPABILITY_VIDEO))
+	assert.Contains(t, entry.Capabilities(), provider.CAPABILITY_VIDEO)
 
 	for _, name := range []string{"anthropic", "antigravity", "codex", "google", "grok", "ollama"} {
 		t.Run(name, func(t *testing.T) {
 			entry, ok := provider.Lookup(name)
 			require.True(t, ok)
-			assert.False(t, entry.Supports(provider.CAPABILITY_VIDEO_GENERATE))
-			assert.NotContains(t, entry.Capabilities(), provider.CAPABILITY_VIDEO_GENERATE)
+			assert.False(t, entry.Supports(provider.CAPABILITY_VIDEO))
+			assert.NotContains(t, entry.Capabilities(), provider.CAPABILITY_VIDEO)
 		})
 	}
 }
@@ -268,15 +268,15 @@ func TestVideoCapabilitiesAreExplicit(t *testing.T) {
 func TestMusicCapabilitiesAreExplicit(t *testing.T) {
 	entry, ok := provider.Lookup("minimax")
 	require.True(t, ok)
-	assert.True(t, entry.Supports(provider.CAPABILITY_MUSIC_GENERATE))
-	assert.Contains(t, entry.Capabilities(), provider.CAPABILITY_MUSIC_GENERATE)
+	assert.True(t, entry.Supports(provider.CAPABILITY_MUSIC))
+	assert.Contains(t, entry.Capabilities(), provider.CAPABILITY_MUSIC)
 
 	for _, name := range []string{"anthropic", "antigravity", "codex", "google", "grok", "ollama"} {
 		t.Run(name, func(t *testing.T) {
 			entry, ok := provider.Lookup(name)
 			require.True(t, ok)
-			assert.False(t, entry.Supports(provider.CAPABILITY_MUSIC_GENERATE))
-			assert.NotContains(t, entry.Capabilities(), provider.CAPABILITY_MUSIC_GENERATE)
+			assert.False(t, entry.Supports(provider.CAPABILITY_MUSIC))
+			assert.NotContains(t, entry.Capabilities(), provider.CAPABILITY_MUSIC)
 		})
 	}
 }
@@ -291,7 +291,7 @@ func TestNewImageRejectsUnsupportedCapabilityBeforeCredentialResolution(t *testi
 	var unsupported *provider.UnsupportedCapabilityError
 	require.True(t, errors.As(err, &unsupported))
 	assert.Equal(t, "anthropic", unsupported.Provider)
-	assert.Equal(t, provider.CAPABILITY_IMAGE_GENERATE, unsupported.Capability)
+	assert.Equal(t, provider.CAPABILITY_IMAGE, unsupported.Capability)
 }
 
 func TestNewImageAllowsDeferredCredentialConstruction(t *testing.T) {
@@ -319,7 +319,7 @@ func TestNewVideoRejectsUnsupportedCapabilityBeforeCredentialResolution(t *testi
 	var unsupported *provider.UnsupportedCapabilityError
 	require.True(t, errors.As(err, &unsupported))
 	assert.Equal(t, "anthropic", unsupported.Provider)
-	assert.Equal(t, provider.CAPABILITY_VIDEO_GENERATE, unsupported.Capability)
+	assert.Equal(t, provider.CAPABILITY_VIDEO, unsupported.Capability)
 }
 
 func TestNewMusicRejectsUnsupportedCapabilityBeforeCredentialResolution(t *testing.T) {
@@ -332,7 +332,7 @@ func TestNewMusicRejectsUnsupportedCapabilityBeforeCredentialResolution(t *testi
 	var unsupported *provider.UnsupportedCapabilityError
 	require.True(t, errors.As(err, &unsupported))
 	assert.Equal(t, "anthropic", unsupported.Provider)
-	assert.Equal(t, provider.CAPABILITY_MUSIC_GENERATE, unsupported.Capability)
+	assert.Equal(t, provider.CAPABILITY_MUSIC, unsupported.Capability)
 }
 
 func TestNewMusicAllowsDeferredCredentialConstruction(t *testing.T) {

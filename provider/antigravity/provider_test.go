@@ -441,6 +441,9 @@ func TestListModels(t *testing.T) {
 	}
 }
 
+// Compile-time: the bundled catalog uses the canonical provider model type.
+var _ []provider.ModelSpec = antigravity.CATALOG
+
 // TestCatalogReasoningMatchesRouting — the catalog's Reasoning flag and
 // the SSE-vs-blocking routing decision must never disagree; a model
 // advertised as reasoning that takes the blocking path returns no

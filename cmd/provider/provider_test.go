@@ -16,6 +16,8 @@ import (
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/provider"
 	_ "github.com/bizshuk/agentsdk/provider/all"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestChat(t *testing.T) {
@@ -328,17 +330,17 @@ func TestWriteMatrixShowsTypeAndAuthSupport(t *testing.T) {
 		}
 	}
 
-	// chat, image, music, speech, transcribe, live, translate — in header order.
-	want := map[string][7]string{
-		"google":     {"yes", "yes", "no", "no", "no", "yes", "yes"},
-		"codex":      {"yes", "no", "no", "no", "no", "yes", "no"},
-		"minimax":    {"yes", "yes", "yes", "yes", "no", "no", "no"},
-		"elevenlabs": {"no", "no", "no", "yes", "yes", "no", "no"},
+	// chat, catalog, image, video, music, transcribe, speech, live, translate — in header order.
+	want := map[string][9]string{
+		"google":     {"yes", "yes", "yes", "no", "no", "no", "no", "yes", "yes"},
+		"codex":      {"yes", "yes", "no", "no", "no", "no", "no", "yes", "no"},
+		"minimax":    {"yes", "yes", "yes", "yes", "yes", "no", "yes", "no", "no"},
+		"elevenlabs": {"no", "yes", "no", "no", "no", "yes", "yes", "no", "no"},
 	}
 	seen := map[string]bool{}
 	for _, line := range strings.Split(text, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 8 {
+		if len(fields) < 10 {
 			continue
 		}
 		expected, ok := want[fields[0]]
@@ -346,7 +348,7 @@ func TestWriteMatrixShowsTypeAndAuthSupport(t *testing.T) {
 			continue
 		}
 		seen[fields[0]] = true
-		if got := [7]string(fields[1:8]); got != expected {
+		if got := [9]string(fields[1:10]); got != expected {
 			t.Errorf("%s capability row = %v, want %v", fields[0], got, expected)
 		}
 	}
@@ -355,4 +357,25 @@ func TestWriteMatrixShowsTypeAndAuthSupport(t *testing.T) {
 			t.Errorf("matrix missing %s row:\n%s", name, text)
 		}
 	}
+}
+
+func TestCatalogPrintsModelCapabilitiesAndModalities(t *testing.T) {
+	entry := provider.Entry{
+		Name: "catalog-only",
+		Catalog: func() []provider.ModelSpec {
+			return []provider.ModelSpec{{
+				ID:               "multi",
+				Family:           "family",
+				Capabilities:     []provider.Capability{provider.CAPABILITY_CHAT, provider.CAPABILITY_IMAGE},
+				InputModalities:  []provider.Modality{provider.MODALITY_TEXT, provider.MODALITY_IMAGE},
+				OutputModalities: []provider.Modality{provider.MODALITY_TEXT, provider.MODALITY_IMAGE},
+			}}
+		},
+	}
+
+	var out bytes.Buffer
+	require.NoError(t, Catalog(context.Background(), entry, provider.Options{}, io.Discard, &out))
+	assert.Contains(t, out.String(), "capabilities=chat,image")
+	assert.Contains(t, out.String(), "input=text,image")
+	assert.Contains(t, out.String(), "output=text,image")
 }

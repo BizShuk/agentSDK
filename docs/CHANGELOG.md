@@ -34,6 +34,19 @@
   內容才能理解的名稱，後改為直接對應公開詞彙。
 - `provider/sample` 已整併進 `cmd/provider/`。
 
+### Provider capability 與 model catalog consolidation
+
+- Provider discovery、model catalog、CLI 與 benchmark 收斂為單一
+  `provider.Capability` vocabulary；provider-level support 與 model-level support
+  分離表達。
+- `ModelSpec`、`ModelLister` 與 `Modality` 改由 provider layer 擁有；model catalog
+  可分別描述 input/output modalities，agent wizard 只列 `chat` models。
+- Benchmark 移除平行 `Kind` vocabulary 與 model-name inference，改由 catalog metadata
+  與 applicability 選擇 cases；CLI 使用 `-capabilities`，result JSON 使用
+  `capability`，generated packages 已依新 catalog 重生並保留既有結果目錄。
+- Deterministic tests、generator、full workspace verification 為 acceptance boundary；
+  未執行 live/paid provider calls。
+
 ## 2026-08-03
 
 ### Audio capability（STT/TTS）+ ElevenLabs / MiniMax speech adapters

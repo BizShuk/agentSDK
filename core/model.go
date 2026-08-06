@@ -1,25 +1,5 @@
 package core
 
-// ModelSpec is one entry in a provider's catalog. It mirrors pi/ai's Model
-// type so picker UIs and budget middleware can plan across providers.
-type ModelSpec struct {
-	ID            string     `json:"id"`
-	Family        string     `json:"family,omitempty"`
-	Reasoning     bool       `json:"reasoning,omitempty"`
-	Input         []Modality `json:"input,omitempty"`
-	ContextWindow int        `json:"context_window,omitempty"`
-	MaxTokens     int        `json:"max_tokens,omitempty"`
-}
-
-// Modality enumerates input types a model accepts.
-type Modality string
-
-const (
-	MODALITY_TEXT  Modality = "text"
-	MODALITY_IMAGE Modality = "image"
-	MODALITY_AUDIO Modality = "audio"
-)
-
 // ModelRequest is what runtime sends to a Provider.
 type ModelRequest struct {
 	RequestID   string     `json:"request_id,omitempty"`

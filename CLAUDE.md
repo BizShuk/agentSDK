@@ -31,6 +31,11 @@
   `New` 為 nil）。每個 adapter 的 endpoint、預設 model、base override 與 wire 例外
   處置由 [`docs/providers.md`](docs/providers.md) 擁有——upstream 改版屬高頻異動,
   不放進本檔的 boundary 規則。
+- Provider discovery vocabulary：`provider.Capability` 是 operation 的唯一詞彙；
+  `Entry` factories 表示 provider-level support，`ModelSpec.Capabilities` 表示
+  model-level support，`InputModalities` / `OutputModalities` 分別表示讀取與產生能力。
+  consumer 以三者交集選擇 `Provider + Capability + Model`；catalog metadata 不負責
+  request routing，選定 operation 後仍使用對應 typed constructor。
 - Reasoning content boundary：`core.Part` 以 `PART_KIND_REASONING` 表示可攜 reasoning
   文字，`ReasoningState` 保存 opaque continuation metadata。`ModelResult.Parts` 是有序
   canonical assistant content；無法表示 metadata 的 wire path 必須明確報錯。
@@ -87,6 +92,7 @@ agentsdk/
 ├── runtime/                          # Engine：dispatch Instruction、fold Event、Run/Resume/HITL
 ├── provider/                         # registry、credential bridge、protocol codecs 與七個 adapters
 │   ├── capability.go                 # model/image/video/music/audio capability discovery + typed unsupported error
+│   ├── model.go                      # provider-owned ModelSpec / ModelLister + directional Modality vocabulary
 │   ├── image.go / video.go / music.go / speech.go / transcribe.go / error.go # media contracts、request/result、auth wrappers、structured API error
 │   ├── live.go / translate.go        # realtime session（LiveConnector/LiveSession/LiveEvent）與 translation（Translator + optional TranslateStreamer）contracts
 │   ├── registry.go                   # Entry 是 name / metadata / static catalog / factories 的唯一真相 + DEFAULT_NAME
@@ -110,8 +116,8 @@ agentsdk/
 │   └── ollama/                       # adapter：本地 Ollama endpoint
 ├── benchmark/                        # provider-model capability benchmark；root package 擁有 run→iterate→store flow
 │   ├── testdata/                     # 共用輸入資產：shape.png（vision）、tone.wav（transcribe）
-│   ├── cmd/                          # flag 驅動 runner：-provider/-model（all = sweep）/-kinds/-list，結果寫進同一 pkg/<pair-slug>
-│   ├── gen/                          # 產生器：registry × DefaultCatalog × KindsOf → pkg/ 全部套件（DO NOT EDIT）
+│   ├── cmd/                          # flag runner：-provider/-model（all = sweep）/-capabilities/-list，結果寫進同一 pkg/<pair-slug>
+│   ├── gen/                          # 產生器：Entry × ModelSpec × benchmark applicability → pkg/ 全部套件（DO NOT EDIT）
 │   └── pkg/<provider-model>/         # 每個 runnable catalog model 一個 gen 產生的可執行套件（dir 名 = PairSlug）；結果存自身 tmp/<session-id>/case-NN-<name>/
 ├── sample/                           # demo-* 是單一元件展示，*-agent 是完整 agent
 │   ├── code-agent/                   # 全 harness 組合 CLI：tui 互動 / -p print / --json（wire）+ session flags；composition 位於 cmd/
@@ -179,9 +185,10 @@ observability 都在此。
 - Provider capability boundary：`core.Provider` 是 runtime 消費端定義的最小 port，只含
   blocking `Generate`；stream、live catalog、image generation、video generation、
   music generation
-  分別是 optional `core.StreamProvider`、`core.ModelLister`、
+  分別是 optional `core.StreamProvider`、`provider.ModelLister`、
   `provider.ImageGenerator`、`provider.VideoGenerator`、`provider.MusicGenerator`。
-  `provider.Entry` 單獨擁有 discovery metadata 與 factories。
+  `provider.Entry` 單獨擁有 provider discovery metadata 與 factories；
+  `provider.ModelSpec` 單獨擁有 catalog model metadata，兩者都不進 `core`。
 - Provider config pipeline：`provider.Options` 是 unresolved live input，只在
   `Resolve(Entry.Metadata)` 查 env 並投影成 `ResolvedConfig{Model, BaseURL, Auth}`。
   Endpoint 不進 `core.Auth`；credential 優先序固定為
@@ -227,7 +234,7 @@ observability 都在此。
 - `provider.Entry` 是 discovery/config 的唯一 owner；每個 `register.go` 在 Entry literal
   宣告 `Name`、`Metadata`、`Catalog`、`New` 與 optional `NewImage` / `NewVideo` /
   `NewMusic`。Static fallback
-  讀 `Entry.Catalog`，live path 才使用 `core.ModelLister`。
+  讀 `Entry.Catalog`，live path 才使用 `provider.ModelLister`。
 - `provider.Decorator` 定義在 provider layer 並於每個 request 解析 `core.Auth`，
   讓 OAuth refresh 可涵蓋 retry/SSE reconnect 而不重建 adapter。只有
   `provider/credential` 可 import `github.com/bizshuk/auth`；其 Source/Login wiring
@@ -247,14 +254,16 @@ observability 都在此。
   package 擁有 `run → iterate cases → query → store` flow 與預定義 case sets
   （chat/image/speech/transcribe/video/music），每個 `benchmark/pkg/<provider-model>`
   子套件是單一 pair 的 runnable main，結果以 session id 落在該套件自身 `tmp/`
-  （gitignored）。case 失敗只報告並跳過，不中斷 session。model 是每個 kind 共有的
-  軸：chat model 由 `Target.Model` 釘住，media model 由 `WithModel` 釘在
-  `Case.Model`，兩者皆取自該 provider 的 `DefaultCatalog`；`offCatalog` 只印
+  （gitignored）。case 失敗只報告並跳過，不中斷 session。`Case` 與 persisted
+  `Record` 直接使用 `provider.Capability`；chat model 由 `Target.Model` 釘住，media
+  model 由 `WithModel` 釘在 `Case.Model`。catalog-driven selection 取
+  `Entry.Supports ∩ ModelSpec.Capabilities ∩ benchmark case set ∩ applicability`，並依
+  `InputModalities` 移除 model 無法讀取的 case；`offCatalog` 只印
   warning 不擋——live catalog、本地 Ollama 與 catalog 未收錄的 media model 可合法
-  超出 snapshot。`pkg/` 全部由 `benchmark/gen` 產生（registry × `DefaultCatalog` ×
-  `KindsOf`），`KindsOf(provider, spec)` 擁有 model→kind 對照——`ModelSpec` 沒有
-  output modality，命名知識集中於此，回空 = 不產生套件。重新產生只覆寫 main.go
-  不動 `tmp/`；離開 catalog 的 model 其帶 marker 的產生檔會被移除。testdata anchor
+  超出 snapshot。特殊 model 缺少 generic case 必要輸入時，以 exact applicability
+  exclusion 留在 benchmark domain，不改寫 provider capability metadata。`pkg/` 全部由
+  `benchmark/gen` 產生；重新產生只覆寫 main.go，不動 `tmp/`；離開 runnable set 的
+  model 其帶 marker 的產生檔會被移除。testdata anchor
   由 `benchmark.Root()`（`runtime.Caller` 定位本套件源碼）提供，與巢狀深度無關；
   credential 只走 `os.Getenv`，不掛 gosdk/viper。runner 指令見
   [`docs/cli.md`](docs/cli.md)。
@@ -330,7 +339,7 @@ JSONL 對外 envelope 由 `agent/wire` 擁有，經
 | middleware preset | `agentsdk/middleware/preset`：`Default()`（retry→timeout→budget→loopguard）、`Secure(sandbox, approval)`（再加 sandbox→approval→spotlight→sanitizer） |
 | credential | `agentsdk/provider/credential`：`RouteID`/`Kinds`/`Names`、`NewSource`/`NewAutoSource`/`Source.Decorator()`、`Login`；唯一 import `bizshuk/auth` 之處 |
 | provider registry | `agentsdk/provider`（package `provider`，非 `registry`）：`Entry` 單獨擁有 name / metadata / static catalog / model+image+video+music+audio factories；`Names`/`Entries`/`Lookup`/`Catalog`/`Capabilities`/`New`/`NewImage`/`NewVideo`/`NewMusic`/`NewTranscriber`/`NewSpeech`/`NewLive`/`NewTranslate`/`Options.Resolve`/`ResolvedConfig`/`DEFAULT_NAME`；`env` 查詢以 `LookupEnv` 注入 |
-| capability benchmark | `agentsdk/benchmark`：`Target`、`Case`/`Kind`、六組 case sets（`ChatCases`/`ImageCases`/`SpeechCases`/`TranscribeCases`/`VideoCases`/`MusicCases`）與 `WithModel`、`Main`/`Run`/`RunPair`/`Root`/`PairSlug`、`CatalogSpecs`/`KindsOf`、`Record`；`benchmark/gen` 產生 `benchmark/pkg/<provider-model>` 全部子套件，`benchmark/cmd` 是 flag runner，結果為 `pkg/<pair-slug>/tmp/<session-id>/case-NN-<name>/`（meta.json + outputs）+ session `summary.json` |
+| capability benchmark | `agentsdk/benchmark`：`Target`、`Case`、六組 case sets、`RunnableCapabilities` / `CasesForModel` / `CatalogCases`、`Main` / `Run` / `RunPair`、`Record`；`benchmark/gen` 產生 `benchmark/pkg/<provider-model>` 全部子套件，`benchmark/cmd` 是 flag runner，結果為 `pkg/<pair-slug>/tmp/<session-id>/case-NN-<name>/`（meta.json + outputs）+ session `summary.json` |
 | root CLI subcommands | `agentsdk/cmd`：`cmd.ProviderCmd`（`provider` 手動測試 CLI，不走 Engine；per-type handler 在 `cmd/provider` package：`Chat`/`Image`/`Music`/`Speech`/`Transcribe`/`WriteMatrix`/`Catalog`/`JoinCapabilities` + `Request`）、`cmd/agent/wizard.WizardCmd`（`wizard`/`w` 設定產生器）；flag 用法見 [`docs/cli.md`](docs/cli.md) |
 | authentication | 外部 module `github.com/bizshuk/auth`：只由 `provider/credential` 消費；API 契約見該 repo |
 | provider adapters | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity,elevenlabs}`：前七者實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`），elevenlabs 是 audio-only（`New` 為 nil）。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal；每家實作哪些 optional capability、endpoint 與 wire 形狀見 [`docs/providers.md`](docs/providers.md) |

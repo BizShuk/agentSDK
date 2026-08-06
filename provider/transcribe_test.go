@@ -176,7 +176,7 @@ func TestNewTranscriberRejectsUnsupportedCapabilityBeforeCredentialResolution(t 
 	var unsupported *provider.UnsupportedCapabilityError
 	require.True(t, errors.As(err, &unsupported))
 	assert.Equal(t, "minimax", unsupported.Provider)
-	assert.Equal(t, provider.CAPABILITY_AUDIO_TRANSCRIBE, unsupported.Capability)
+	assert.Equal(t, provider.CAPABILITY_TRANSCRIBE, unsupported.Capability)
 }
 
 func TestNewTranscriberAllowsDeferredCredentialConstruction(t *testing.T) {

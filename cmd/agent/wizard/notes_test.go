@@ -61,3 +61,16 @@ func TestNoteIncludesCredentialEnv(t *testing.T) {
 		}
 	}
 }
+
+func TestCatalogChoicesOnlyIncludeChatModels(t *testing.T) {
+	specs := []provider.ModelSpec{
+		{ID: "chat-model", Capabilities: []provider.Capability{provider.CAPABILITY_CHAT}},
+		{ID: "image-model", Capabilities: []provider.Capability{provider.CAPABILITY_IMAGE}},
+		{ID: "live-model", Capabilities: []provider.Capability{provider.CAPABILITY_LIVE}},
+	}
+
+	choices := catalogChoices(specs)
+	require.Len(t, choices, 2)
+	assert.Equal(t, "", choices[0].Value)
+	assert.Equal(t, "chat-model", choices[1].Value)
+}

@@ -12,11 +12,11 @@ adapter 的 upstream 會改版，本檔因此是`高頻異動`區；CLAUDE.md �
 矩陣由 registry 產生，`不`在文件裡維護靜態副本 —— 靜態表格會在新增 adapter 時靜默過期：
 
 ```bash
-go run . provider --list      # provider × chat/image/music/speech/transcribe/live/translate × auth env
+go run . provider --list      # provider × chat/catalog/image/video/music/transcribe/speech/live/translate × auth env
 ```
 
-`Vision read`（chat request 攜帶 image part）與 `Video`（`provider.VideoGenerator`）
-不在該矩陣內：前者是全部 chat adapter 的共通能力，後者目前只有 MiniMax。
+`Capability` 表示 operation；model 是否能讀 image/audio 或產生 text/image/audio/video，
+另由 catalog 的 directional modalities 表示，不另塞進 provider-level matrix。
 
 ## Capability Interfaces
 
@@ -28,7 +28,7 @@ go run . provider --list      # provider × chat/image/music/speech/transcribe/l
 | ---------------- | ---------------------------- | -------------------------------------------------------------------------------- | -------------------------------- |
 | Chat (blocking)  | `core.Provider`              | `Generate(ctx, ModelRequest) (ModelResult, error)`                               | `provider.New`                   |
 | Chat (streaming) | `core.StreamProvider`        | `Stream(ctx, ModelRequest) (<-chan ModelChunk, error)`                           | 同上（`Adapter` = 兩者合體）     |
-| Live catalog     | `core.ModelLister`           | `ListModels(ctx) ([]ModelSpec, error)`                                           | type assertion                   |
+| Live catalog     | `provider.ModelLister`       | `ListModels(ctx) ([]ModelSpec, error)`                                           | type assertion                   |
 | Image (t2i/i2i)  | `provider.ImageGenerator`    | `GenerateImage(ctx, ImageRequest) (ImageResult, error)`                          | `provider.NewImage`              |
 | Video            | `provider.VideoGenerator`    | `MaxPromptLength() int`；`GenerateVideo(ctx, VideoRequest) (VideoResult, error)` | `provider.NewVideo`              |
 | Music            | `provider.MusicGenerator`    | `GenerateMusic(ctx, MusicRequest) (MusicResult, error)`                          | `provider.NewMusic`              |
@@ -157,8 +157,8 @@ API key 走 `?key=` query、OAuth Bearer 走 `Authorization` header，read limit
   voice、input/output transcription 皆映射進 setup）。
 - translation 是同一條 socket 加 `generationConfig.translationConfig`，預設 model
   `gemini-3.5-live-translate-preview`。
-- 兩個 live model 刻意`不`進 `DefaultCatalog`——它們沒有 REST chat surface，進
-  catalog 會讓 `benchmark/gen` 產生打不通的套件。
+- 兩個 live model 以 `live` / `translate` capability 進 catalog，不宣告 `chat`；
+  benchmark 因不具對應 case set，不會為它們產生套件。
 
 ## Codex — OpenAI Realtime API（live）
 
@@ -182,7 +182,8 @@ live credential 在 connect 時解析一次（websocket handshake 驗證後 sess
 
 ## Vision 輸入編碼 (Vision Input)
 
-`PART_KIND_IMAGE` 由`全部` chat adapter 編碼進 request，各自編成自家 wire 形狀：
+chat adapter 可把 `PART_KIND_IMAGE` 編碼成各家 wire 形狀；個別 model 是否接受 image
+以 `ModelSpec.InputModalities` 為準：
 
 | Adapter                                     | 形狀                      |
 | ------------------------------------------- | ------------------------- |
@@ -194,6 +195,7 @@ live credential 在 connect 時解析一次（websocket handshake 驗證後 sess
 
 ## Model catalog
 
-除 codex 外的 chat adapter 皆實作 optional `core.ModelLister`（ElevenLabs 掛在
+除 codex 外的 chat adapter 皆實作 optional `provider.ModelLister`（ElevenLabs 掛在
 `*SpeechProvider` 上；antigravity 走 `/v1internal:fetchAvailableModels`）。沒有
-live lister 的 provider 讀 static `Entry.Catalog`。
+live lister 的 provider 讀 static `Entry.Catalog`。已知 live ID 會保留 bundled
+`ModelSpec` 的 capability 與 directional modalities；未知 ID 不以名稱猜測 metadata。

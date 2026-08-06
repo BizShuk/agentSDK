@@ -10,18 +10,15 @@ import (
 type Capability string
 
 const (
-	CAPABILITY_MODEL_GENERATE Capability = "model_generate"
-	CAPABILITY_MODEL_STREAM   Capability = "model_stream"
-	CAPABILITY_MODEL_CATALOG  Capability = "model_catalog"
-	CAPABILITY_IMAGE_GENERATE Capability = "image_generate"
-	CAPABILITY_VIDEO_GENERATE Capability = "video_generate"
-	CAPABILITY_MUSIC_GENERATE Capability = "music_generate"
-
-	CAPABILITY_AUDIO_TRANSCRIBE Capability = "audio_transcribe"
-	CAPABILITY_AUDIO_SPEECH     Capability = "audio_speech"
-
-	CAPABILITY_LIVE      Capability = "live"
-	CAPABILITY_TRANSLATE Capability = "translate"
+	CAPABILITY_CHAT       Capability = "chat"
+	CAPABILITY_CATALOG    Capability = "catalog"
+	CAPABILITY_IMAGE      Capability = "image"
+	CAPABILITY_VIDEO      Capability = "video"
+	CAPABILITY_MUSIC      Capability = "music"
+	CAPABILITY_TRANSCRIBE Capability = "transcribe"
+	CAPABILITY_SPEECH     Capability = "speech"
+	CAPABILITY_LIVE       Capability = "live"
+	CAPABILITY_TRANSLATE  Capability = "translate"
 )
 
 // ErrUnsupportedCapability identifies a provider that is registered but does
@@ -46,19 +43,19 @@ func (e *UnsupportedCapabilityError) Unwrap() error {
 // Supports reports whether this registry entry implements capability.
 func (e Entry) Supports(capability Capability) bool {
 	switch capability {
-	case CAPABILITY_MODEL_GENERATE, CAPABILITY_MODEL_STREAM:
+	case CAPABILITY_CHAT:
 		return e.New != nil
-	case CAPABILITY_MODEL_CATALOG:
+	case CAPABILITY_CATALOG:
 		return e.Catalog != nil
-	case CAPABILITY_IMAGE_GENERATE:
+	case CAPABILITY_IMAGE:
 		return e.NewImage != nil
-	case CAPABILITY_VIDEO_GENERATE:
+	case CAPABILITY_VIDEO:
 		return e.NewVideo != nil
-	case CAPABILITY_MUSIC_GENERATE:
+	case CAPABILITY_MUSIC:
 		return e.NewMusic != nil
-	case CAPABILITY_AUDIO_TRANSCRIBE:
+	case CAPABILITY_TRANSCRIBE:
 		return e.NewTranscriber != nil
-	case CAPABILITY_AUDIO_SPEECH:
+	case CAPABILITY_SPEECH:
 		return e.NewSpeech != nil
 	case CAPABILITY_LIVE:
 		return e.NewLive != nil
@@ -72,14 +69,13 @@ func (e Entry) Supports(capability Capability) bool {
 // Capabilities returns this entry's supported API surfaces in stable order.
 func (e Entry) Capabilities() []Capability {
 	ordered := []Capability{
-		CAPABILITY_MODEL_GENERATE,
-		CAPABILITY_MODEL_STREAM,
-		CAPABILITY_MODEL_CATALOG,
-		CAPABILITY_IMAGE_GENERATE,
-		CAPABILITY_VIDEO_GENERATE,
-		CAPABILITY_MUSIC_GENERATE,
-		CAPABILITY_AUDIO_TRANSCRIBE,
-		CAPABILITY_AUDIO_SPEECH,
+		CAPABILITY_CHAT,
+		CAPABILITY_CATALOG,
+		CAPABILITY_IMAGE,
+		CAPABILITY_VIDEO,
+		CAPABILITY_MUSIC,
+		CAPABILITY_TRANSCRIBE,
+		CAPABILITY_SPEECH,
 		CAPABILITY_LIVE,
 		CAPABILITY_TRANSLATE,
 	}

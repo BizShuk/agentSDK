@@ -225,7 +225,7 @@ func TestProviderModelsContainsExpectedIDs(t *testing.T) {
 	for _, m := range models {
 		ids = append(ids, m.ID)
 	}
-	for _, want := range []string{"grok-3", "grok-4", "grok-3-mini"} {
+	for _, want := range []string{"grok-4.5", "grok-2-vision", grok.DefaultImageModel} {
 		assert.Contains(t, ids, want, "catalog must include %s", want)
 	}
 }

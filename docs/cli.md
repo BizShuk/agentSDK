@@ -19,8 +19,9 @@ go run . provider --provider elevenlabs --type transcribe --audio-file ./clip.mp
 
 - `--type` 選 API surface（預設 `chat`）：`chat` / `image` / `music` / `speech` /
   `transcribe`。不支援的 provider 回 typed `provider.ErrUnsupportedCapability`。
-- `--list-models` 優先打 live `core.ModelLister`，失敗才 fallback `Entry.Catalog`；
+- `--list-models` 優先打 live `provider.ModelLister`，失敗才 fallback `Entry.Catalog`；
   audio-only entry 改由 speech client 取得 lister。
+- catalog output 同時列出 model capabilities、input modalities 與 output modalities。
 - credential 由 env 提供，對應 env 名稱在 `--list` 的 `AUTH ENV` 欄。
 
 per-adapter 的 endpoint、預設 model 與 base override 見
@@ -37,7 +38,8 @@ go run . w -o - --print-go                  # 額外印出等價的 Go literal
 go run . w --list reasoning.style           # 列出單一欄位的選項
 ```
 
-設定詞彙來自 `agent/spec`，provider 資料直接來自 `provider.Entries` / `Catalog`。
+設定詞彙來自 `agent/spec`，provider 資料直接來自 `provider.Entries` / `Catalog`；
+model picker 只列能作為 agent runtime 的 `chat` models。
 
 ## Sample 執行
 
@@ -76,13 +78,15 @@ agent samples 皆將 Markdown 寫 stdout、`core.StreamEvent` JSONL 寫 stderr�
 ```bash
 go run ./benchmark/cmd -list
 go run ./benchmark/cmd -provider minimax -model all
-go run ./benchmark/cmd -provider google -kinds chat,image
+go run ./benchmark/cmd -provider google -model gemini-2.5-pro -capabilities chat
 go run ./benchmark/gen                      # 重新產生 benchmark/pkg/* （亦掛 go:generate）
 ```
 
-`-model all` 是全 catalog sweep（單一 model 失敗不中斷）；`-kinds` 留空 = 依
-`Entry.Supports` 自動選。結果落在 `benchmark/pkg/<pair-slug>/tmp/<session-id>/`
-（gitignored）。
+`-model all` 是全 catalog sweep（單一 model 失敗不中斷）；`-capabilities` 留空時，
+已選 catalog model 依 provider support、model capabilities、input modalities 與
+benchmark applicability 自動選擇 cases。顯式指定 unsupported capability 會執行並記錄
+typed failure。結果落在 `benchmark/pkg/<pair-slug>/tmp/<session-id>/`（gitignored），
+每筆 `Record` 以 `capability` 欄保存 operation。
 
 ## 依賴圖分析（外部 CLI）
 

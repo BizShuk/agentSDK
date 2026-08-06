@@ -9,8 +9,5 @@ import (
 )
 
 func main() {
-	benchmark.Main(
-		benchmark.Target{Provider: "ollama", Model: "gemma4:e2b"},
-		benchmark.ChatCases(),
-	)
+	benchmark.Main("ollama", "gemma4:e2b")
 }

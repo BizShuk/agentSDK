@@ -24,7 +24,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 )
 
 // MAX_BODY_BYTES caps how much of a catalog response we read. Catalogs are
@@ -121,18 +121,18 @@ func DecodeIDList(raw []byte) ([]string, error) {
 // catalog knows, the full ModelSpec is reused so family / reasoning /
 // context-window survive; for ids it does not, the spec carries the id
 // alone, which is honest about what the endpoint actually told us.
-func Merge(ids []string, static []core.ModelSpec) []core.ModelSpec {
-	known := make(map[string]core.ModelSpec, len(static))
+func Merge(ids []string, static []provider.ModelSpec) []provider.ModelSpec {
+	known := make(map[string]provider.ModelSpec, len(static))
 	for _, s := range static {
 		known[s.ID] = s
 	}
-	out := make([]core.ModelSpec, 0, len(ids))
+	out := make([]provider.ModelSpec, 0, len(ids))
 	for _, id := range ids {
 		if spec, ok := known[id]; ok {
 			out = append(out, spec)
 			continue
 		}
-		out = append(out, core.ModelSpec{ID: id})
+		out = append(out, provider.ModelSpec{ID: id})
 	}
 	return out
 }

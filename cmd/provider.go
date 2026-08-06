@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"os"
+
 	providercli "github.com/bizshuk/agentsdk/cmd/provider"
 	"github.com/bizshuk/agentsdk/provider"
 	_ "github.com/bizshuk/agentsdk/provider/all"
@@ -18,7 +20,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"os"
 )
 
 // DEFAULT_PROVIDER_TIMEOUT bounds one manual-test request; media generation
@@ -165,7 +166,7 @@ Examples:
 
 		switch ProviderType {
 		case "chat":
-			if !entry.Supports(provider.CAPABILITY_MODEL_GENERATE) {
+			if !entry.Supports(provider.CAPABILITY_CHAT) {
 				return fmt.Errorf("provider %s has no chat surface; supported capabilities: %s",
 					label, providercli.JoinCapabilities(entry.Capabilities()))
 			}

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/bizshuk/agentsdk/agent/spec"
-	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/provider"
 )
 
@@ -37,10 +36,10 @@ func providerNote(e provider.Entry) string {
 	return strings.Join(parts, "; ")
 }
 
-// catalogChoices maps a slice of core.ModelSpec into the wizard's
+// catalogChoices maps a slice of provider.ModelSpec into the wizard's
 // []Choice vocabulary. The empty-Value entry with Default=true lets the
 // wizard prompt accept Enter to mean "the adapter's flagship default".
-func catalogChoices(specs []core.ModelSpec) []spec.Choice {
+func catalogChoices(specs []provider.ModelSpec) []spec.Choice {
 	out := make([]spec.Choice, 0, len(specs)+1)
 	out = append(out, spec.Choice{
 		Value:   "",
@@ -49,6 +48,9 @@ func catalogChoices(specs []core.ModelSpec) []spec.Choice {
 		Default: true,
 	})
 	for _, s := range specs {
+		if !s.Supports(provider.CAPABILITY_CHAT) {
+			continue
+		}
 		out = append(out, spec.Choice{
 			Value: s.ID,
 			Label: s.ID,
@@ -60,7 +62,7 @@ func catalogChoices(specs []core.ModelSpec) []spec.Choice {
 
 // modelNote is the human-facing note attached to each model Choice.
 // Living next to the wizard because it is presentation only.
-func modelNote(s core.ModelSpec) string {
+func modelNote(s provider.ModelSpec) string {
 	var parts []string
 	if s.Family != "" {
 		parts = append(parts, s.Family)

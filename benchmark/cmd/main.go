@@ -1,12 +1,11 @@
 // Command cmd runs the benchmark flow for one provider-model pair chosen by
-// flags, or sweeps a provider's entire DefaultCatalog with -model all.
-// Results land in the same place as the pinned packages:
-// benchmark/pkg/<pair-slug>/tmp/<session-id>/.
+// flags, or sweeps a provider's entire bundled catalog with -model all.
+// Results land in benchmark/pkg/<pair-slug>/tmp/<session-id>/.
 //
 //	go run ./benchmark/cmd -list
 //	go run ./benchmark/cmd -provider minimax -model MiniMax-M3
-//	go run ./benchmark/cmd -provider google -model gemini-2.5-pro -kinds chat
-//	go run ./benchmark/cmd -provider elevenlabs -kinds speech -model eleven_v3
+//	go run ./benchmark/cmd -provider google -model gemini-2.5-pro -capabilities chat
+//	go run ./benchmark/cmd -provider elevenlabs -capabilities speech -model eleven_v3
 //	go run ./benchmark/cmd -provider elevenlabs -model all
 package main
 
@@ -23,46 +22,20 @@ import (
 	_ "github.com/bizshuk/agentsdk/provider/all"
 )
 
-// MODEL_ALL sweeps every DefaultCatalog model instead of naming one.
+// MODEL_ALL sweeps every bundled catalog model instead of naming one.
 const MODEL_ALL = "all"
 
-// kindOrder fixes both the -kinds vocabulary and the case execution order.
-var kindOrder = []benchmark.Kind{
-	benchmark.KIND_CHAT,
-	benchmark.KIND_IMAGE,
-	benchmark.KIND_SPEECH,
-	benchmark.KIND_TRANSCRIBE,
-	benchmark.KIND_VIDEO,
-	benchmark.KIND_MUSIC,
-}
-
-var caseSets = map[benchmark.Kind]func() []benchmark.Case{
-	benchmark.KIND_CHAT:       benchmark.ChatCases,
-	benchmark.KIND_IMAGE:      benchmark.ImageCases,
-	benchmark.KIND_SPEECH:     benchmark.SpeechCases,
-	benchmark.KIND_TRANSCRIBE: benchmark.TranscribeCases,
-	benchmark.KIND_VIDEO:      benchmark.VideoCases,
-	benchmark.KIND_MUSIC:      benchmark.MusicCases,
-}
-
-var kindCapability = map[benchmark.Kind]provider.Capability{
-	benchmark.KIND_CHAT:       provider.CAPABILITY_MODEL_GENERATE,
-	benchmark.KIND_IMAGE:      provider.CAPABILITY_IMAGE_GENERATE,
-	benchmark.KIND_SPEECH:     provider.CAPABILITY_AUDIO_SPEECH,
-	benchmark.KIND_TRANSCRIBE: provider.CAPABILITY_AUDIO_TRANSCRIBE,
-	benchmark.KIND_VIDEO:      provider.CAPABILITY_VIDEO_GENERATE,
-	benchmark.KIND_MUSIC:      provider.CAPABILITY_MUSIC_GENERATE,
-}
+var capabilityOrder = benchmark.BenchmarkCapabilities()
 
 func main() {
 	providerName := flag.String("provider", provider.DEFAULT_NAME,
 		"provider name; see -list")
 	model := flag.String("model", "",
-		"model id from the provider DefaultCatalog (off-catalog ids warn), or \"all\" to sweep every catalog model. Empty = adapter default. Applies to the chat cases; when chat is not among the selected kinds it applies to every selected case (audio/image/video/music models are models too)")
-	kinds := flag.String("kinds", "",
-		"comma-separated case kinds (chat,image,speech,transcribe,video,music); empty = every kind the provider supports; an explicitly requested unsupported kind runs and is recorded as FAIL")
+		"model id from the provider catalog (off-catalog ids warn), or \"all\" to sweep the catalog; empty uses adapter defaults")
+	capabilities := flag.String("capabilities", "",
+		"comma-separated benchmark capabilities (chat,image,speech,transcribe,video,music); empty derives them from provider and model metadata; explicitly unsupported capabilities run and are recorded as FAIL")
 	list := flag.Bool("list", false,
-		"list registered providers with capabilities and DefaultCatalog models (each annotated with the kinds it can serve), then exit")
+		"list registered providers and catalog models with runnable benchmark capabilities, then exit")
 	flag.Parse()
 
 	if *list {
@@ -76,30 +49,30 @@ func main() {
 			*providerName, strings.Join(provider.Names(), ", ")))
 	}
 
-	selected, err := selectKinds(entry, *kinds)
-	if err != nil {
-		fatal(err)
-	}
-
 	if *model == MODEL_ALL {
+		selected, err := selectCapabilities(entry, nil, *capabilities)
+		if err != nil {
+			fatal(err)
+		}
 		if err := sweepCatalog(context.Background(), entry, selected); err != nil {
 			fatal(err)
 		}
 		return
 	}
 
-	var cases []benchmark.Case
-	for _, kind := range selected {
-		cases = append(cases, caseSets[kind]()...)
+	spec := findCatalogSpec(entry, *model)
+	selected, err := selectCapabilities(entry, spec, *capabilities)
+	if err != nil {
+		fatal(err)
+	}
+	cases := casesForSelection(entry, spec, selected)
+	if spec == nil && *model != "" &&
+		!slices.Contains(selected, provider.CAPABILITY_CHAT) {
+		cases = pinMediaModel(*model, cases)
 	}
 	if len(cases) == 0 {
-		fatal(fmt.Errorf("provider %s supports none of the benchmark kinds", entry.Name))
-	}
-	// Without a chat kind in the selection, -model can only mean the media
-	// model — a media-only run (elevenlabs speech, minimax music) would
-	// otherwise silently ignore the flag and ride the adapter default.
-	if *model != "" && !slices.Contains(selected, benchmark.KIND_CHAT) {
-		cases = benchmark.WithModel(*model, cases)
+		fatal(fmt.Errorf("provider %s model %s has no runnable benchmark cases",
+			entry.Name, displayModel(*model)))
 	}
 
 	target := benchmark.Target{Provider: entry.Name, Model: *model}
@@ -108,29 +81,24 @@ func main() {
 	}
 }
 
-// sweepCatalog runs every DefaultCatalog model on the kinds it can serve
-// (KindsOf ∩ the selected kinds). Models the benchmark cannot drive are
-// reported and skipped, and one model's failure never stops the sweep —
-// the same report-and-continue contract the per-case flow has.
-func sweepCatalog(ctx context.Context, entry provider.Entry, selected []benchmark.Kind) error {
+// sweepCatalog runs every bundled model on the intersection of its declared
+// runnable capabilities and the selected benchmark capabilities.
+func sweepCatalog(ctx context.Context, entry provider.Entry, selected []provider.Capability) error {
 	specs := benchmark.CatalogSpecs(entry.Name)
 	if len(specs) == 0 {
-		return fmt.Errorf("provider %s ships no DefaultCatalog to sweep", entry.Name)
+		return fmt.Errorf("provider %s ships no catalog to sweep", entry.Name)
 	}
 	for _, spec := range specs {
-		var kinds []benchmark.Kind
-		for _, kind := range benchmark.KindsOf(entry.Name, spec) {
-			if slices.Contains(selected, kind) {
-				kinds = append(kinds, kind)
+		var capabilities []provider.Capability
+		for _, capability := range benchmark.RunnableCapabilities(entry, spec) {
+			if slices.Contains(selected, capability) {
+				capabilities = append(capabilities, capability)
 			}
 		}
-		if len(kinds) == 0 {
-			fmt.Printf("skip %s: no runnable kind in this benchmark\n", spec.ID)
+		cases := casesForSelection(entry, &spec, capabilities)
+		if len(cases) == 0 {
+			fmt.Printf("skip %s: no runnable benchmark capability\n", spec.ID)
 			continue
-		}
-		var cases []benchmark.Case
-		for _, kind := range kinds {
-			cases = append(cases, benchmark.WithModel(spec.ID, caseSets[kind]())...)
 		}
 		target := benchmark.Target{Provider: entry.Name, Model: spec.ID}
 		if err := benchmark.RunPair(ctx, target, cases); err != nil {
@@ -140,57 +108,123 @@ func sweepCatalog(ctx context.Context, entry provider.Entry, selected []benchmar
 	return nil
 }
 
-// selectKinds resolves the -kinds flag. Empty selects every kind the entry
-// supports, in kindOrder; an explicit list is validated against the
-// vocabulary only, so an unsupported-but-requested kind still runs and gets
-// recorded as a failing case.
-func selectKinds(entry provider.Entry, flagValue string) ([]benchmark.Kind, error) {
+// selectCapabilities derives an empty selection from model metadata when a
+// catalog model is known, otherwise from the provider entry. An explicit list
+// is vocabulary-checked only so unsupported requests still produce a result.
+func selectCapabilities(entry provider.Entry, spec *provider.ModelSpec, flagValue string) ([]provider.Capability, error) {
 	if strings.TrimSpace(flagValue) == "" {
-		var out []benchmark.Kind
-		for _, kind := range kindOrder {
-			if entry.Supports(kindCapability[kind]) {
-				out = append(out, kind)
+		if spec != nil {
+			return benchmark.RunnableCapabilities(entry, *spec), nil
+		}
+		var out []provider.Capability
+		for _, capability := range capabilityOrder {
+			if entry.Supports(capability) {
+				out = append(out, capability)
 			}
 		}
 		return out, nil
 	}
 
-	var out []benchmark.Kind
+	var out []provider.Capability
 	for raw := range strings.SplitSeq(flagValue, ",") {
-		kind := benchmark.Kind(strings.TrimSpace(strings.ToLower(raw)))
-		if _, ok := caseSets[kind]; !ok {
-			return nil, fmt.Errorf("unknown kind %q (known: %s)", raw, joinKinds(kindOrder))
+		capability := provider.Capability(strings.TrimSpace(strings.ToLower(raw)))
+		if !slices.Contains(capabilityOrder, capability) {
+			return nil, fmt.Errorf("unknown capability %q (known: %s)", raw, joinCapabilities(capabilityOrder))
 		}
-		out = append(out, kind)
+		if !slices.Contains(out, capability) {
+			out = append(out, capability)
+		}
 	}
 	return out, nil
 }
 
+// casesForSelection applies catalog model requirements to supported
+// capabilities. Explicit unsupported capabilities keep their base cases so
+// the benchmark records the typed provider failure.
+func casesForSelection(entry provider.Entry, spec *provider.ModelSpec, selected []provider.Capability) []benchmark.Case {
+	if spec == nil {
+		var out []benchmark.Case
+		for _, capability := range selected {
+			out = append(out, benchmark.CasesForCapability(capability)...)
+		}
+		return out
+	}
+
+	modelCases := benchmark.CasesForModel(entry, *spec)
+	var out []benchmark.Case
+	for _, capability := range selected {
+		if entry.Supports(capability) && spec.Supports(capability) {
+			for _, testCase := range modelCases {
+				if testCase.Capability == capability {
+					out = append(out, testCase)
+				}
+			}
+			continue
+		}
+		cases := benchmark.CasesForCapability(capability)
+		if capability != provider.CAPABILITY_CHAT {
+			cases = benchmark.WithModel(spec.ID, cases)
+		}
+		out = append(out, cases...)
+	}
+	return out
+}
+
+func pinMediaModel(model string, cases []benchmark.Case) []benchmark.Case {
+	out := slices.Clone(cases)
+	for i := range out {
+		if out[i].Capability != provider.CAPABILITY_CHAT && out[i].Model == "" {
+			out[i].Model = model
+		}
+	}
+	return out
+}
+
+func findCatalogSpec(entry provider.Entry, model string) *provider.ModelSpec {
+	if model == "" {
+		return nil
+	}
+	for _, spec := range benchmark.CatalogSpecs(entry.Name) {
+		if spec.ID == model {
+			matched := spec
+			return &matched
+		}
+	}
+	return nil
+}
+
 func printList() {
 	for _, entry := range provider.Entries() {
-		var supported []benchmark.Kind
-		for _, kind := range kindOrder {
-			if entry.Supports(kindCapability[kind]) {
-				supported = append(supported, kind)
+		var supported []provider.Capability
+		for _, capability := range capabilityOrder {
+			if entry.Supports(capability) {
+				supported = append(supported, capability)
 			}
 		}
-		fmt.Printf("%-12s kinds: %s\n", entry.Name, joinKinds(supported))
+		fmt.Printf("%-12s capabilities: %s\n", entry.Name, joinCapabilities(supported))
 		for _, spec := range benchmark.CatalogSpecs(entry.Name) {
-			kinds := joinKinds(benchmark.KindsOf(entry.Name, spec))
-			if kinds == "" {
-				kinds = "-"
+			capabilities := joinCapabilities(benchmark.RunnableCapabilities(entry, spec))
+			if capabilities == "" {
+				capabilities = "-"
 			}
-			fmt.Printf("  %-42s %s\n", spec.ID, kinds)
+			fmt.Printf("  %-42s %s\n", spec.ID, capabilities)
 		}
 	}
 }
 
-func joinKinds(kinds []benchmark.Kind) string {
-	names := make([]string, 0, len(kinds))
-	for _, kind := range kinds {
-		names = append(names, string(kind))
+func joinCapabilities(capabilities []provider.Capability) string {
+	names := make([]string, 0, len(capabilities))
+	for _, capability := range capabilities {
+		names = append(names, string(capability))
 	}
 	return strings.Join(names, ",")
+}
+
+func displayModel(model string) string {
+	if model == "" {
+		return "(adapter default)"
+	}
+	return model
 }
 
 func fatal(err error) {

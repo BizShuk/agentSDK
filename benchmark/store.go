@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/bizshuk/agentsdk/provider"
 )
 
 const (
@@ -20,18 +22,18 @@ const (
 // Record is the persisted outcome of one case: the per-case meta.json and one
 // row of the session-level summary.json.
 type Record struct {
-	Case       string            `json:"case"`
-	Kind       Kind              `json:"kind"`
-	Provider   string            `json:"provider"`
-	Model      string            `json:"model,omitempty"`
-	Prompt     string            `json:"prompt,omitempty"`
-	InputFile  string            `json:"input_file,omitempty"`
-	StartedAt  time.Time         `json:"started_at"`
-	DurationMs int64             `json:"duration_ms"`
-	Status     string            `json:"status"`
-	Error      string            `json:"error,omitempty"`
-	Outputs    []string          `json:"outputs,omitempty"`
-	Extra      map[string]string `json:"extra,omitempty"`
+	Case       string              `json:"case"`
+	Capability provider.Capability `json:"capability"`
+	Provider   string              `json:"provider"`
+	Model      string              `json:"model,omitempty"`
+	Prompt     string              `json:"prompt,omitempty"`
+	InputFile  string              `json:"input_file,omitempty"`
+	StartedAt  time.Time           `json:"started_at"`
+	DurationMs int64               `json:"duration_ms"`
+	Status     string              `json:"status"`
+	Error      string              `json:"error,omitempty"`
+	Outputs    []string            `json:"outputs,omitempty"`
+	Extra      map[string]string   `json:"extra,omitempty"`
 }
 
 // makeSessionDir creates tmp/<sessionID>/ under the provider-model package.

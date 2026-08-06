@@ -77,12 +77,17 @@ func TestListModels(t *testing.T) {
 	assert.Equal(t, "gemini-flash", known.Family)
 	assert.Equal(t, 1048576, known.ContextWindow)
 	assert.Equal(t, 65536, known.MaxTokens)
+	assert.Equal(t, []provider.Capability{provider.CAPABILITY_CHAT}, known.Capabilities)
+	assert.Equal(t, []provider.Modality{provider.MODALITY_TEXT}, known.OutputModalities)
 
-	// Unknown id infers a coarse family and defaults to text input.
+	// The endpoint establishes chat capability for an unknown generateContent
+	// model without guessing family or richer modality metadata from its id.
 	unknown := specs[1]
-	assert.Equal(t, "gemini", unknown.Family)
+	assert.Empty(t, unknown.Family)
 	assert.Equal(t, 2000000, unknown.ContextWindow)
-	assert.Equal(t, []core.Modality{core.MODALITY_TEXT}, unknown.Input)
+	assert.Equal(t, []provider.Capability{provider.CAPABILITY_CHAT}, unknown.Capabilities)
+	assert.Equal(t, []provider.Modality{provider.MODALITY_TEXT}, unknown.InputModalities)
+	assert.Equal(t, []provider.Modality{provider.MODALITY_TEXT}, unknown.OutputModalities)
 }
 
 func TestListModelsEmptyIsError(t *testing.T) {

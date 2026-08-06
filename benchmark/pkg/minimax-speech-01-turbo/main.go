@@ -9,8 +9,5 @@ import (
 )
 
 func main() {
-	benchmark.Main(
-		benchmark.Target{Provider: "minimax", Model: "speech-01-turbo"},
-		benchmark.WithModel("speech-01-turbo", benchmark.SpeechCases()),
-	)
+	benchmark.Main("minimax", "speech-01-turbo")
 }

@@ -338,8 +338,8 @@ func TestDefaultCatalogListsBothCapabilities(t *testing.T) {
 		"eleven_multilingual_sts_v2",
 	}, ids)
 	assert.Equal(t,
-		[]core.Modality{core.MODALITY_AUDIO},
-		elevenlabs.DefaultCatalog()[0].Input,
+		[]provider.Modality{provider.MODALITY_AUDIO},
+		elevenlabs.DefaultCatalog()[0].InputModalities,
 		"the transcription model takes audio in")
 	assert.True(t, strings.HasPrefix(elevenlabs.DefaultSpeechModel, "eleven_"))
 	assert.NotContains(t, ids, "scribe_v2_realtime",

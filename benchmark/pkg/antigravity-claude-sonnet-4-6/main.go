@@ -9,8 +9,5 @@ import (
 )
 
 func main() {
-	benchmark.Main(
-		benchmark.Target{Provider: "antigravity", Model: "claude-sonnet-4-6"},
-		benchmark.ChatCases(),
-	)
+	benchmark.Main("antigravity", "claude-sonnet-4-6")
 }

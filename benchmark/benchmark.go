@@ -29,22 +29,22 @@ import (
 )
 
 // Target pins the provider-model pair one benchmark package runs against.
-// Model is the chat model; media kinds default to the adapter's own model
+// Model is the chat model; media capabilities default to the adapter's own model
 // unless the case overrides it.
 type Target struct {
 	Provider string
 	Model    string
 }
 
-// timeouts caps one case per kind; asynchronous video generation upstream
+// timeouts caps one case per capability; asynchronous video generation upstream
 // routinely takes minutes.
-var timeouts = map[Kind]time.Duration{
-	KIND_CHAT:       2 * time.Minute,
-	KIND_IMAGE:      5 * time.Minute,
-	KIND_SPEECH:     2 * time.Minute,
-	KIND_TRANSCRIBE: 2 * time.Minute,
-	KIND_MUSIC:      5 * time.Minute,
-	KIND_VIDEO:      15 * time.Minute,
+var timeouts = map[provider.Capability]time.Duration{
+	provider.CAPABILITY_CHAT:       2 * time.Minute,
+	provider.CAPABILITY_IMAGE:      5 * time.Minute,
+	provider.CAPABILITY_SPEECH:     2 * time.Minute,
+	provider.CAPABILITY_TRANSCRIBE: 2 * time.Minute,
+	provider.CAPABILITY_MUSIC:      5 * time.Minute,
+	provider.CAPABILITY_VIDEO:      15 * time.Minute,
 }
 
 // Root returns the benchmark package directory inside the repository,
@@ -68,13 +68,15 @@ func RunPair(ctx context.Context, target Target, cases []Case) error {
 }
 
 // Main is the shared entrypoint every provider-model package calls from its
-// main(). Results are stored under the calling package's own directory,
-// located via the caller's source path.
-func Main(target Target, cases []Case) {
+// main(). It resolves the target and catalog cases for the pair, then stores
+// results under the calling package's own directory.
+func Main(providerName, modelID string) {
 	pkgDir := "."
 	if _, file, _, ok := runtime.Caller(1); ok {
 		pkgDir = filepath.Dir(file)
 	}
+	target := Target{Provider: providerName, Model: modelID}
+	cases := CatalogCases(providerName, modelID)
 	if err := Run(context.Background(), target, cases, pkgDir); err != nil {
 		fmt.Fprintf(os.Stderr, "benchmark: %v\n", err)
 		os.Exit(1)
@@ -114,11 +116,11 @@ func Run(ctx context.Context, target Target, cases []Case, pkgDir string) error 
 		if rec.Status == STATUS_OK {
 			okCount++
 			fmt.Printf("[%d/%d] %s/%s ok (%.1fs) → %v\n",
-				i+1, len(cases), c.Kind, c.Name,
+				i+1, len(cases), c.Capability, c.Name,
 				float64(rec.DurationMs)/1000, rec.Outputs)
 		} else {
 			fmt.Printf("[%d/%d] %s/%s FAIL: %s\n",
-				i+1, len(cases), c.Kind, c.Name, rec.Error)
+				i+1, len(cases), c.Capability, c.Name, rec.Error)
 		}
 	}
 
@@ -174,22 +176,22 @@ func offCatalog(target Target, cases []Case) []string {
 // failure is folded into the returned Record.
 func runCase(ctx context.Context, target Target, c Case, root, caseDir string) Record {
 	rec := Record{
-		Case:      c.Name,
-		Kind:      c.Kind,
-		Provider:  target.Provider,
-		Model:     target.Model,
-		Prompt:    c.Prompt,
-		InputFile: c.InputFile,
-		StartedAt: time.Now().UTC(),
+		Case:       c.Name,
+		Capability: c.Capability,
+		Provider:   target.Provider,
+		Model:      target.Model,
+		Prompt:     c.Prompt,
+		InputFile:  c.InputFile,
+		StartedAt:  time.Now().UTC(),
 	}
-	if c.Kind != KIND_CHAT {
+	if c.Capability != provider.CAPABILITY_CHAT {
 		rec.Model = c.Model
 	}
 
-	timeout, ok := timeouts[c.Kind]
+	timeout, ok := timeouts[c.Capability]
 	if !ok {
 		rec.Status = STATUS_FAIL
-		rec.Error = fmt.Sprintf("unknown case kind %q", c.Kind)
+		rec.Error = fmt.Sprintf("unknown case capability %q", c.Capability)
 		return rec
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -209,21 +211,21 @@ func runCase(ctx context.Context, target Target, c Case, root, caseDir string) R
 }
 
 func dispatch(ctx context.Context, target Target, c Case, root, caseDir string) ([]string, map[string]string, error) {
-	switch c.Kind {
-	case KIND_CHAT:
+	switch c.Capability {
+	case provider.CAPABILITY_CHAT:
 		return runChat(ctx, target, c, root, caseDir)
-	case KIND_IMAGE:
+	case provider.CAPABILITY_IMAGE:
 		return runImage(ctx, target, c, root, caseDir)
-	case KIND_SPEECH:
+	case provider.CAPABILITY_SPEECH:
 		return runSpeech(ctx, target, c, caseDir)
-	case KIND_TRANSCRIBE:
+	case provider.CAPABILITY_TRANSCRIBE:
 		return runTranscribe(ctx, target, c, root, caseDir)
-	case KIND_VIDEO:
+	case provider.CAPABILITY_VIDEO:
 		return runVideo(ctx, target, c, caseDir)
-	case KIND_MUSIC:
+	case provider.CAPABILITY_MUSIC:
 		return runMusic(ctx, target, c, caseDir)
 	default:
-		return nil, nil, fmt.Errorf("unknown case kind %q", c.Kind)
+		return nil, nil, fmt.Errorf("unknown case capability %q", c.Capability)
 	}
 }
 

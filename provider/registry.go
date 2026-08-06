@@ -25,8 +25,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-
-	"github.com/bizshuk/agentsdk/core"
 )
 
 // DEFAULT_NAME is the registry key used when a name is empty.
@@ -58,7 +56,7 @@ type Entry struct {
 	NewSpeech      SpeechFactory
 	NewLive        LiveFactory
 	NewTranslate   TranslateFactory
-	Catalog        func() []core.ModelSpec
+	Catalog        func() []ModelSpec
 }
 
 // entries is the registry proper. Keys are lower-case; Lookup normalizes.
@@ -144,7 +142,7 @@ func Lookup(name string) (Entry, bool) {
 // Catalog returns the bundled model list for a registered provider. The
 // returned slice is the adapter's own DefaultCatalog — the registry does
 // not synthesize one. Unknown names return false.
-func Catalog(name string) ([]core.ModelSpec, bool) {
+func Catalog(name string) ([]ModelSpec, bool) {
 	e, ok := Lookup(name)
 	if !ok || e.Catalog == nil {
 		return nil, false
@@ -162,7 +160,7 @@ func New(name string, o Options) (Adapter, error) {
 	if e.New == nil {
 		return nil, &UnsupportedCapabilityError{
 			Provider:   e.Name,
-			Capability: CAPABILITY_MODEL_GENERATE,
+			Capability: CAPABILITY_CHAT,
 		}
 	}
 	resolved, decorator, err := resolveOptions(e, o)
@@ -186,7 +184,7 @@ func NewImage(name string, o Options) (ImageGenerator, error) {
 	if e.NewImage == nil {
 		return nil, &UnsupportedCapabilityError{
 			Provider:   e.Name,
-			Capability: CAPABILITY_IMAGE_GENERATE,
+			Capability: CAPABILITY_IMAGE,
 		}
 	}
 	resolved, decorator, err := resolveImageOptions(e, o)
@@ -210,7 +208,7 @@ func NewVideo(name string, o Options) (VideoGenerator, error) {
 	if e.NewVideo == nil {
 		return nil, &UnsupportedCapabilityError{
 			Provider:   e.Name,
-			Capability: CAPABILITY_VIDEO_GENERATE,
+			Capability: CAPABILITY_VIDEO,
 		}
 	}
 	resolved, decorator, err := resolveVideoOptions(e, o)
@@ -234,7 +232,7 @@ func NewMusic(name string, o Options) (MusicGenerator, error) {
 	if e.NewMusic == nil {
 		return nil, &UnsupportedCapabilityError{
 			Provider:   e.Name,
-			Capability: CAPABILITY_MUSIC_GENERATE,
+			Capability: CAPABILITY_MUSIC,
 		}
 	}
 	resolved, decorator, err := resolveMusicOptions(e, o)
@@ -258,7 +256,7 @@ func NewTranscriber(name string, o Options) (Transcriber, error) {
 	if e.NewTranscriber == nil {
 		return nil, &UnsupportedCapabilityError{
 			Provider:   e.Name,
-			Capability: CAPABILITY_AUDIO_TRANSCRIBE,
+			Capability: CAPABILITY_TRANSCRIBE,
 		}
 	}
 	resolved, decorator, err := resolveOptions(e, o)
@@ -282,7 +280,7 @@ func NewSpeech(name string, o Options) (SpeechGenerator, error) {
 	if e.NewSpeech == nil {
 		return nil, &UnsupportedCapabilityError{
 			Provider:   e.Name,
-			Capability: CAPABILITY_AUDIO_SPEECH,
+			Capability: CAPABILITY_SPEECH,
 		}
 	}
 	resolved, decorator, err := resolveSpeechOptions(e, o)

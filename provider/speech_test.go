@@ -266,7 +266,7 @@ func TestNewSpeechRejectsUnsupportedCapabilityBeforeCredentialResolution(t *test
 	var unsupported *provider.UnsupportedCapabilityError
 	require.True(t, errors.As(err, &unsupported))
 	assert.Equal(t, "anthropic", unsupported.Provider)
-	assert.Equal(t, provider.CAPABILITY_AUDIO_SPEECH, unsupported.Capability)
+	assert.Equal(t, provider.CAPABILITY_SPEECH, unsupported.Capability)
 }
 
 func TestNewSpeechAllowsDeferredCredentialConstruction(t *testing.T) {

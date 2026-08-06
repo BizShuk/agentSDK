@@ -9,8 +9,5 @@ import (
 )
 
 func main() {
-	benchmark.Main(
-		benchmark.Target{Provider: "elevenlabs", Model: "eleven_multilingual_v2"},
-		benchmark.WithModel("eleven_multilingual_v2", benchmark.SpeechCases()),
-	)
+	benchmark.Main("elevenlabs", "eleven_multilingual_v2")
 }

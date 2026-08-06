@@ -390,7 +390,8 @@ func TestDefaultCatalogReturnsExpectedFamily(t *testing.T) {
 	assert.True(t, ids["gpt-5.6-sol"], "gpt-5.6-sol must be in catalog")
 	assert.True(t, ids["gpt-5.6-terra"], "gpt-5.6-terra must be in catalog")
 	assert.True(t, ids["gpt-5.6-luna"], "gpt-5.6-luna must be in catalog")
-	assert.True(t, ids["gpt-5"])
+	assert.True(t, ids["gpt-5.5"])
+	assert.True(t, ids[codex.DefaultLiveModel])
 }
 
 // Compile-time: codex.Provider satisfies core.Provider.

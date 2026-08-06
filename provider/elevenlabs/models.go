@@ -7,11 +7,12 @@ import (
 	"slices"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/provider/utils"
 )
 
 // Compile-time: the speech surface is what carries the catalog endpoint.
-var _ core.ModelLister = (*SpeechProvider)(nil)
+var _ provider.ModelLister = (*SpeechProvider)(nil)
 
 // modelsPath is the vendor's catalog endpoint. It answers with a bare JSON
 // array, not the {"data":[...]} envelope utils.DecodeIDList understands, so
@@ -23,34 +24,50 @@ const modelsPath = "/v1/models"
 // ContextWindow and MaxTokens stay zero: the vendor bounds requests by
 // characters of input text, not tokens, so a token figure here would be a
 // fabricated one.
-func DefaultCatalog() []core.ModelSpec {
-	return []core.ModelSpec{
+func DefaultCatalog() []provider.ModelSpec {
+	return []provider.ModelSpec{
 		// Speech-to-text. scribe_v2_realtime is a websocket-only model and
 		// is rejected by the batch /v1/speech-to-text route this adapter
 		// posts to, so it is not listed.
 		{ID: "scribe_v2", Family: "scribe",
-			Input: []core.Modality{core.MODALITY_AUDIO}},
+			Capabilities:     []provider.Capability{provider.CAPABILITY_TRANSCRIBE},
+			InputModalities:  []provider.Modality{provider.MODALITY_AUDIO},
+			OutputModalities: []provider.Modality{provider.MODALITY_TEXT}},
 		// Text-to-speech — flash is the low-latency default.
 		{ID: "eleven_flash_v2_5", Family: "eleven_flash",
-			Input: []core.Modality{core.MODALITY_TEXT}},
+			Capabilities:     []provider.Capability{provider.CAPABILITY_SPEECH},
+			InputModalities:  []provider.Modality{provider.MODALITY_TEXT},
+			OutputModalities: []provider.Modality{provider.MODALITY_AUDIO}},
 		{ID: "eleven_flash_v2", Family: "eleven_flash",
-			Input: []core.Modality{core.MODALITY_TEXT}},
+			Capabilities:     []provider.Capability{provider.CAPABILITY_SPEECH},
+			InputModalities:  []provider.Modality{provider.MODALITY_TEXT},
+			OutputModalities: []provider.Modality{provider.MODALITY_AUDIO}},
 		{ID: "eleven_v3", Family: "eleven_v3",
-			Input: []core.Modality{core.MODALITY_TEXT}},
+			Capabilities:     []provider.Capability{provider.CAPABILITY_SPEECH},
+			InputModalities:  []provider.Modality{provider.MODALITY_TEXT},
+			OutputModalities: []provider.Modality{provider.MODALITY_AUDIO}},
 		{ID: "eleven_multilingual_v2", Family: "eleven_multilingual",
-			Input: []core.Modality{core.MODALITY_TEXT}},
+			Capabilities:     []provider.Capability{provider.CAPABILITY_SPEECH},
+			InputModalities:  []provider.Modality{provider.MODALITY_TEXT},
+			OutputModalities: []provider.Modality{provider.MODALITY_AUDIO}},
 		{ID: "eleven_turbo_v2_5", Family: "eleven_turbo",
-			Input: []core.Modality{core.MODALITY_TEXT}},
+			Capabilities:     []provider.Capability{provider.CAPABILITY_SPEECH},
+			InputModalities:  []provider.Modality{provider.MODALITY_TEXT},
+			OutputModalities: []provider.Modality{provider.MODALITY_AUDIO}},
 		{ID: "eleven_turbo_v2", Family: "eleven_turbo",
-			Input: []core.Modality{core.MODALITY_TEXT}},
+			Capabilities:     []provider.Capability{provider.CAPABILITY_SPEECH},
+			InputModalities:  []provider.Modality{provider.MODALITY_TEXT},
+			OutputModalities: []provider.Modality{provider.MODALITY_AUDIO}},
 		{ID: "eleven_english_sts_v2", Family: "eleven_sts",
-			Input: []core.Modality{core.MODALITY_AUDIO}},
+			InputModalities:  []provider.Modality{provider.MODALITY_AUDIO},
+			OutputModalities: []provider.Modality{provider.MODALITY_AUDIO}},
 		{ID: "eleven_multilingual_sts_v2", Family: "eleven_sts",
-			Input: []core.Modality{core.MODALITY_AUDIO}},
+			InputModalities:  []provider.Modality{provider.MODALITY_AUDIO},
+			OutputModalities: []provider.Modality{provider.MODALITY_AUDIO}},
 	}
 }
 
-// ListModels implements core.ModelLister against GET /v1/models.
+// ListModels implements provider.ModelLister against GET /v1/models.
 //
 // The endpoint enumerates synthesis models only — text-to-speech and voice
 // conversion. Speech-to-text (scribe) models are served by a different
@@ -58,7 +75,7 @@ func DefaultCatalog() []core.ModelSpec {
 // appended rather than being dropped by the live-drives-membership rule in
 // utils.Merge. Everything else follows that rule: the live list decides
 // which synthesis models exist, the bundle supplies their metadata.
-func (p *SpeechProvider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
+func (p *SpeechProvider) ListModels(ctx context.Context) ([]provider.ModelSpec, error) {
 	raw, err := utils.Fetch(ctx, p.client, p.baseURL+modelsPath, catalogHeaders(p.auth))
 	if err != nil {
 		return nil, fmt.Errorf("elevenlabs list models: %w", err)
@@ -116,7 +133,7 @@ func decodeModelIDs(raw []byte) ([]string, error) {
 
 // appendTranscribeModels adds the bundled audio-input models the synthesis
 // catalog cannot report, skipping any id the live list already covered.
-func appendTranscribeModels(live, static []core.ModelSpec) []core.ModelSpec {
+func appendTranscribeModels(live, static []provider.ModelSpec) []provider.ModelSpec {
 	seen := make(map[string]struct{}, len(live))
 	for _, spec := range live {
 		seen[spec.ID] = struct{}{}
@@ -132,6 +149,6 @@ func appendTranscribeModels(live, static []core.ModelSpec) []core.ModelSpec {
 	return live
 }
 
-func takesAudio(spec core.ModelSpec) bool {
-	return slices.Contains(spec.Input, core.MODALITY_AUDIO)
+func takesAudio(spec provider.ModelSpec) bool {
+	return slices.Contains(spec.InputModalities, provider.MODALITY_AUDIO)
 }

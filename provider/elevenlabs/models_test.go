@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/provider/elevenlabs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,8 +66,8 @@ func TestListModelsUsesLiveCatalog(t *testing.T) {
 	assert.Empty(t, specs[2].Family,
 		"an id the bundle does not know carries the id alone")
 	assert.Equal(t,
-		[]core.Modality{core.MODALITY_AUDIO},
-		specs[3].Input,
+		[]provider.Modality{provider.MODALITY_AUDIO},
+		specs[3].InputModalities,
 		"the appended transcription model keeps its audio modality")
 }
 

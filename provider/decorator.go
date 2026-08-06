@@ -87,7 +87,7 @@ func resolveRequestAuth(
 // through unconditionally.
 //
 // ListModels is deliberately NOT forwarded here. Promoting it would make
-// every decorated adapter advertise core.ModelLister even when the one it
+// every decorated adapter advertise ModelLister even when the one it
 // wraps cannot list, and callers type-assert on that interface to decide
 // whether to query live or fall back to the bundled catalog.
 func WithDecorator(name string, a Adapter, d Decorator) Adapter {

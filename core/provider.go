@@ -21,11 +21,3 @@ type StreamProvider interface {
 	// channel without Done so consumers can reject a partial response.
 	Stream(ctx context.Context, request ModelRequest) (<-chan ModelChunk, error)
 }
-
-// ModelLister is the optional live-catalog capability. Adapters whose
-// upstream publishes a catalog endpoint implement it so callers can prefer
-// current model IDs over the bundled snapshot. It stays separate because some
-// upstreams expose no catalog endpoint.
-type ModelLister interface {
-	ListModels(ctx context.Context) ([]ModelSpec, error)
-}

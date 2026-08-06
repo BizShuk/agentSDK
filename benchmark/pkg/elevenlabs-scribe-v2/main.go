@@ -9,8 +9,5 @@ import (
 )
 
 func main() {
-	benchmark.Main(
-		benchmark.Target{Provider: "elevenlabs", Model: "scribe_v2"},
-		benchmark.WithModel("scribe_v2", benchmark.TranscribeCases()),
-	)
+	benchmark.Main("elevenlabs", "scribe_v2")
 }

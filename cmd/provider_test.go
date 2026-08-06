@@ -157,8 +157,8 @@ func TestProviderChatRejectsAudioOnly(t *testing.T) {
 	_, _, err := runCLI(t, "--provider", "elevenlabs", "--api-key", "sk-test", "ping")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no chat surface")
-	assert.Contains(t, err.Error(), "audio_transcribe")
-	assert.Contains(t, err.Error(), "audio_speech")
+	assert.Contains(t, err.Error(), "transcribe")
+	assert.Contains(t, err.Error(), "speech")
 }
 
 // TestProviderListProviders prints the registered adapter names.

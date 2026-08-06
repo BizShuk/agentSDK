@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/provider/utils"
 )
 
@@ -28,27 +30,12 @@ const (
 	GPT_OSS_MAX_OUTPUT     = 16384
 )
 
-// catalogEntry is one bundled model's metadata.
-//
-// Reasoning is absent on purpose: it is derived from the id by
-// isThinkingModel, which is the same function that decides whether a
-// request takes the SSE path. Hand-writing the flag here let the two
-// disagree — the previous table claimed claude-sonnet-4-6 reasons while
-// the router sent it down the blocking path.
-type catalogEntry struct {
-	id     string
-	family string
-	ctx    int
-	max    int
-	input  []core.Modality
+func geminiInput() []provider.Modality {
+	return []provider.Modality{provider.MODALITY_TEXT, provider.MODALITY_IMAGE, provider.MODALITY_AUDIO}
 }
 
-func geminiInput() []core.Modality {
-	return []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE, core.MODALITY_AUDIO}
-}
-
-func claudeInput() []core.Modality {
-	return []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE}
+func claudeInput() []provider.Modality {
+	return []provider.Modality{provider.MODALITY_TEXT, provider.MODALITY_IMAGE}
 }
 
 // CATALOG carries only models whose limits are actually known.
@@ -63,16 +50,16 @@ func claudeInput() []core.Modality {
 // routing ids (chat_20706, tab_flash_lite_preview) and the untiered
 // variants never reach a model picker as rows of zeroes. They remain
 // callable by name via --model; they are simply not advertised.
-var CATALOG = []catalogEntry{
+var CATALOG = []provider.ModelSpec{
 	// Gemini flash tiers.
-	{"gemini-3.6-flash-high", "gemini-flash", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
-	{"gemini-3.6-flash-medium", "gemini-flash", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
-	{"gemini-3.6-flash-low", "gemini-flash", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
-	{"gemini-3.5-flash-low", "gemini-flash", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
+	chatCatalogSpec("gemini-3.6-flash-high", "gemini-flash", geminiInput(), GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT),
+	chatCatalogSpec("gemini-3.6-flash-medium", "gemini-flash", geminiInput(), GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT),
+	chatCatalogSpec("gemini-3.6-flash-low", "gemini-flash", geminiInput(), GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT),
+	chatCatalogSpec("gemini-3.5-flash-low", "gemini-flash", geminiInput(), GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT),
 
 	// Gemini pro tiers.
-	{"gemini-3.1-pro-high", "gemini-pro", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
-	{"gemini-3.1-pro-low", "gemini-pro", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
+	chatCatalogSpec("gemini-3.1-pro-high", "gemini-pro", geminiInput(), GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT),
+	chatCatalogSpec("gemini-3.1-pro-low", "gemini-pro", geminiInput(), GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT),
 
 	// Image-output Gemini, and the default of the ImageGenerator
 	// capability. It answers an ordinary chat turn with an inlineData
@@ -82,14 +69,36 @@ var CATALOG = []catalogEntry{
 	// model whose output is a picture, and was not probed separately
 	// because every probe of this model spends image quota that takes
 	// days to reset.
-	{"gemini-3.1-flash-image", "gemini-image", GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT, geminiInput()},
+	imageCatalogSpec("gemini-3.1-flash-image", "gemini-image", geminiInput(), GEMINI_CONTEXT_WINDOW, GEMINI_MAX_OUTPUT),
 
 	// Claude family.
-	{"claude-sonnet-4-6", "claude-sonnet", CLAUDE_CONTEXT_WINDOW, CLAUDE_MAX_OUTPUT, claudeInput()},
-	{"claude-opus-4-6-thinking", "claude-opus", CLAUDE_CONTEXT_WINDOW, CLAUDE_MAX_OUTPUT, claudeInput()},
+	chatCatalogSpec("claude-sonnet-4-6", "claude-sonnet", claudeInput(), CLAUDE_CONTEXT_WINDOW, CLAUDE_MAX_OUTPUT),
+	chatCatalogSpec("claude-opus-4-6-thinking", "claude-opus", claudeInput(), CLAUDE_CONTEXT_WINDOW, CLAUDE_MAX_OUTPUT),
 
 	// GPT-OSS family.
-	{"gpt-oss-120b-medium", "gpt-oss", GPT_OSS_CONTEXT_WINDOW, GPT_OSS_MAX_OUTPUT, []core.Modality{core.MODALITY_TEXT}},
+	chatCatalogSpec("gpt-oss-120b-medium", "gpt-oss", []provider.Modality{provider.MODALITY_TEXT}, GPT_OSS_CONTEXT_WINDOW, GPT_OSS_MAX_OUTPUT),
+}
+
+func chatCatalogSpec(id, family string, input []provider.Modality, contextWindow, maxTokens int) provider.ModelSpec {
+	return provider.ModelSpec{
+		ID: id, Family: family,
+		Capabilities:     []provider.Capability{provider.CAPABILITY_CHAT},
+		InputModalities:  input,
+		OutputModalities: []provider.Modality{provider.MODALITY_TEXT},
+		ContextWindow:    contextWindow,
+		MaxTokens:        maxTokens,
+	}
+}
+
+func imageCatalogSpec(id, family string, input []provider.Modality, contextWindow, maxTokens int) provider.ModelSpec {
+	return provider.ModelSpec{
+		ID: id, Family: family,
+		Capabilities:     []provider.Capability{provider.CAPABILITY_IMAGE},
+		InputModalities:  input,
+		OutputModalities: []provider.Modality{provider.MODALITY_IMAGE},
+		ContextWindow:    contextWindow,
+		MaxTokens:        maxTokens,
+	}
 }
 
 // DefaultCatalog returns the bundled Antigravity model catalog — the
@@ -98,17 +107,16 @@ var CATALOG = []catalogEntry{
 //
 // Both Claude and Gemini families are routed through the same gateway.
 // IDs are the strings the gateway accepts on the wire.
-func DefaultCatalog() []core.ModelSpec {
-	out := make([]core.ModelSpec, 0, len(CATALOG))
-	for _, e := range CATALOG {
-		out = append(out, core.ModelSpec{
-			ID:            e.id,
-			Family:        e.family,
-			Reasoning:     isThinkingModel(e.id),
-			Input:         e.input,
-			ContextWindow: e.ctx,
-			MaxTokens:     e.max,
-		})
+// Reasoning is derived from each ID so catalog metadata stays aligned with
+// the SSE-versus-blocking routing decision.
+func DefaultCatalog() []provider.ModelSpec {
+	out := make([]provider.ModelSpec, 0, len(CATALOG))
+	for _, spec := range CATALOG {
+		spec.Capabilities = slices.Clone(spec.Capabilities)
+		spec.InputModalities = slices.Clone(spec.InputModalities)
+		spec.OutputModalities = slices.Clone(spec.OutputModalities)
+		spec.Reasoning = isThinkingModel(spec.ID)
+		out = append(out, spec)
 	}
 	return out
 }
@@ -126,14 +134,14 @@ type modelsResponse struct {
 	} `json:"models"`
 }
 
-// ListModels implements core.ModelLister against
+// ListModels implements provider.ModelLister against
 // /v1internal:fetchAvailableModels.
 //
 // The endpoint reports which models this account may actually call —
 // entitlement varies by subscription tier — so it is a better membership
 // source than the bundled catalog. Metadata still comes from
 // DefaultCatalog, which the endpoint does not carry.
-func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
+func (p *Provider) ListModels(ctx context.Context) ([]provider.ModelSpec, error) {
 	project, err := p.ProjectID(ctx, core.Auth{})
 	if err != nil {
 		return nil, err
@@ -171,8 +179,8 @@ func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
 // The cost is real and worth stating: a model Google adds after this
 // build will not appear until CATALOG learns its limits. Membership is no
 // longer purely live.
-func sized(specs []core.ModelSpec) []core.ModelSpec {
-	out := make([]core.ModelSpec, 0, len(specs))
+func sized(specs []provider.ModelSpec) []provider.ModelSpec {
+	out := make([]provider.ModelSpec, 0, len(specs))
 	for _, s := range specs {
 		if s.ContextWindow == 0 || s.MaxTokens == 0 {
 			continue

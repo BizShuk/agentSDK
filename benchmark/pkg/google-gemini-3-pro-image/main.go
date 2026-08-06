@@ -9,8 +9,5 @@ import (
 )
 
 func main() {
-	benchmark.Main(
-		benchmark.Target{Provider: "google", Model: "gemini-3-pro-image"},
-		benchmark.WithModel("gemini-3-pro-image", benchmark.ImageCases()),
-	)
+	benchmark.Main("google", "gemini-3-pro-image")
 }

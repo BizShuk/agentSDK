@@ -9,8 +9,5 @@ import (
 )
 
 func main() {
-	benchmark.Main(
-		benchmark.Target{Provider: "minimax", Model: "image-01-live"},
-		benchmark.WithModel("image-01-live", benchmark.ImageCases()),
-	)
+	benchmark.Main("minimax", "image-01-live")
 }

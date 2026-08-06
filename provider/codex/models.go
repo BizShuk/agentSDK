@@ -1,6 +1,6 @@
 package codex
 
-import "github.com/bizshuk/agentsdk/core"
+import "github.com/bizshuk/agentsdk/provider"
 
 // DefaultCatalog returns the bundled Codex model catalog. IDs are
 // the upstream strings published by OpenAI for ChatGPT-Plus/Pro
@@ -11,27 +11,44 @@ import "github.com/bizshuk/agentsdk/core"
 // toggle — see IsLiteModel below.
 //
 // Add new models in a follow-up after they ship a stable API.
-func DefaultCatalog() []core.ModelSpec {
-	return []core.ModelSpec{
+func DefaultCatalog() []provider.ModelSpec {
+	return []provider.ModelSpec{
 		{
-			ID: "gpt-5", Family: "gpt-5", Reasoning: true,
-			Input: []core.Modality{core.MODALITY_TEXT}, ContextWindow: 200000, MaxTokens: 16384,
+			ID: "gpt-5.5", Family: "gpt-5", Reasoning: true,
+			Capabilities:    []provider.Capability{provider.CAPABILITY_CHAT},
+			InputModalities: []provider.Modality{provider.MODALITY_TEXT}, ContextWindow: 200000, MaxTokens: 16384,
+			OutputModalities: []provider.Modality{provider.MODALITY_TEXT},
 		},
 		{
 			ID: "gpt-5-mini", Family: "gpt-5", Reasoning: false,
-			Input: []core.Modality{core.MODALITY_TEXT}, ContextWindow: 200000, MaxTokens: 16384,
+			Capabilities:    []provider.Capability{provider.CAPABILITY_CHAT},
+			InputModalities: []provider.Modality{provider.MODALITY_TEXT}, ContextWindow: 200000, MaxTokens: 16384,
+			OutputModalities: []provider.Modality{provider.MODALITY_TEXT},
 		},
 		{
 			ID: "gpt-5.6-sol", Family: "gpt-5.6", Reasoning: true,
-			Input: []core.Modality{core.MODALITY_TEXT}, ContextWindow: 200000, MaxTokens: 16384,
+			Capabilities:    []provider.Capability{provider.CAPABILITY_CHAT},
+			InputModalities: []provider.Modality{provider.MODALITY_TEXT}, ContextWindow: 200000, MaxTokens: 16384,
+			OutputModalities: []provider.Modality{provider.MODALITY_TEXT},
 		},
 		{
-			ID: "gpt-5.6-terra", Family: "gpt-5.5", Reasoning: true,
-			Input: []core.Modality{core.MODALITY_TEXT}, ContextWindow: 200000, MaxTokens: 16384,
+			ID: "gpt-5.6-terra", Family: "gpt-5.6", Reasoning: true,
+			Capabilities:    []provider.Capability{provider.CAPABILITY_CHAT},
+			InputModalities: []provider.Modality{provider.MODALITY_TEXT}, ContextWindow: 200000, MaxTokens: 16384,
+			OutputModalities: []provider.Modality{provider.MODALITY_TEXT},
 		},
 		{
-			ID: "gpt-5.6-luna", Family: "gpt-5.5", Reasoning: true,
-			Input: []core.Modality{core.MODALITY_TEXT}, ContextWindow: 200000, MaxTokens: 16384,
+			ID: "gpt-5.6-luna", Family: "gpt-5.6", Reasoning: true,
+			Capabilities:    []provider.Capability{provider.CAPABILITY_CHAT},
+			InputModalities: []provider.Modality{provider.MODALITY_TEXT}, ContextWindow: 200000, MaxTokens: 16384,
+			OutputModalities: []provider.Modality{provider.MODALITY_TEXT},
+		},
+		{
+			ID:               DefaultLiveModel,
+			Family:           "gpt-realtime",
+			Capabilities:     []provider.Capability{provider.CAPABILITY_LIVE},
+			InputModalities:  []provider.Modality{provider.MODALITY_TEXT, provider.MODALITY_AUDIO},
+			OutputModalities: []provider.Modality{provider.MODALITY_TEXT, provider.MODALITY_AUDIO},
 		},
 	}
 }

@@ -1,7 +1,6 @@
 package antigravity
 
 import (
-	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/provider"
 )
 
@@ -10,7 +9,7 @@ import (
 // reachable through the registry's shared contract.
 var (
 	_ provider.Adapter        = (*Provider)(nil)
-	_ core.ModelLister        = (*Provider)(nil)
+	_ provider.ModelLister    = (*Provider)(nil)
 	_ provider.ImageGenerator = (*ImageProvider)(nil)
 )
 

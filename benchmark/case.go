@@ -1,37 +1,33 @@
 package benchmark
 
-import "slices"
+import (
+	"slices"
 
-// Kind selects which provider capability a case exercises.
-type Kind string
-
-const (
-	KIND_CHAT       Kind = "chat"       // text (+ optional image/audio input) → text
-	KIND_IMAGE      Kind = "image"      // prompt (+ optional reference image) → image
-	KIND_SPEECH     Kind = "speech"     // text → audio
-	KIND_TRANSCRIBE Kind = "transcribe" // audio file → text
-	KIND_VIDEO      Kind = "video"      // prompt → mp4
-	KIND_MUSIC      Kind = "music"      // prompt + lyrics → audio
+	"github.com/bizshuk/agentsdk/provider"
 )
 
 // Case is one predefined input to run against a provider-model pair.
 type Case struct {
-	Name string
-	Kind Kind
+	Name       string
+	Capability provider.Capability
 
-	// Prompt is the text input; for KIND_SPEECH it is the text to synthesize.
+	// RequiredInput identifies an additional input modality beyond the prompt.
+	// Catalog-driven runs omit cases the selected model cannot accept.
+	RequiredInput provider.Modality
+
+	// Prompt is the text input; for speech it is the text to synthesize.
 	Prompt string
 
-	// Model overrides the media model for non-chat kinds. Empty keeps the
+	// Model overrides the media model for non-chat capabilities. Empty keeps the
 	// adapter's own default. Chat always uses Target.Model.
 	Model string
 
 	// InputFile is a media input path, resolved against the benchmark root
 	// when relative: an image or audio file for chat, a reference image for
-	// image-to-image, the audio to transcribe for KIND_TRANSCRIBE.
+	// image-to-image, or the audio to transcribe.
 	InputFile string
 
-	// Lyrics feeds KIND_MUSIC providers that require them.
+	// Lyrics feeds music providers that require them.
 	Lyrics string
 }
 
@@ -53,20 +49,21 @@ func WithModel(model string, cases []Case) []Case {
 func ChatCases() []Case {
 	return []Case{
 		{
-			Name:   "text-basic",
-			Kind:   KIND_CHAT,
-			Prompt: "Reply with exactly one word: pong",
+			Name:       "text-basic",
+			Capability: provider.CAPABILITY_CHAT,
+			Prompt:     "Reply with exactly one word: pong",
 		},
 		{
-			Name:   "text-reasoning",
-			Kind:   KIND_CHAT,
-			Prompt: "Which number is larger, 9.11 or 9.9? Answer in one short sentence.",
+			Name:       "text-reasoning",
+			Capability: provider.CAPABILITY_CHAT,
+			Prompt:     "Which number is larger, 9.11 or 9.9? Answer in one short sentence.",
 		},
 		{
-			Name:      "vision-describe",
-			Kind:      KIND_CHAT,
-			Prompt:    "Describe this image in one short sentence.",
-			InputFile: "testdata/shape.png",
+			Name:          "vision-describe",
+			Capability:    provider.CAPABILITY_CHAT,
+			RequiredInput: provider.MODALITY_IMAGE,
+			Prompt:        "Describe this image in one short sentence.",
+			InputFile:     "testdata/shape.png",
 		},
 	}
 }
@@ -75,9 +72,9 @@ func ChatCases() []Case {
 func ImageCases() []Case {
 	return []Case{
 		{
-			Name:   "text-to-image",
-			Kind:   KIND_IMAGE,
-			Prompt: "A minimal flat illustration of a red circle on a white background",
+			Name:       "text-to-image",
+			Capability: provider.CAPABILITY_IMAGE,
+			Prompt:     "A minimal flat illustration of a red circle on a white background",
 		},
 	}
 }
@@ -86,9 +83,9 @@ func ImageCases() []Case {
 func SpeechCases() []Case {
 	return []Case{
 		{
-			Name:   "text-to-speech",
-			Kind:   KIND_SPEECH,
-			Prompt: "Hello from the agent SDK benchmark.",
+			Name:       "text-to-speech",
+			Capability: provider.CAPABILITY_SPEECH,
+			Prompt:     "Hello from the agent SDK benchmark.",
 		},
 	}
 }
@@ -100,9 +97,10 @@ func SpeechCases() []Case {
 func TranscribeCases() []Case {
 	return []Case{
 		{
-			Name:      "speech-to-text",
-			Kind:      KIND_TRANSCRIBE,
-			InputFile: "testdata/tone.wav",
+			Name:          "speech-to-text",
+			Capability:    provider.CAPABILITY_TRANSCRIBE,
+			RequiredInput: provider.MODALITY_AUDIO,
+			InputFile:     "testdata/tone.wav",
 		},
 	}
 }
@@ -112,9 +110,9 @@ func TranscribeCases() []Case {
 func VideoCases() []Case {
 	return []Case{
 		{
-			Name:   "text-to-video",
-			Kind:   KIND_VIDEO,
-			Prompt: "A paper airplane gliding across a clear blue sky",
+			Name:       "text-to-video",
+			Capability: provider.CAPABILITY_VIDEO,
+			Prompt:     "A paper airplane gliding across a clear blue sky",
 		},
 	}
 }
@@ -123,10 +121,10 @@ func VideoCases() []Case {
 func MusicCases() []Case {
 	return []Case{
 		{
-			Name:   "text-to-music",
-			Kind:   KIND_MUSIC,
-			Prompt: "An upbeat cheerful acoustic guitar tune",
-			Lyrics: "##\nSunny day, on my way\nSing along, all day long\n##",
+			Name:       "text-to-music",
+			Capability: provider.CAPABILITY_MUSIC,
+			Prompt:     "An upbeat cheerful acoustic guitar tune",
+			Lyrics:     "##\nSunny day, on my way\nSing along, all day long\n##",
 		},
 	}
 }

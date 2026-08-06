@@ -1,6 +1,6 @@
 package anthropic
 
-// Static model catalog the SDK ships by default. Mirrors core.ModelSpec
+// Static model catalog the SDK ships by default. Mirrors provider.ModelSpec
 // so picker UIs and budget middleware can plan across providers without
 // reaching into Anthropic-specific types.
 
@@ -10,7 +10,7 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/bizshuk/agentsdk/provider/utils"
 )
 
@@ -23,17 +23,23 @@ import (
 // This list is intentionally conservative — adding a new model here is a
 // user-facing change because picker UIs render it. Add new models in a
 // follow-up after they ship a stable API.
-func DefaultCatalog() []core.ModelSpec {
-	return []core.ModelSpec{
+func DefaultCatalog() []provider.ModelSpec {
+	return []provider.ModelSpec{
 		{ID: "claude-opus-4-8", Family: "claude-opus", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE},
-			ContextWindow: 200000, MaxTokens: 32000},
+			Capabilities:     []provider.Capability{provider.CAPABILITY_CHAT},
+			InputModalities:  []provider.Modality{provider.MODALITY_TEXT, provider.MODALITY_IMAGE},
+			OutputModalities: []provider.Modality{provider.MODALITY_TEXT},
+			ContextWindow:    200000, MaxTokens: 32000},
 		{ID: "claude-sonnet-5", Family: "claude-sonnet", Reasoning: true,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE},
-			ContextWindow: 200000, MaxTokens: 8192},
+			Capabilities:     []provider.Capability{provider.CAPABILITY_CHAT},
+			InputModalities:  []provider.Modality{provider.MODALITY_TEXT, provider.MODALITY_IMAGE},
+			OutputModalities: []provider.Modality{provider.MODALITY_TEXT},
+			ContextWindow:    200000, MaxTokens: 8192},
 		{ID: "claude-haiku-4-5-20251001", Family: "claude-haiku", Reasoning: false,
-			Input:         []core.Modality{core.MODALITY_TEXT, core.MODALITY_IMAGE},
-			ContextWindow: 200000, MaxTokens: 8192},
+			Capabilities:     []provider.Capability{provider.CAPABILITY_CHAT},
+			InputModalities:  []provider.Modality{provider.MODALITY_TEXT, provider.MODALITY_IMAGE},
+			OutputModalities: []provider.Modality{provider.MODALITY_TEXT},
+			ContextWindow:    200000, MaxTokens: 8192},
 	}
 }
 
@@ -41,7 +47,7 @@ func DefaultCatalog() []core.ModelSpec {
 // live catalog — GET {base}/v1/models
 // ---------------------------------------------------------------------------
 
-// ListModels implements core.ModelLister against Anthropic's catalog
+// ListModels implements provider.ModelLister against Anthropic's catalog
 // endpoint. The endpoint reports ids and display names only, so context
 // windows and reasoning flags are merged in from DefaultCatalog; ids
 // Anthropic has published since this binary was built come back with the
@@ -49,7 +55,7 @@ func DefaultCatalog() []core.ModelSpec {
 //
 // The same call works against an Anthropic-compatible gateway, since the
 // URL is derived from the configured endpoint rather than hard-coded.
-func (p *Provider) ListModels(ctx context.Context) ([]core.ModelSpec, error) {
+func (p *Provider) ListModels(ctx context.Context) ([]provider.ModelSpec, error) {
 	raw, err := utils.Fetch(ctx, p.httpDoer, p.modelsEndpoint(), p.catalogHeaders())
 	if err != nil {
 		return nil, fmt.Errorf("anthropic: list models: %w", err)
@@ -81,4 +87,4 @@ func (p *Provider) catalogHeaders() map[string]string {
 }
 
 // Compile-time: ensure Provider satisfies the optional live-catalog port.
-var _ core.ModelLister = (*Provider)(nil)
+var _ provider.ModelLister = (*Provider)(nil)

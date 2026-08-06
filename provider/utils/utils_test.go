@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bizshuk/agentsdk/core"
+	"github.com/bizshuk/agentsdk/provider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,7 +89,7 @@ func TestDecodeIDList(t *testing.T) {
 }
 
 func TestMerge(t *testing.T) {
-	static := []core.ModelSpec{
+	static := []provider.ModelSpec{
 		{ID: "known", Family: "fam", Reasoning: true, ContextWindow: 1000, MaxTokens: 100},
 		{ID: "dropped-upstream", Family: "gone"},
 	}
