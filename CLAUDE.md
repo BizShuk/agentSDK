@@ -160,6 +160,11 @@ agentsdk/
 │   ├── grok/                         # adapter：xAI Grok
 │   ├── minimax/                      # adapter：MiniMax model HTTP/SSE + video/music/speech generation transport
 │   └── ollama/                       # adapter：本地 Ollama endpoint
+├── benchmark/                        # provider-model capability benchmark；root package 擁有 run→iterate→store flow
+│   ├── testdata/                     # 共用輸入資產：shape.png（vision）、tone.wav（transcribe）
+│   ├── cmd/                          # flag 驅動 runner：-provider/-model（all = sweep）/-kinds/-list，結果寫進同一 pkg/<pair-slug>
+│   ├── gen/                          # 產生器：registry × DefaultCatalog × KindsOf → pkg/ 全部套件（DO NOT EDIT）
+│   └── pkg/<provider-model>/         # 每個 runnable catalog model 一個 gen 產生的可執行套件（dir 名 = PairSlug）；結果存自身 tmp/<session-id>/case-NN-<name>/
 ├── sample/                           # demo-* 是單一元件展示，*-agent 是完整 agent
 │   ├── code-agent/                   # 全 harness 組合 CLI：tui 互動 / -p print / --json（wire）+ session flags；composition 位於 cmd/
 │   │   └── tui/                      # zero-dep differential renderer、ANSI 工具、Component/Terminal 抽象
@@ -284,6 +289,29 @@ agentsdk/
   discovery roots 由 `agent` 組裝，`prompt/source` 不 import `skill` 或 `agent`。
 - 頂層 `sample/demo-*` 是單一 SDK 元件展示，`sample/*-agent` 是完整 agent；
   `provider/sample` 是 package-local provider API example。
+- `benchmark/` 是 root module 內的 provider-model capability benchmark：root
+  package 擁有 `run → iterate cases → query → store` flow 與預定義 case sets
+  （chat/image/speech/transcribe/video/music），每個 `benchmark/pkg/<provider-model>`
+  子套件是單一 pair 的 runnable main（`benchmark.Main(Target, cases)`），結果以
+  session id（date）落在該套件自身 `tmp/`（gitignored）。case 失敗只報告並跳過，
+  不中斷 session。model 是每個 kind 共有的軸：chat model 由 `Target.Model` 釘住，
+  media model（image/speech/transcribe/video/music）由 `WithModel` 釘在
+  `Case.Model`，兩者皆取自該 provider 的 `DefaultCatalog`；`offCatalog` 對
+  target 與全部 case 的 model 逐一印 warning（不擋，因 live catalog、本地
+  Ollama 與 catalog 未收錄的 media model——grok image——可合法超出 snapshot）。
+  `pkg/` 的套件全部由 `benchmark/gen` 產生（`go run ./benchmark/gen`，亦掛
+  `go:generate`）：registry × DefaultCatalog × `KindsOf` 展開為每個 runnable
+  model 一個套件；`KindsOf(provider, spec)` 擁有 model→kind 對照（ModelSpec 無
+  output modality，命名知識集中於此；speech-to-speech、music-cover、S2V、
+  Google TTS/Lyria、Ollama embedding 回空 = 不產生套件、sweep 時報 skip）。
+  重新產生只覆寫 main.go 不動 tmp/；離開 catalog 的 model 其帶 marker 的產生檔
+  會被移除。`benchmark/cmd` 是 flag 驅動 runner（`-provider`/`-model`——`all` =
+  全 catalog sweep，單一 model 失敗不中斷/`-kinds`/`-list`，`-list` 逐 model
+  標註可跑 kind；`-kinds` 留空 = 依 `Entry.Supports` 自動選；`-model` 作用於
+  chat，選定 kinds 不含 chat 時改作用於全部 case），與 pair 套件透過 `RunPair`
+  共用 `pkg/<PairSlug>/tmp` 結果目錄；testdata anchor 由 `benchmark.Root()`
+  （`runtime.Caller` 定位本套件源碼）提供，與巢狀深度無關。credential 只走
+  `os.Getenv`，不掛 gosdk/viper。
 - `provider.Metadata` 分別宣告 `OAuthEnv` / `APIKeyEnv`，image / video / music /
   speech endpoint 可另以 `ImageBaseURLEnv` / `VideoBaseURLEnv` /
   `MusicBaseURLEnv` / `SpeechBaseURLEnv` 宣告 override；
@@ -353,6 +381,7 @@ JSONL 對外 envelope 由 `agent/wire` 擁有，經
 | middleware preset         | `agentsdk/middleware/preset`：`Default()`（retry→timeout→budget→loopguard）、`Secure(sandbox, approval)`（再加 sandbox→approval→spotlight→sanitizer）                                                                                                                                                                                                                                                              |
 | credential                | `agentsdk/provider/credential`：`RouteID`/`Kinds`/`Names`、`NewSource`/`NewAutoSource`/`Source.Decorator()`、`Login`；唯一 import `bizshuk/auth` 之處                                                                                                                                                                                                                                                              |
 | provider registry         | `agentsdk/provider`（package `provider`，非 `registry`）：`Entry` 單獨擁有 name / metadata / static catalog / model+image+video+music+audio factories；`Names`/`Entries`/`Lookup`/`Catalog`/`Capabilities`/`New`/`NewImage`/`NewVideo`/`NewMusic`/`NewTranscriber`/`NewSpeech`/`Options.Resolve`/`ResolvedConfig`/`DEFAULT_NAME`；`env` 查詢以 `LookupEnv` 注入                                                                                                        |
+| capability benchmark      | `agentsdk/benchmark`：`Target`、`Case`/`Kind`、六組 case sets（`ChatCases`/`ImageCases`/`SpeechCases`/`TranscribeCases`/`VideoCases`/`MusicCases`）與 `WithModel`、`Main`/`Run`/`RunPair`/`Root`/`PairSlug`、`CatalogSpecs`/`KindsOf`、`Record`；`benchmark/gen` 產生 `benchmark/pkg/<provider-model>` 全部子套件（每個 runnable DefaultCatalog model 一個，現 84 個）+ `benchmark/cmd` flag runner（`-provider`/`-model`（`all` = 全 catalog sweep）/`-kinds`/`-list`），結果為 `pkg/<pair-slug>/tmp/<session-id>/case-NN-<name>/`（meta.json + outputs）+ session `summary.json`                                        |
 | root CLI subcommands      | `agentsdk/cmd`：`NewWizardCommand`（`wizard`/`w` 設定產生器）、`NewProviderCommand`（root cobra `provider` smoke-test CLI；打 `core.Provider.Generate` / `core.StreamProvider.Stream` 不走 Engine；`--list-models` 優先打 live `core.ModelLister`,失敗 fallback `Entry.Catalog`,audio-only entry 改由 speech client 取得 lister,無 chat surface 的 prompt path 回報該 provider 實際支援的 capabilities）                                                                                                                                  |
 | authentication            | 外部 module `github.com/bizshuk/auth`：只由 `provider/credential` 消費；API 契約見該 repo                                                                                                                                                                                                                                                                                                                          |
 | proxy                     | 外部 repo `github.com/bizshuk/proxy`：本 repo 無目錄、無 require、無 import                                                                                                                                                                                                                                                                                                                                        |
