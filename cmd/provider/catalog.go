@@ -95,6 +95,13 @@ func openLister(entry provider.Entry, options provider.Options) (provider.ModelL
 		}
 		lister, _ := speech.(provider.ModelLister)
 		return lister, nil
+	case entry.Supports(provider.CAPABILITY_TRANSCRIBE):
+		transcriber, err := provider.NewTranscriber(entry.Name, options)
+		if err != nil {
+			return nil, err
+		}
+		lister, _ := transcriber.(provider.ModelLister)
+		return lister, nil
 	default:
 		return nil, nil
 	}

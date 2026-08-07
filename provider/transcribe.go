@@ -110,8 +110,21 @@ func (d *decoratedTranscriber) Transcribe(
 	return d.transcriber.Transcribe(ctx, req)
 }
 
+type decoratedTranscriberModelLister struct {
+	*decoratedTranscriber
+	lister ModelLister
+}
+
+func (d *decoratedTranscriberModelLister) ListModels(
+	ctx context.Context,
+) ([]ModelSpec, error) {
+	return d.lister.ListModels(ctx)
+}
+
 // WithTranscriberDecorator returns a transcriber that resolves credentials
-// before every outbound request. A nil decorator returns transcriber unchanged.
+// before every outbound request. A nil decorator returns transcriber
+// unchanged. An inner ModelLister survives the wrap so live catalog
+// discovery keeps working on the decorated client.
 func WithTranscriberDecorator(
 	name string,
 	transcriber Transcriber,
@@ -120,9 +133,16 @@ func WithTranscriberDecorator(
 	if decorator == nil || transcriber == nil {
 		return transcriber
 	}
-	return &decoratedTranscriber{
+	decorated := &decoratedTranscriber{
 		transcriber: transcriber,
 		name:        name,
 		decorate:    decorator,
 	}
+	if lister, ok := transcriber.(ModelLister); ok {
+		return &decoratedTranscriberModelLister{
+			decoratedTranscriber: decorated,
+			lister:               lister,
+		}
+	}
+	return decorated
 }

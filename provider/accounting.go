@@ -244,6 +244,15 @@ type transcriberAccounting struct {
 	snapshot     pricing.Snapshot
 }
 
+type transcriberAccountingModelLister struct {
+	*transcriberAccounting
+	lister ModelLister
+}
+
+func (a *transcriberAccountingModelLister) ListModels(ctx context.Context) ([]ModelSpec, error) {
+	return a.lister.ListModels(ctx)
+}
+
 func withTranscriberAccounting(
 	providerName string,
 	modelName string,
@@ -253,9 +262,13 @@ func withTranscriberAccounting(
 	if transcriber == nil {
 		return nil
 	}
-	return &transcriberAccounting{
+	base := &transcriberAccounting{
 		transcriber: transcriber, providerName: providerName, modelName: modelName, snapshot: snapshot,
 	}
+	if lister, ok := transcriber.(ModelLister); ok {
+		return &transcriberAccountingModelLister{transcriberAccounting: base, lister: lister}
+	}
+	return base
 }
 
 func (a *transcriberAccounting) Transcribe(

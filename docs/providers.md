@@ -187,6 +187,11 @@ bytes：hex 是 MiniMax wire 細節，於 adapter 內解碼。
   spk model 決定；有掛時 speaker 仍流入結果）。
 - catalog model id 是部署端 `models.json` 的 key（預設 `sensevoice`）；
   pricing 一律 `free`（local provider，與 ollama 同 policy）。
+- `GET /v1/models` live catalog 掛在 `TranscribeProvider.ListModels`（標準
+  OpenAI `{"data":[...]}` envelope，走 `utils.DecodeIDList`）：live list（=
+  server 的 models.json registry）決定 membership，bundled catalog 補 metadata，
+  未知 id 仍標為 transcribe-capable（server 只註冊 ASR model）。transcriber 的
+  decorator 與 accounting wrapper 都保留 `ModelLister` type assertion。
 - 完整優缺點與 WebSocket / sherpa-onnx 取捨見 [`docs/funASR.md`](funASR.md)；
   docker 部署在 `~/projects/platform/inf`（`funasr` service）。
 
