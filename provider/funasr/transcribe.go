@@ -16,7 +16,7 @@ import (
 
 const (
 	transcribePath             = "/v1/audio/transcriptions"
-	defaultRequestTimeout      = 5 * time.Minute
+	defaultRequestTimeout      = 30 * time.Minute
 	maxTranscriptResponseBytes = int64(32 << 20)
 	maxErrorResponseBytes      = int64(1 << 20)
 	maxErrorMessageRunes       = 512
