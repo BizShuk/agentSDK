@@ -96,7 +96,7 @@ func DecodeOpenRouterManifest(r io.Reader, fetchedAt time.Time) (Snapshot, error
 // Estimate converts usage to cost using exact decimal arithmetic. Missing
 // billing dimensions fail closed as unpriced.
 func (s Snapshot) Estimate(providerName, modelName string, usage core.TokenUsage) core.Cost {
-	if strings.EqualFold(strings.TrimSpace(providerName), "ollama") {
+	if isLocalProvider(providerName) {
 		return core.FreeCost()
 	}
 	if !validUsage(usage) {
@@ -152,6 +152,16 @@ func (s Snapshot) Estimate(providerName, modelName string, usage core.TokenUsage
 		PricingAsOf: s.PricingAsOf,
 		Source:      s.Source,
 	}
+}
+
+// isLocalProvider names the providers that run local inference with no
+// billed upstream: their cost is always free, never unpriced.
+func isLocalProvider(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "ollama", "funasr":
+		return true
+	}
+	return false
 }
 
 func validUsage(usage core.TokenUsage) bool {

@@ -95,11 +95,12 @@ func TestEstimateDoesNotTreatMissingUsageAsFree(t *testing.T) {
 	assert.Equal(t, core.UnpricedCost(), snapshot.Estimate("meta", "muse-spark-1.2", core.TokenUsage{}))
 }
 
-func TestEstimateAlwaysTreatsOllamaAsFree(t *testing.T) {
+func TestEstimateAlwaysTreatsLocalProvidersAsFree(t *testing.T) {
 	snapshot, err := pricing.DecodeOpenRouterManifest(strings.NewReader(manifestFixture), time.Unix(0, 0).UTC())
 	require.NoError(t, err)
 
 	assert.Equal(t, core.FreeCost(), snapshot.Estimate("ollama", "muse-spark-1.2", core.TokenUsage{InputTokens: 1000}))
+	assert.Equal(t, core.FreeCost(), snapshot.Estimate("funasr", "sensevoice", core.TokenUsage{}))
 }
 
 func TestDecodeOpenRouterManifestSkipsVariablePriceSentinels(t *testing.T) {

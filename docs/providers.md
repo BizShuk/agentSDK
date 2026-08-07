@@ -173,6 +173,23 @@ chat surface 無法表達的欄位一律`明確拒收`不靜默忽略，`Subject
 `New == nil` 的 audio-only provider。`SpeechAsset.Bytes` 是 canonical decoded
 bytes：hex 是 MiniMax wire 細節，於 adapter 內解碼。
 
+## FunASR（local ASR，transcribe-only，`Entry.New` 為 nil）
+
+自架 OpenAI-compatible HTTP server（`POST /v1/audio/transcriptions`，multipart）。
+
+- 預設 `http://localhost:8000`（`FUNASR_BASE_URL` 覆寫）；keyless by default，
+  `FUNASR_API_KEY` 只給 gateway-fronted 部署（`Authorization: Bearer`）。
+- 一律送 `response_format=verbose_json`：`segments`（`句級` timing + nullable
+  speaker）摺入 `Words`，`language` 的 `auto` placeholder 摺疊為空。
+- response `duration` 是 server 處理耗時、非音訊長度，刻意不進 `Usage`；
+  audio duration 由 request 端經 accounting fallback 補齊。
+- `Audio.URL` 與 `Diarize` 無 wire 對應，`明確報錯`（diarization 由部署掛
+  spk model 決定；有掛時 speaker 仍流入結果）。
+- catalog model id 是部署端 `models.json` 的 key（預設 `sensevoice`）；
+  pricing 一律 `free`（local provider，與 ollama 同 policy）。
+- 完整優缺點與 WebSocket / sherpa-onnx 取捨見 [`docs/funASR.md`](funASR.md)；
+  docker 部署在 `~/projects/platform/inf`（`funasr` service）。
+
 ## Google — Gemini Live API（live / translate）
 
 `BidiGenerateContent` websocket（`coder/websocket`；`GOOGLE_LIVE_BASE_URL` 覆寫，

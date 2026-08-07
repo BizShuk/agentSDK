@@ -38,7 +38,8 @@
   request routing，選定 operation 後仍使用對應 typed constructor。
 - Provider accounting surface：chat、media、realtime 與 translation result 都回傳
   canonical `Usage` / `Cost` metadata；stream 只在 terminal chunk 回報一次。價格估算由
-  `provider/pricing` 的 checked-in OpenRouter snapshot 擁有，Ollama 固定為 `free`，
+  `provider/pricing` 的 checked-in OpenRouter snapshot 擁有，local providers
+  （Ollama、FunASR）固定為 `free`，
   缺少 model identity、價格或必要計費維度時明確回 `unpriced`。
 - Reasoning content boundary：`core.Part` 以 `PART_KIND_REASONING` 表示可攜 reasoning
   文字，`ReasoningState` 保存 opaque continuation metadata。`ModelResult.Parts` 是有序
@@ -115,6 +116,7 @@ agentsdk/
 │   ├── antigravity/                  # adapter：Google Cloud Code v1internal（Gemini + Claude），OAuth-only
 │   ├── codex/                        # adapter：OpenAI Codex OAuth
 │   ├── elevenlabs/                   # adapter：ElevenLabs STT/TTS（audio-only，New 為 nil、無 chat surface）
+│   ├── funasr/                       # adapter：自架 FunASR OpenAI-compatible HTTP server（transcribe-only，keyless、預設 localhost）
 │   ├── google/                       # stdlib HTTP adapter + Gemini Live API websocket（live/translate）
 │   ├── grok/                         # adapter：xAI Grok
 │   ├── minimax/                      # adapter：MiniMax model HTTP/SSE + video/music/speech generation transport
@@ -138,6 +140,7 @@ agentsdk/
 ├── docs/
 │   ├── CHANGELOG.md                  # 歷史變更與完成項目
 │   ├── providers.md                  # 各 adapter 的 capability、endpoint 與 wire 細節（高頻異動）
+│   ├── funASR.md                     # FunASR provider 相容性評估與 HTTP/WebSocket/in-process 取捨
 │   ├── cli.md                        # provider / wizard / sample / benchmark 指令參考
 │   ├── terminology.md                # 領域術語單一定義來源
 │   ├── specs/                        # root SDK architecture/spec history
@@ -150,20 +153,20 @@ agentsdk/
 
 ## 技術棧 (Tech Stack)
 
-| 類別 | 技術 | 為什麼是它 |
-| ---------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Language | Go `1.26+` | `go.work` 納入 root 與 `sample/` 下各 module |
-| Root runtime | Go stdlib、`bizshuk/gosdk` | config/log/notify 等組合點在 root 或 sample |
-| External auth module | `bizshuk/auth` | 只由 `provider/credential` import |
-| CLI/config | `spf13/cobra`、`spf13/viper` | samples 與 root `provider` / `wizard` 子指令 |
-| Config 序列化 | stdlib `encoding/json`、`gopkg.in/yaml.v3` | `agent/spec` 只用 JSON；YAML 在 `agent` 走 JSON tag 轉譯，不另立 tag |
-| Markdown frontmatter | `adrg/frontmatter` | `utils/frontmatter` wrapper：自動偵測 YAML/TOML/JSON delimiter，攤平為 `map[string]string` |
-| State/schema | `testify`、`invopop/jsonschema` | table-driven tests、`core.Tool` RawMessage Call、反射式 JSON Schema |
-| IDs/telemetry | `google/uuid`、OpenTelemetry | request ID、transform warning/loss metrics |
-| Anthropic adapter | `anthropics/anthropic-sdk-go` | 只由 `provider/anthropic` 引入 |
-| Websocket | `coder/websocket` | Gemini Live 與 OpenAI Realtime 的 bidirectional session |
-| Shared protocol codecs | `net/http` + JSON + SSE | `provider/protocol/{sse,openaichat,openaiimage}`，不承接 vendor terminal semantics |
-| Terminal UI | Go stdlib only | `sample/code-agent/tui`（zero-dep）；differential rendering、CSI 2026、不用 alternate screen |
+| 類別                   | 技術                                       | 為什麼是它                                                                                   |
+| ---------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Language               | Go `1.26+`                                 | `go.work` 納入 root 與 `sample/` 下各 module                                                 |
+| Root runtime           | Go stdlib、`bizshuk/gosdk`                 | config/log/notify 等組合點在 root 或 sample                                                  |
+| External auth module   | `bizshuk/auth`                             | 只由 `provider/credential` import                                                            |
+| CLI/config             | `spf13/cobra`、`spf13/viper`               | samples 與 root `provider` / `wizard` 子指令                                                 |
+| Config 序列化          | stdlib `encoding/json`、`gopkg.in/yaml.v3` | `agent/spec` 只用 JSON；YAML 在 `agent` 走 JSON tag 轉譯，不另立 tag                         |
+| Markdown frontmatter   | `adrg/frontmatter`                         | `utils/frontmatter` wrapper：自動偵測 YAML/TOML/JSON delimiter，攤平為 `map[string]string`   |
+| State/schema           | `testify`、`invopop/jsonschema`            | table-driven tests、`core.Tool` RawMessage Call、反射式 JSON Schema                          |
+| IDs/telemetry          | `google/uuid`、OpenTelemetry               | request ID、transform warning/loss metrics                                                   |
+| Anthropic adapter      | `anthropics/anthropic-sdk-go`              | 只由 `provider/anthropic` 引入                                                               |
+| Websocket              | `coder/websocket`                          | Gemini Live 與 OpenAI Realtime 的 bidirectional session                                      |
+| Shared protocol codecs | `net/http` + JSON + SSE                    | `provider/protocol/{sse,openaichat,openaiimage}`，不承接 vendor terminal semantics           |
+| Terminal UI            | Go stdlib only                             | `sample/code-agent/tui`（zero-dep）；differential rendering、CSI 2026、不用 alternate screen |
 
 版本 pin 的真相是 `go.mod`，不在此重複。
 
@@ -328,34 +331,34 @@ JSONL 對外 envelope 由 `agent/wire` 擁有，經
 
 ## 模組對應 (Module Mapping)
 
-| 領域 | 套件 / 進入點 |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 宣告式設定 | `agentsdk/agent/spec`：`Config`、`Choice`、`Expand`（tier 展開）、`Validate`、`Prepare`（只 import `core` + 純 stdlib） |
-| agent 設定檔 I/O | `agentsdk/utils/agentconfig`：`Decode`/`DecodeBytes`/`Encode`/`EncodeBytes`、`LoadFile`/`SaveFile`/`Marshal`/`FormatOf`、`Format`/`FORMAT_YAML`/`FORMAT_JSON`（re-export 自 `utils/configfile`） |
-| agent 組裝 | `agentsdk/agent`：`New`/`MustNew`/`Bootstrap`（實作 `agent.Runner`）、`Once`/`OnceStream`、`Option` 全部 `With*`、`BuildSources`、`Run`、`Interactive` |
-| prompt 內容管理 | `agentsdk/prompt`：`Slot`（system/user/reminder）、`Section`、`Source`、`Builder.Seed`/`Turn`、`Static`、`PersonaSource`/`ContextFileSource`/`EnvSource`/`ReminderSource` |
-| 狀態與 ports | `agentsdk/core`：`State`/`Budget`、`TokenUsage`/`Cost`、`Event`/`Observation`、`Instruction`/`Decide`、最小 `Provider`、optional `StreamProvider`/`ModelLister`、`Tool` 與 persistence/presentation ports；檔案依 domain 分組，package/API 不拆 |
-| 推理策略 | `agentsdk/reasoning`：`DecisionRule`、`NewRule` built-in factory、`NewDecide` dispatcher + 6 個 `New*` rule constructor |
-| runtime | `agentsdk/runtime`：`NewEngine`、`Run`、`RunWithEvent`、`Resume`、`SubmitHumanDecision` |
-| tools/safety | `agentsdk/tool`、`agentsdk/tool/builtin`：`Tool`、`CallWithRawMessage`、`NewRegistry`、`RegisterFunc`、allowlist-aware `Register`、`RegisterDefaults` |
-| memory | `agentsdk/memory`、`memory/checkpoint`、`memory/filestore` |
-| lifecycle hooks | `agentsdk/middleware/hook`：`NewRunner`、`Rule`、`Func`、`Command`（實作 `core.Hooks`；lifecycle event 為 fan-out + decision merge，handler 串以 middleware-style 連續執行，但 signature 仍獨立） |
-| permission | `agentsdk/agent/permission`：`Engine`、`Rule`、`MatchSpec`（實作 `core.ApprovalPolicy`；只 import `core`） |
-| session 管理 | `agentsdk/agent/session`：`NewManager`、`Begin`、`List`、`Latest`、`Fork`、`Tree`（只 import `core`） |
-| context files | `agentsdk/prompt`：`LoadContextFiles(cwd, userDir)`（AGENTS.md/CLAUDE.md 階層 + `@import`；無 Loader 結構、無 config knob） |
-| skills/commands/subagents | `agentsdk/skill`：`NewRegistry` 統一索引三類定義；`DiscoverSkills`／`DiscoverCommands`／`DiscoverSubagents` 採相同的 later-wins 覆寫規則，並以 `Skills`／`Commands`／`Subagents` 回傳排序結果；另提供 `SubAgent`、`Body`、`ExpandCommand`、`RenderTemplate`、`ParseDef`、`NewSpawner`、`Depth`／`WithDepth`。源碼分為 `skill.go`／`command.go`／`registry.go`／`subagent.go` 四檔 |
-| headless wire | `agentsdk/agent/wire`：`Envelope`、`NewEncoder`/`NewDecoder`、`NewSink`、`ReadRequest`/`WriteResponse`、`FormatStream` |
-| terminal UI | `agentsdk/sample/code-agent/tui`（zero-dep，非 SDK 表面）：`Renderer`、`Component`、`Terminal`、`VisibleWidth`/`WrapText` |
-| middleware | `agentsdk/middleware`、`harness`、`loopguard`、`security`、`observability` |
-| agent lifecycle | `agentsdk/agent`：`Run`、`Host`、`Interactive`、`Pause`/`Resume`、`WithRoundTimeout`；`agentsdk/agent/cli`：`Main`/`Run`、`OpenForCLI`/`MustOpenForCLI` |
-| middleware preset | `agentsdk/middleware/preset`：`Default()`（retry→timeout→budget→loopguard）、`Secure(sandbox, approval)`（再加 sandbox→approval→spotlight→sanitizer） |
-| credential | `agentsdk/provider/credential`：`RouteID`/`Kinds`/`Names`、`NewSource`/`NewAutoSource`/`Source.Decorator()`、`Login`；唯一 import `bizshuk/auth` 之處 |
-| provider registry | `agentsdk/provider`（package `provider`，非 `registry`）：`Entry` 單獨擁有 name / metadata / static catalog / model+image+video+music+audio factories；`Names`/`Entries`/`Lookup`/`Catalog`/`Capabilities`/`New`/`NewImage`/`NewVideo`/`NewMusic`/`NewTranscriber`/`NewSpeech`/`NewLive`/`NewTranslate`/`Options.Resolve`/`ResolvedConfig`/`DEFAULT_NAME`；`env` 查詢以 `LookupEnv` 注入 |
-| provider pricing | `agentsdk/provider/pricing`：checked-in OpenRouter snapshot、provider/model mapping、cost calculation、diff 與 refresh；Ollama free policy 與 `unpriced` fallback 的唯一 owner |
-| capability benchmark | `agentsdk/benchmark`：`Target`、`Case`、六組 case sets、`RunnableCapabilities` / `CasesForModel` / `CatalogCases`、`Main` / `Run` / `RunPair`、`Record`；`benchmark/gen` 產生 `benchmark/pkg/<provider-model>` 全部子套件，`benchmark/cmd` 是 flag runner，結果為 `pkg/<pair-slug>/tmp/<session-id>/case-NN-<name>/`（meta.json + outputs）+ session `summary.json` |
-| root CLI subcommands | `agentsdk/cmd`：`cmd.ProviderCmd`（`provider` 手動測試 CLI，不走 Engine；per-type handler 在 `cmd/provider` package：`Chat`/`Image`/`Music`/`Speech`/`Transcribe`/`WriteMatrix`/`Catalog`/`JoinCapabilities` + `Request`）、`cmd/agent/wizard.WizardCmd`（`wizard`/`w` 設定產生器）；flag 用法見 [`docs/cli.md`](docs/cli.md) |
-| authentication | 外部 module `github.com/bizshuk/auth`：只由 `provider/credential` 消費；API 契約見該 repo |
-| provider adapters | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity,elevenlabs}`：前七者實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`），elevenlabs 是 audio-only（`New` 為 nil）。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal；每家實作哪些 optional capability、endpoint 與 wire 形狀見 [`docs/providers.md`](docs/providers.md) |
+| 領域                      | 套件 / 進入點                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 宣告式設定                | `agentsdk/agent/spec`：`Config`、`Choice`、`Expand`（tier 展開）、`Validate`、`Prepare`（只 import `core` + 純 stdlib）                                                                                                                                                                                                                                                                                                                                           |
+| agent 設定檔 I/O          | `agentsdk/utils/agentconfig`：`Decode`/`DecodeBytes`/`Encode`/`EncodeBytes`、`LoadFile`/`SaveFile`/`Marshal`/`FormatOf`、`Format`/`FORMAT_YAML`/`FORMAT_JSON`（re-export 自 `utils/configfile`）                                                                                                                                                                                                                                                                  |
+| agent 組裝                | `agentsdk/agent`：`New`/`MustNew`/`Bootstrap`（實作 `agent.Runner`）、`Once`/`OnceStream`、`Option` 全部 `With*`、`BuildSources`、`Run`、`Interactive`                                                                                                                                                                                                                                                                                                            |
+| prompt 內容管理           | `agentsdk/prompt`：`Slot`（system/user/reminder）、`Section`、`Source`、`Builder.Seed`/`Turn`、`Static`、`PersonaSource`/`ContextFileSource`/`EnvSource`/`ReminderSource`                                                                                                                                                                                                                                                                                         |
+| 狀態與 ports              | `agentsdk/core`：`State`/`Budget`、`TokenUsage`/`Cost`、`Event`/`Observation`、`Instruction`/`Decide`、最小 `Provider`、optional `StreamProvider`/`ModelLister`、`Tool` 與 persistence/presentation ports；檔案依 domain 分組，package/API 不拆                                                                                                                                                                                                                   |
+| 推理策略                  | `agentsdk/reasoning`：`DecisionRule`、`NewRule` built-in factory、`NewDecide` dispatcher + 6 個 `New*` rule constructor                                                                                                                                                                                                                                                                                                                                           |
+| runtime                   | `agentsdk/runtime`：`NewEngine`、`Run`、`RunWithEvent`、`Resume`、`SubmitHumanDecision`                                                                                                                                                                                                                                                                                                                                                                           |
+| tools/safety              | `agentsdk/tool`、`agentsdk/tool/builtin`：`Tool`、`CallWithRawMessage`、`NewRegistry`、`RegisterFunc`、allowlist-aware `Register`、`RegisterDefaults`                                                                                                                                                                                                                                                                                                             |
+| memory                    | `agentsdk/memory`、`memory/checkpoint`、`memory/filestore`                                                                                                                                                                                                                                                                                                                                                                                                        |
+| lifecycle hooks           | `agentsdk/middleware/hook`：`NewRunner`、`Rule`、`Func`、`Command`（實作 `core.Hooks`；lifecycle event 為 fan-out + decision merge，handler 串以 middleware-style 連續執行，但 signature 仍獨立）                                                                                                                                                                                                                                                                 |
+| permission                | `agentsdk/agent/permission`：`Engine`、`Rule`、`MatchSpec`（實作 `core.ApprovalPolicy`；只 import `core`）                                                                                                                                                                                                                                                                                                                                                        |
+| session 管理              | `agentsdk/agent/session`：`NewManager`、`Begin`、`List`、`Latest`、`Fork`、`Tree`（只 import `core`）                                                                                                                                                                                                                                                                                                                                                             |
+| context files             | `agentsdk/prompt`：`LoadContextFiles(cwd, userDir)`（AGENTS.md/CLAUDE.md 階層 + `@import`；無 Loader 結構、無 config knob）                                                                                                                                                                                                                                                                                                                                       |
+| skills/commands/subagents | `agentsdk/skill`：`NewRegistry` 統一索引三類定義；`DiscoverSkills`／`DiscoverCommands`／`DiscoverSubagents` 採相同的 later-wins 覆寫規則，並以 `Skills`／`Commands`／`Subagents` 回傳排序結果；另提供 `SubAgent`、`Body`、`ExpandCommand`、`RenderTemplate`、`ParseDef`、`NewSpawner`、`Depth`／`WithDepth`。源碼分為 `skill.go`／`command.go`／`registry.go`／`subagent.go` 四檔                                                                                 |
+| headless wire             | `agentsdk/agent/wire`：`Envelope`、`NewEncoder`/`NewDecoder`、`NewSink`、`ReadRequest`/`WriteResponse`、`FormatStream`                                                                                                                                                                                                                                                                                                                                            |
+| terminal UI               | `agentsdk/sample/code-agent/tui`（zero-dep，非 SDK 表面）：`Renderer`、`Component`、`Terminal`、`VisibleWidth`/`WrapText`                                                                                                                                                                                                                                                                                                                                         |
+| middleware                | `agentsdk/middleware`、`harness`、`loopguard`、`security`、`observability`                                                                                                                                                                                                                                                                                                                                                                                        |
+| agent lifecycle           | `agentsdk/agent`：`Run`、`Host`、`Interactive`、`Pause`/`Resume`、`WithRoundTimeout`；`agentsdk/agent/cli`：`Main`/`Run`、`OpenForCLI`/`MustOpenForCLI`                                                                                                                                                                                                                                                                                                           |
+| middleware preset         | `agentsdk/middleware/preset`：`Default()`（retry→timeout→budget→loopguard）、`Secure(sandbox, approval)`（再加 sandbox→approval→spotlight→sanitizer）                                                                                                                                                                                                                                                                                                             |
+| credential                | `agentsdk/provider/credential`：`RouteID`/`Kinds`/`Names`、`NewSource`/`NewAutoSource`/`Source.Decorator()`、`Login`；唯一 import `bizshuk/auth` 之處                                                                                                                                                                                                                                                                                                             |
+| provider registry         | `agentsdk/provider`（package `provider`，非 `registry`）：`Entry` 單獨擁有 name / metadata / static catalog / model+image+video+music+audio factories；`Names`/`Entries`/`Lookup`/`Catalog`/`Capabilities`/`New`/`NewImage`/`NewVideo`/`NewMusic`/`NewTranscriber`/`NewSpeech`/`NewLive`/`NewTranslate`/`Options.Resolve`/`ResolvedConfig`/`DEFAULT_NAME`；`env` 查詢以 `LookupEnv` 注入                                                                          |
+| provider pricing          | `agentsdk/provider/pricing`：checked-in OpenRouter snapshot、provider/model mapping、cost calculation、diff 與 refresh；local provider（ollama/funasr）free policy 與 `unpriced` fallback 的唯一 owner                                                                                                                                                                                                                                                            |
+| capability benchmark      | `agentsdk/benchmark`：`Target`、`Case`、六組 case sets、`RunnableCapabilities` / `CasesForModel` / `CatalogCases`、`Main` / `Run` / `RunPair`、`Record`；`benchmark/gen` 產生 `benchmark/pkg/<provider-model>` 全部子套件，`benchmark/cmd` 是 flag runner，結果為 `pkg/<pair-slug>/tmp/<session-id>/case-NN-<name>/`（meta.json + outputs）+ session `summary.json`                                                                                               |
+| root CLI subcommands      | `agentsdk/cmd`：`cmd.ProviderCmd`（`provider` 手動測試 CLI，不走 Engine；per-type handler 在 `cmd/provider` package：`Chat`/`Image`/`Music`/`Speech`/`Transcribe`/`WriteMatrix`/`Catalog`/`JoinCapabilities` + `Request`）、`cmd/agent/wizard.WizardCmd`（`wizard`/`w` 設定產生器）；flag 用法見 [`docs/cli.md`](docs/cli.md)                                                                                                                                     |
+| authentication            | 外部 module `github.com/bizshuk/auth`：只由 `provider/credential` 消費；API 契約見該 repo                                                                                                                                                                                                                                                                                                                                                                         |
+| provider adapters         | `agentsdk/provider/{anthropic,google,minimax,grok,ollama,codex,antigravity,elevenlabs,funasr}`：前七者實作 `provider.Adapter`（`core.Provider` + `core.StreamProvider`），elevenlabs 是 audio-only、funasr 是 transcribe-only（兩者 `New` 為 nil）。identity / credential metadata / factories / static catalog 只存在於各自 `register.go` 的 `Entry` literal；每家實作哪些 optional capability、endpoint 與 wire 形狀見 [`docs/providers.md`](docs/providers.md) |
 
 ## 開發與驗證 (Development and Verification)
 
@@ -370,11 +373,11 @@ bash scripts/verify-workspace.sh   # go.work 全部 module 的 build + test
 
 依賴紀律不是文件裡的手動指令，是 `layering_test.go` 的三個測試：
 
-| 不變式 | 測試 |
+| 不變式                                                                                                            | 測試                                       |
 | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `agent/spec`、`prompt`、`prompt/source`、`agent/{permission,session,wire}` 的 agentsdk 依賴閉包只含 `core` 與自身 | `TestDeclarativeLayersOnlySeeCore` |
-| `core` 只依賴 stdlib | `TestCoreImportsStdlibOnly` |
-| 只有 `provider/credential` 可 import `github.com/bizshuk/auth` | `TestAuthImportedOnlyByProviderCredential` |
+| `agent/spec`、`prompt`、`prompt/source`、`agent/{permission,session,wire}` 的 agentsdk 依賴閉包只含 `core` 與自身 | `TestDeclarativeLayersOnlySeeCore`         |
+| `core` 只依賴 stdlib                                                                                              | `TestCoreImportsStdlibOnly`                |
+| 只有 `provider/credential` 可 import `github.com/bizshuk/auth`                                                    | `TestAuthImportedOnlyByProviderCredential` |
 
 常用指令（provider 手動測試、wizard、sample、benchmark、依賴圖分析）集中於
 [`docs/cli.md`](docs/cli.md)。
