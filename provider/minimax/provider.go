@@ -259,9 +259,9 @@ func fromResponse(r Response) core.ModelResult {
 	out := core.ModelResult{
 		StopReason: r.StopReason,
 		Usage: core.TokenUsage{
-			PromptTokens:     r.Usage.InputTokens,
-			CompletionTokens: r.Usage.OutputTokens,
-			TotalTokens:      r.Usage.InputTokens + r.Usage.OutputTokens,
+			InputTokens:  r.Usage.InputTokens,
+			OutputTokens: r.Usage.OutputTokens,
+			TotalTokens:  r.Usage.InputTokens + r.Usage.OutputTokens,
 		},
 	}
 	for _, block := range r.Content {

@@ -109,6 +109,10 @@ type LiveEvent struct {
 
 	// TurnComplete marks the end of one model turn.
 	TurnComplete bool `json:"turn_complete,omitempty"`
+
+	// Usage and Cost are populated on the TurnComplete event.
+	Usage core.TokenUsage `json:"usage,omitempty"`
+	Cost  core.Cost       `json:"cost,omitempty"`
 }
 
 // LiveSession is one open realtime connection. Send methods and Receive may

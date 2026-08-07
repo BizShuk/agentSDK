@@ -84,6 +84,7 @@ func ParseStream(ctx context.Context, r io.Reader) <-chan core.ModelChunk {
 	go func() {
 		defer close(out)
 		decoder := sse.NewDecoder(r)
+		var usage core.TokenUsage
 
 		for {
 			if ctx.Err() != nil {
@@ -105,6 +106,19 @@ func ParseStream(ctx context.Context, r io.Reader) <-chan core.ModelChunk {
 				continue // ignore malformed lines
 			}
 			switch ev.Type {
+			case "message_start":
+				if ev.Message != nil {
+					usage.InputTokens = ev.Message.Usage.InputTokens
+				}
+			case "message_delta":
+				if ev.Usage != nil {
+					if ev.Usage.InputTokens != 0 {
+						usage.InputTokens = ev.Usage.InputTokens
+					}
+					if ev.Usage.OutputTokens != 0 {
+						usage.OutputTokens = ev.Usage.OutputTokens
+					}
+				}
 			case "content_block_delta":
 				chunk, ok := reasoningAwareChunk(ev.Delta)
 				if !ok {
@@ -147,8 +161,9 @@ func ParseStream(ctx context.Context, r io.Reader) <-chan core.ModelChunk {
 		}
 
 		// Terminal sentinel.
+		usage.TotalTokens = usage.InputTokens + usage.OutputTokens
 		select {
-		case out <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Done: true}:
+		case out <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Usage: usage, Done: true}:
 		case <-ctx.Done():
 		}
 	}()

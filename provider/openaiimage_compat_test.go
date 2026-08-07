@@ -103,15 +103,16 @@ func TestOpenAIImageGenerateGolden(t *testing.T) {
 			{URL: "https://example.test/image-2.png", MIMEType: "image/png"},
 		},
 		Usage: provider.ImageUsage{
-			TotalTokens:  100,
-			InputTokens:  50,
-			OutputTokens: 50,
+			TotalTokens:     100,
+			InputTokens:     50,
+			OutputTokens:    50,
+			GeneratedImages: 2,
 			InputTokenDetails: provider.ImageInputTokenDetails{
 				TextTokens:  10,
 				ImageTokens: 40,
 			},
-			CostInUSDTicks: 200000000,
 		},
+		Cost: core.ExactCostFromUSDTicks(200000000),
 	}
 
 	for _, tc := range openAIImageAdapterCases() {

@@ -63,8 +63,17 @@ func runGenerate(ctx context.Context, prov core.Provider, req core.ModelRequest,
 	if res.Text != "" {
 		fmt.Fprintln(out, res.Text)
 	}
-	fmt.Fprintf(out, "[stop=%s tokens=%d/%d]\n",
-		res.StopReason, res.Usage.PromptTokens, res.Usage.CompletionTokens)
+	fmt.Fprintf(
+		out,
+		"[stop=%s tokens=%d/%d cache_read=%d web_search=%d cost_usd=%s cost_status=%s]\n",
+		res.StopReason,
+		res.Usage.InputTokens,
+		res.Usage.OutputTokens,
+		res.Usage.InputCacheReadTokens,
+		res.Usage.WebSearchCount,
+		res.Cost.AmountUSD,
+		res.Cost.Status,
+	)
 	return nil
 }
 
@@ -76,10 +85,12 @@ func runStream(ctx context.Context, prov core.StreamProvider, req core.ModelRequ
 		return fmt.Errorf("stream: %w", err)
 	}
 	sawDone := false
+	var terminal core.ModelChunk
 	enc := json.NewEncoder(out)
 	for c := range ch {
 		if c.Done {
 			sawDone = true
+			terminal = c
 		}
 		if asJSON {
 			if err := enc.Encode(c); err != nil {
@@ -103,6 +114,15 @@ func runStream(ctx context.Context, prov core.StreamProvider, req core.ModelRequ
 	if asJSON {
 		return nil
 	}
-	fmt.Fprintln(out)
+	fmt.Fprintf(
+		out,
+		"\n[tokens=%d/%d cache_read=%d web_search=%d cost_usd=%s cost_status=%s]\n",
+		terminal.Usage.InputTokens,
+		terminal.Usage.OutputTokens,
+		terminal.Usage.InputCacheReadTokens,
+		terminal.Usage.WebSearchCount,
+		terminal.Cost.AmountUSD,
+		terminal.Cost.Status,
+	)
 	return nil
 }

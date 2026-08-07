@@ -27,6 +27,17 @@ go run . provider --provider elevenlabs --type transcribe --audio-file ./clip.mp
 per-adapter 的 endpoint、預設 model 與 base override 見
 [`providers.md`](providers.md)。
 
+### Pricing snapshot refresh
+
+```bash
+go run . provider pricing refresh          # fetch + diff preview，不改檔案
+go run . provider pricing refresh --write  # 明示更新 checked-in snapshot
+```
+
+refresh 從 OpenRouter public model manifest 讀取 per-unit USD prices，正規化後才顯示
+差異。預設是 read-only preview；只有 `--write` 會更新 snapshot。成本狀態與計算邊界見
+[`providers.md`](providers.md#usage-and-cost-accounting)。
+
 ## `wizard` — 設定產生器
 
 ```bash

@@ -55,10 +55,11 @@ func Image(ctx context.Context, req Request, out io.Writer) error {
 	}
 	if _, err := fmt.Fprintf(
 		out,
-		"[images=%d tokens=%d cost_ticks=%d]\n",
+		"[images=%d tokens=%d cost_usd=%s cost_status=%s]\n",
 		len(result.Images),
 		result.Usage.TotalTokens,
-		result.Usage.CostInUSDTicks,
+		result.Cost.AmountUSD,
+		result.Cost.Status,
 	); err != nil {
 		return fmt.Errorf("write image usage: %w", err)
 	}

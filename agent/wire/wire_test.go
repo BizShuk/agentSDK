@@ -22,7 +22,11 @@ func TestEnvelopeRoundTrip(t *testing.T) {
 		{Type: TYPE_EVENT, Stream: &core.StreamEvent{Kind: core.STREAM_MESSAGE, RunID: "r1", Text: "hi"}},
 		{Type: TYPE_APPROVAL_REQUEST, Approval: &core.PendingApproval{ID: "a1", Reason: "high risk"}},
 		{Type: TYPE_HUMAN_DECISION, Decision: &decision},
-		{Type: TYPE_RESULT, Result: &Result{RunID: "r1", Status: core.RUN_STATUS_COMPLETED, Text: "done"}},
+		{Type: TYPE_RESULT, Result: &Result{
+			RunID: "r1", Status: core.RUN_STATUS_COMPLETED, Text: "done",
+			Usage: core.TokenUsage{InputTokens: 10, OutputTokens: 2, TotalTokens: 12},
+			Cost:  core.Cost{AmountUSD: "0.0010000000", Status: core.COST_STATUS_ESTIMATED},
+		}},
 		{Type: TYPE_ERROR, Error: &ErrorPayload{Message: "boom"}},
 	}
 	for _, env := range in {
@@ -45,6 +49,8 @@ func TestEnvelopeRoundTrip(t *testing.T) {
 	assert.Equal(t, "a1", out[1].Approval.ID)
 	assert.Equal(t, core.APPROVAL_DECISION_APPROVE, *out[2].Decision)
 	assert.Equal(t, core.RUN_STATUS_COMPLETED, out[3].Result.Status)
+	assert.Equal(t, 12, out[3].Result.Usage.TotalTokens)
+	assert.Equal(t, "0.0010000000", out[3].Result.Cost.AmountUSD)
 	assert.Equal(t, "boom", out[4].Error.Message)
 }
 

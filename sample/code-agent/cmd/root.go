@@ -127,6 +127,7 @@ func runOnce(ctx context.Context, out io.Writer, parts *agentParts, state core.S
 	if jsonMode {
 		return enc.Encode(wire.Envelope{Type: wire.TYPE_RESULT, Result: &wire.Result{
 			RunID: final.RunID, Status: final.Status, Text: lastAssistantText(final),
+			Usage: final.Usage, Cost: final.Cost,
 		}, Ts: time.Now().UTC()})
 	}
 	fmt.Fprintln(out, lastAssistantText(final))

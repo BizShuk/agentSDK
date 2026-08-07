@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/provider"
 )
 
@@ -174,20 +175,24 @@ func DecodeResponse(raw []byte) (provider.ImageResult, error) {
 			RevisedPrompt: item.RevisedPrompt,
 		})
 	}
-	return provider.ImageResult{
+	result := provider.ImageResult{
 		Created: wire.Created,
 		Images:  images,
 		Usage: provider.ImageUsage{
-			TotalTokens:  wire.Usage.TotalTokens,
-			InputTokens:  wire.Usage.InputTokens,
-			OutputTokens: wire.Usage.OutputTokens,
+			TotalTokens:     wire.Usage.TotalTokens,
+			InputTokens:     wire.Usage.InputTokens,
+			OutputTokens:    wire.Usage.OutputTokens,
+			GeneratedImages: len(images),
 			InputTokenDetails: provider.ImageInputTokenDetails{
 				TextTokens:  wire.Usage.InputDetails.TextTokens,
 				ImageTokens: wire.Usage.InputDetails.ImageTokens,
 			},
-			CostInUSDTicks: wire.Usage.CostInUSDTicks,
 		},
-	}, nil
+	}
+	if wire.Usage.CostInUSDTicks > 0 {
+		result.Cost = core.ExactCostFromUSDTicks(wire.Usage.CostInUSDTicks)
+	}
+	return result, nil
 }
 
 // ReadResponse reads a complete image response with a fixed upper bound.

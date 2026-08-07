@@ -247,7 +247,7 @@ func (s *realtimeSession) Receive(ctx context.Context) (provider.LiveEvent, erro
 		case "input_audio_buffer.speech_started":
 			return provider.LiveEvent{Interrupted: true}, nil
 		case "response.done":
-			return provider.LiveEvent{TurnComplete: true}, nil
+			return provider.LiveEvent{TurnComplete: true, Cost: core.UnpricedCost()}, nil
 		case "error":
 			return provider.LiveEvent{}, event.Error.err()
 		}

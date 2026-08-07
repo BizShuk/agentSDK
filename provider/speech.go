@@ -87,10 +87,18 @@ type SpeechInfo struct {
 	SizeBytes  int64 `json:"size_bytes,omitempty"`
 }
 
+// SpeechUsage is the billable work completed by one speech request.
+type SpeechUsage struct {
+	Characters                int   `json:"characters,omitempty"`
+	AudioDurationMilliseconds int64 `json:"audio_duration_milliseconds,omitempty"`
+}
+
 // SpeechResult is the folded response from one speech-synthesis request.
 type SpeechResult struct {
 	Audio SpeechAsset `json:"audio"`
 	Info  SpeechInfo  `json:"info,omitempty"`
+	Usage SpeechUsage `json:"usage,omitempty"`
+	Cost  core.Cost   `json:"cost"`
 }
 
 type decoratedSpeech struct {

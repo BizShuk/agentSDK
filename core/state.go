@@ -20,6 +20,8 @@ type State struct {
 	WorkingMemory    map[string]any    `json:"scratch,omitempty"` // Go field renamed; wire tag kept
 	PendingApprovals []PendingApproval `json:"pending_approvals,omitempty"`
 	Budget           Budget            `json:"budget"`
+	Usage            TokenUsage        `json:"usage"`
+	Cost             Cost              `json:"cost"`
 	Status           RunStatus         `json:"status"`
 	UpdatedAt        time.Time         `json:"updated_at"`
 	LastInputSeq     int               `json:"last_input_seq"`

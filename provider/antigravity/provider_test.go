@@ -125,8 +125,8 @@ func TestGenerateNonThinkingModel(t *testing.T) {
 
 	assert.Equal(t, "hello back", res.Text)
 	assert.Equal(t, "end_turn", res.StopReason)
-	assert.Equal(t, 7, res.Usage.PromptTokens)
-	assert.Equal(t, 3, res.Usage.CompletionTokens)
+	assert.Equal(t, 7, res.Usage.InputTokens)
+	assert.Equal(t, 3, res.Usage.OutputTokens)
 	assert.Equal(t, 10, res.Usage.TotalTokens)
 
 	assert.Equal(t,
@@ -193,7 +193,7 @@ func TestGenerateThinkingModelUsesStream(t *testing.T) {
 	assert.Equal(t, "end_turn", res.StopReason)
 	// Thinking tokens are billed output and are folded into the
 	// completion count rather than dropped.
-	assert.Equal(t, 7, res.Usage.CompletionTokens)
+	assert.Equal(t, 7, res.Usage.OutputTokens)
 }
 
 // TestStreamToolCallOutranksFinishReason — Gemini reports finishReason
@@ -214,6 +214,27 @@ func TestStreamToolCallOutranksFinishReason(t *testing.T) {
 	assert.Equal(t, "tool_use", res.StopReason)
 	require.Len(t, res.ToolCalls, 1)
 	assert.Equal(t, "get_weather", res.ToolCalls[0].Name)
+}
+
+func TestParseStreamCarriesTerminalUsage(t *testing.T) {
+	raw := strings.Join([]string{
+		`data: {"response":{"candidates":[{"content":{"parts":[]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":6,"candidatesTokenCount":2,"thoughtsTokenCount":3,"totalTokenCount":11}}}`,
+		``,
+	}, "\n") + "\n"
+
+	chunks, _ := antigravity.ParseStream(context.Background(), strings.NewReader(raw))
+	var got []core.ModelChunk
+	for chunk := range chunks {
+		got = append(got, chunk)
+	}
+
+	require.Len(t, got, 1)
+	assert.True(t, got[0].Done)
+	assert.Equal(t, core.TokenUsage{
+		InputTokens:  6,
+		OutputTokens: 5,
+		TotalTokens:  11,
+	}, got[0].Usage)
 }
 
 // TestStreamCarriesGeneratedImage — an image model returns its whole

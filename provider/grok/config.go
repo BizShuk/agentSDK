@@ -97,10 +97,10 @@ const (
 
 // Response metadata the host returns alongside a completion.
 const (
-	ContextWindowHeader       = "x-grok-context-window"
-	MaxCompletionTokensHeader = "x-grok-max-completion-tokens"
-	ModelsETagHeader          = "x-models-etag"
-	ShouldRetryHeader         = "x-should-retry"
+	ContextWindowHeader   = "x-grok-context-window"
+	MaxOutputTokensHeader = "x-grok-max-completion-tokens"
+	ModelsETagHeader      = "x-models-etag"
+	ShouldRetryHeader     = "x-should-retry"
 )
 
 // DefaultMaxTokens is the ceiling cli-chat-proxy assumes when an

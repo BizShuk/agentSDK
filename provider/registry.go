@@ -25,6 +25,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/bizshuk/agentsdk/provider/pricing"
 )
 
 // DEFAULT_NAME is the registry key used when a name is empty.
@@ -171,7 +173,8 @@ func New(name string, o Options) (Adapter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: %w", e.Name, err)
 	}
-	return WithDecorator(e.Name, p, decorator), nil
+	decorated := WithDecorator(e.Name, p, decorator)
+	return withAccounting(e.Name, resolved.Model, decorated, pricing.Default()), nil
 }
 
 // NewImage builds the named provider's image-generation capability using the
@@ -195,7 +198,8 @@ func NewImage(name string, o Options) (ImageGenerator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: image: %w", e.Name, err)
 	}
-	return WithImageDecorator(e.Name, generator, decorator), nil
+	decorated := WithImageDecorator(e.Name, generator, decorator)
+	return withImageAccounting(e.Name, resolved.Model, decorated, pricing.Default()), nil
 }
 
 // NewVideo builds the named provider's video-generation capability using the
@@ -219,7 +223,8 @@ func NewVideo(name string, o Options) (VideoGenerator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: video: %w", e.Name, err)
 	}
-	return WithVideoDecorator(e.Name, generator, decorator), nil
+	decorated := WithVideoDecorator(e.Name, generator, decorator)
+	return withVideoAccounting(e.Name, resolved.Model, decorated, pricing.Default()), nil
 }
 
 // NewMusic builds the named provider's music-generation capability using the
@@ -243,7 +248,8 @@ func NewMusic(name string, o Options) (MusicGenerator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: music: %w", e.Name, err)
 	}
-	return WithMusicDecorator(e.Name, generator, decorator), nil
+	decorated := WithMusicDecorator(e.Name, generator, decorator)
+	return withMusicAccounting(e.Name, resolved.Model, decorated, pricing.Default()), nil
 }
 
 // NewTranscriber builds the named provider's speech-to-text capability using
@@ -267,7 +273,8 @@ func NewTranscriber(name string, o Options) (Transcriber, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: transcribe: %w", e.Name, err)
 	}
-	return WithTranscriberDecorator(e.Name, transcriber, decorator), nil
+	decorated := WithTranscriberDecorator(e.Name, transcriber, decorator)
+	return withTranscriberAccounting(e.Name, resolved.Model, decorated, pricing.Default()), nil
 }
 
 // NewSpeech builds the named provider's text-to-speech capability using the
@@ -291,7 +298,8 @@ func NewSpeech(name string, o Options) (SpeechGenerator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: speech: %w", e.Name, err)
 	}
-	return WithSpeechDecorator(e.Name, generator, decorator), nil
+	decorated := WithSpeechDecorator(e.Name, generator, decorator)
+	return withSpeechAccounting(e.Name, resolved.Model, decorated, pricing.Default()), nil
 }
 
 // NewLive builds the named provider's realtime-session capability using the
@@ -339,7 +347,8 @@ func NewTranslate(name string, o Options) (Translator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider %s: translate: %w", e.Name, err)
 	}
-	return WithTranslateDecorator(e.Name, translator, decorator), nil
+	decorated := WithTranslateDecorator(e.Name, translator, decorator)
+	return withTranslateAccounting(e.Name, resolved.Model, decorated, pricing.Default()), nil
 }
 
 func lookup(name string) (Entry, error) {

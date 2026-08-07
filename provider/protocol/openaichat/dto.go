@@ -99,9 +99,12 @@ type response struct {
 		FinishReason string          `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
+		InputTokens  int `json:"prompt_tokens"`
+		OutputTokens int `json:"completion_tokens"`
+		TotalTokens  int `json:"total_tokens"`
+		InputDetails struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details"`
 	} `json:"usage"`
 }
 
@@ -119,8 +122,11 @@ type streamChunk struct {
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
+		InputTokens  int `json:"prompt_tokens"`
+		OutputTokens int `json:"completion_tokens"`
+		TotalTokens  int `json:"total_tokens"`
+		InputDetails struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details"`
 	} `json:"usage,omitempty"`
 }

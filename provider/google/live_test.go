@@ -118,6 +118,7 @@ func TestConnectLiveTextDialogue(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "ld", second.Text)
 	assert.True(t, second.TurnComplete)
+	assert.Equal(t, core.UnpricedCost(), second.Cost)
 }
 
 func TestConnectLiveAudioEventFolding(t *testing.T) {

@@ -28,6 +28,7 @@ func ParseStream(ctx context.Context, r io.Reader) <-chan core.ModelChunk {
 	go func() {
 		defer close(out)
 		decoder := sse.NewDecoder(r)
+		var usage core.TokenUsage
 
 		for {
 			if ctx.Err() != nil {
@@ -51,6 +52,14 @@ func ParseStream(ctx context.Context, r io.Reader) <-chan core.ModelChunk {
 			if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
 				continue
 			}
+			if chunk.Usage != nil {
+				usage = core.TokenUsage{
+					InputTokens:          chunk.Usage.InputTokens,
+					OutputTokens:         chunk.Usage.OutputTokens,
+					InputCacheReadTokens: chunk.Usage.InputDetails.CachedTokens,
+					TotalTokens:          chunk.Usage.TotalTokens,
+				}
+			}
 			if len(chunk.Choices) == 0 {
 				continue
 			}
@@ -73,7 +82,7 @@ func ParseStream(ctx context.Context, r io.Reader) <-chan core.ModelChunk {
 
 		// Terminal sentinel.
 		select {
-		case out <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Done: true}:
+		case out <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Usage: usage, Done: true}:
 		case <-ctx.Done():
 		}
 	}()

@@ -7,6 +7,21 @@
 日期優先沿用來源文字；來源未標日期時，採該項目首次出現於 Git history 的日期。
 本檔記錄歷史事實，識別符可能已在後續重構中改名或移除。
 
+## 2026-08-07
+
+### Token usage 與 cost accounting
+
+- Provider response 統一回傳 token/operation usage 與 USD cost metadata，blocking、
+  streaming、media、realtime 與 wire result 使用同一套 `exact` / `estimated` / `free` /
+  `unpriced` 語意。
+- Agent runtime 以 replay-safe 方式彙總成功 model calls；SDK 不建立全域成本帳本，
+  application 在自身 persistence boundary 決定是否將 USD round 成 cents。
+- 加入 checked-in OpenRouter pricing snapshot 與 `provider pricing refresh` preview/write
+  command；input、output、cache read 與 web search 按 manifest 的 per-unit USD prices
+  計算，本地 Ollama 固定為 free。
+- Deterministic tests、full workspace build 與 static checks 為 acceptance boundary；
+  未執行 paid provider calls。
+
 ## 2026-08-06
 
 ### 正典文件範疇清理 (Canonical docs scope cleanup)

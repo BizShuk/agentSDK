@@ -250,6 +250,9 @@ func foldServerContent(sc *liveServerContent) (provider.LiveEvent, error) {
 		Interrupted:  sc.Interrupted,
 		TurnComplete: sc.TurnComplete,
 	}
+	if event.TurnComplete {
+		event.Cost = core.UnpricedCost()
+	}
 	if sc.InputTranscription != nil {
 		event.InputTranscript = sc.InputTranscription.Text
 	}

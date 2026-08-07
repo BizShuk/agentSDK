@@ -102,9 +102,17 @@ func hasNonEmptyString(values []string) bool {
 	return false
 }
 
+// VideoUsage is the billable work completed by one video request.
+type VideoUsage struct {
+	GeneratedVideos      int   `json:"generated_videos,omitempty"`
+	DurationMilliseconds int64 `json:"duration_milliseconds,omitempty"`
+}
+
 // VideoResult is the completed result of one video-generation request.
 type VideoResult struct {
-	Path string `json:"path"`
+	Path  string     `json:"path"`
+	Usage VideoUsage `json:"usage,omitempty"`
+	Cost  core.Cost  `json:"cost"`
 }
 
 type decoratedVideo struct {

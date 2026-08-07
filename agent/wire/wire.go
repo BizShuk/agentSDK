@@ -37,9 +37,11 @@ const MAX_LINE_BYTES = 1 << 20
 
 // Result is the terminal summary of a run.
 type Result struct {
-	RunID  string         `json:"run_id"`
-	Status core.RunStatus `json:"status"`
-	Text   string         `json:"text,omitempty"` // final assistant text
+	RunID  string          `json:"run_id"`
+	Status core.RunStatus  `json:"status"`
+	Text   string          `json:"text,omitempty"` // final assistant text
+	Usage  core.TokenUsage `json:"usage"`
+	Cost   core.Cost       `json:"cost"`
 }
 
 // ErrorPayload carries a terminal error. Messages must already be

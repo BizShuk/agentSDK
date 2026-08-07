@@ -89,6 +89,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 	if err != nil {
 		return core.ModelResult{}, fmt.Errorf("ollama: decode: %w", err)
 	}
+	result.Cost = core.FreeCost()
 	return result, nil
 }
 
@@ -113,7 +114,32 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 	if err != nil {
 		return nil, fmt.Errorf("ollama: http: %w", err)
 	}
-	return openaichat.ParseStream(ctx, resp.Body)
+	chunks, err := openaichat.ParseStream(ctx, resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return freeTerminalCost(ctx, chunks), nil
+}
+
+func freeTerminalCost(
+	ctx context.Context,
+	input <-chan core.ModelChunk,
+) <-chan core.ModelChunk {
+	output := make(chan core.ModelChunk, 1)
+	go func() {
+		defer close(output)
+		for chunk := range input {
+			if chunk.Done {
+				chunk.Cost = core.FreeCost()
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case output <- chunk:
+			}
+		}
+	}()
+	return output
 }
 
 func (p *Provider) applyHeaders(req *http.Request, override core.Auth, stream bool) {

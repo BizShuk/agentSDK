@@ -294,9 +294,10 @@ func fromResponse(cr Response) core.ModelResult {
 	out := core.ModelResult{
 		StopReason: "",
 		Usage: core.TokenUsage{
-			PromptTokens:     cr.Usage.PromptTokens,
-			CompletionTokens: cr.Usage.CompletionTokens,
-			TotalTokens:      cr.Usage.TotalTokens,
+			InputTokens:          cr.Usage.InputTokens,
+			OutputTokens:         cr.Usage.OutputTokens,
+			InputCacheReadTokens: cr.Usage.InputDetails.CachedTokens,
+			TotalTokens:          cr.Usage.TotalTokens,
 		},
 	}
 	for _, c := range cr.Choices {

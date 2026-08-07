@@ -36,6 +36,10 @@ go run . provider --list      # provider × capability × auth env
 每個 capability 的 interface 與方法簽名、各 adapter 的 endpoint 與 wire 細節見
 [`docs/providers.md`](docs/providers.md)；指令用法見 [`docs/cli.md`](docs/cli.md)。
 
+Provider response 會回傳 canonical token usage 與 USD cost metadata；Agent run 會把
+多輪結果彙總到 state 與 wire result。SDK 不維護全域成本帳本，應用可自行決定是否把
+回應記帳；無可靠價格時明確標成 `unpriced`，本地 Ollama 固定為 `free`。
+
 ## 怎麼用 (Getting Started)
 
 engagement 是四階`階梯`，不是一堆獨立開關。每一階都是下一階的子集，往上爬只改設定不改 API。

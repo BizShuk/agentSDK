@@ -28,6 +28,10 @@ type AudioSource struct {
 	// Format labels the encoding — "mp3", "wav", "pcm_16000". Empty leaves
 	// detection to the provider.
 	Format string `json:"format,omitempty"`
+
+	// DurationMilliseconds lets callers report the source duration when the
+	// provider response does not repeat it.
+	DurationMilliseconds int64 `json:"duration_milliseconds,omitempty"`
 }
 
 // TranscribeRequest is the provider-neutral input to a speech-to-text API.
@@ -58,6 +62,9 @@ func (r TranscribeRequest) Validate() error {
 	case hasBytes && hasURL:
 		return fmt.Errorf("transcribe audio bytes and URL are mutually exclusive")
 	}
+	if r.Audio.DurationMilliseconds < 0 {
+		return fmt.Errorf("transcribe audio duration must not be negative")
+	}
 	return nil
 }
 
@@ -70,12 +77,19 @@ type TranscribedWord struct {
 	Speaker string `json:"speaker,omitempty"`
 }
 
+// TranscribeUsage is the billable work completed by one transcription.
+type TranscribeUsage struct {
+	AudioDurationMilliseconds int64 `json:"audio_duration_milliseconds,omitempty"`
+}
+
 // TranscribeResult is the folded response from one transcription request.
 // Words is optional: Text is the complete transcript either way.
 type TranscribeResult struct {
 	Text     string            `json:"text"`
 	Language string            `json:"language,omitempty"`
 	Words    []TranscribedWord `json:"words,omitempty"`
+	Usage    TranscribeUsage   `json:"usage,omitempty"`
+	Cost     core.Cost         `json:"cost"`
 }
 
 type decoratedTranscriber struct {

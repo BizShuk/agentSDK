@@ -77,6 +77,32 @@ result, err := generator.GenerateMusic(ctx, provider.MusicRequest{
 
 `result.Audio.URL` 是短效連結；需要 durable asset 時由 caller 及時下載保存。
 
+## Usage and Cost Accounting
+
+Chat、image、video、music、speech、transcribe、live 與 translate result 會攜帶
+canonical `Usage` / `Cost` metadata。Chat token usage 分成 input、output、cache read 與
+web search；其他 capability 使用各自可觀察的計費維度。Streaming 只在 terminal chunk
+回報一次 usage/cost，避免 consumer 重複加總。
+
+`Cost.Status` 明確區分：
+
+- `exact`：provider 回傳 authoritative billed cost。
+- `estimated`：以 checked-in pricing snapshot 和實際 usage 計算。
+- `free`：不計費；本地 Ollama 一律使用此狀態。
+- `unpriced`：缺少 model identity、公開價格或必要計費維度，不能可靠換算。不得把它
+  當成免費。
+
+估價 snapshot 取自 OpenRouter `/api/v1/models` manifest；`prompt` 對應 input token、
+`completion` 對應 output token、`input_cache_read` 對應 cache-read token、`web_search`
+對應 search count，價格字串的單位皆是 USD per unit。計算使用 exact decimal arithmetic；
+application 若要保存 `cost_cents`，只在自身 persistence boundary round 一次。SDK 不寫
+`~/.config/agentsdk/data/cost` 或其他全域帳本。
+
+```bash
+go run . provider pricing refresh          # preview manifest diff
+go run . provider pricing refresh --write  # update checked-in snapshot
+```
+
 ## Antigravity — Google Cloud Code `v1internal`
 
 走 `:generateContent`／`:streamGenerateContent?alt=sse`／`:fetchAvailableModels`／

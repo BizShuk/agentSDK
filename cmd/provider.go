@@ -65,6 +65,7 @@ var (
 var ProviderCmd = &cobra.Command{
 	Use:   "provider [flags] <prompt>",
 	Short: "Run a single prompt against a provider, bypassing the agent loop",
+	Args:  cobra.ArbitraryArgs,
 	Long: strings.TrimSpace(`
 provider is the manual-test CLI for the provider adapter family.
 It calls the provider layer directly — no Agent, Engine, tools, or
@@ -279,8 +280,13 @@ func ResetFlags() {
 	ProviderSampleRate = 44100
 	ProviderBitrate = 256000
 	ProviderAudioFormat = "mp3"
+	ProviderPricingWrite = false
 
 	ProviderCmd.Flags().VisitAll(func(f *pflag.Flag) {
+		f.Changed = false
+		_ = f.Value.Set(f.DefValue)
+	})
+	ProviderPricingRefreshCmd.Flags().VisitAll(func(f *pflag.Flag) {
 		f.Changed = false
 		_ = f.Value.Set(f.DefValue)
 	})

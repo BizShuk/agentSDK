@@ -122,6 +122,7 @@ func TestConnectLiveTextDialogue(t *testing.T) {
 	done, err := session.Receive(ctx)
 	require.NoError(t, err)
 	assert.True(t, done.TurnComplete)
+	assert.Equal(t, core.UnpricedCost(), done.Cost)
 }
 
 func TestConnectLiveAudioEventMapping(t *testing.T) {

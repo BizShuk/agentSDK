@@ -290,7 +290,7 @@ func runChat(ctx context.Context, target Target, c Case, root, caseDir string) (
 	extra := map[string]string{
 		"stop_reason": res.StopReason,
 		"tokens": fmt.Sprintf("%d/%d",
-			res.Usage.PromptTokens, res.Usage.CompletionTokens),
+			res.Usage.InputTokens, res.Usage.OutputTokens),
 	}
 	return outputs, extra, nil
 }

@@ -95,12 +95,20 @@ type MusicInfo struct {
 	SizeBytes            int64 `json:"size_bytes,omitempty"`
 }
 
+// MusicUsage is the billable work completed by one music request.
+type MusicUsage struct {
+	GeneratedTracks      int   `json:"generated_tracks,omitempty"`
+	DurationMilliseconds int64 `json:"duration_milliseconds,omitempty"`
+}
+
 // MusicResult is the folded response from one music-generation request.
 type MusicResult struct {
 	Audio   MusicAsset `json:"audio"`
 	Status  int        `json:"status,omitempty"`
 	TraceID string     `json:"trace_id,omitempty"`
 	Info    MusicInfo  `json:"info,omitempty"`
+	Usage   MusicUsage `json:"usage,omitempty"`
+	Cost    core.Cost  `json:"cost"`
 }
 
 type decoratedMusic struct {

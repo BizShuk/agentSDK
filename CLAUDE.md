@@ -36,6 +36,10 @@
   model-level support，`InputModalities` / `OutputModalities` 分別表示讀取與產生能力。
   consumer 以三者交集選擇 `Provider + Capability + Model`；catalog metadata 不負責
   request routing，選定 operation 後仍使用對應 typed constructor。
+- Provider accounting surface：chat、media、realtime 與 translation result 都回傳
+  canonical `Usage` / `Cost` metadata；stream 只在 terminal chunk 回報一次。價格估算由
+  `provider/pricing` 的 checked-in OpenRouter snapshot 擁有，Ollama 固定為 `free`，
+  缺少 model identity、價格或必要計費維度時明確回 `unpriced`。
 - Reasoning content boundary：`core.Part` 以 `PART_KIND_REASONING` 表示可攜 reasoning
   文字，`ReasoningState` 保存 opaque continuation metadata。`ModelResult.Parts` 是有序
   canonical assistant content；無法表示 metadata 的 wire path 必須明確報錯。
@@ -75,7 +79,7 @@ agentsdk/
 ├── core/                             # 純狀態機；單一 package，檔案依 domain 分組
 │   ├── state.go / budget.go / run_status.go / autonomy.go
 │   ├── event.go / observation.go / instruction.go / decision.go
-│   ├── message.go / model.go / provider.go / credential.go
+│   ├── message.go / model.go / cost.go / provider.go / credential.go
 │   ├── tool.go / approval.go
 │   └── persistence.go / notification.go / hook.go / stream.go
 ├── reasoning/                        # DecisionRule/NewRule/NewDecide + 6 個純函式 FSM
@@ -91,6 +95,7 @@ agentsdk/
 ├── memory/                           # context window、compactor、checkpoint、JSON state/WAL
 ├── runtime/                          # Engine：dispatch Instruction、fold Event、Run/Resume/HITL
 ├── provider/                         # registry、credential bridge、protocol codecs 與七個 adapters
+│   ├── pricing/                      # OpenRouter pricing snapshot、exact decimal cost estimate 與 refresh flow
 │   ├── capability.go                 # model/image/video/music/audio capability discovery + typed unsupported error
 │   ├── model.go                      # provider-owned ModelSpec / ModelLister + directional Modality vocabulary
 │   ├── image.go / video.go / music.go / speech.go / transcribe.go / error.go # media contracts、request/result、auth wrappers、structured API error
@@ -189,6 +194,10 @@ observability 都在此。
   `provider.ImageGenerator`、`provider.VideoGenerator`、`provider.MusicGenerator`。
   `provider.Entry` 單獨擁有 provider discovery metadata 與 factories；
   `provider.ModelSpec` 單獨擁有 catalog model metadata，兩者都不進 `core`。
+- Usage / cost boundary：provider result 擁有單次 response 的 canonical `TokenUsage` 與
+  `Cost`，runtime 只在成功的 model call 後彙總進 `State`。SDK 回傳用量與成本事實，
+  不替 application 寫全域 accounting store；持久化與 `cost_cents` rounding 由 consumer
+  在自身 database boundary 做一次。
 - Provider config pipeline：`provider.Options` 是 unresolved live input，只在
   `Resolve(Entry.Metadata)` 查 env 並投影成 `ResolvedConfig{Model, BaseURL, Auth}`。
   Endpoint 不進 `core.Auth`；credential 優先序固定為
@@ -296,7 +305,8 @@ observability 都在此。
 Agent/Engine/harness）與 `wizard.WizardCmd` 的 `wizard`（alias `w`）。命令一律
 package-level exported var + `init()` 綁 flag，不用 `NewXxxCmd()` constructor。
 Wizard 的設定詞彙來自 `spec`，provider 資料直接來自 `provider.Entries`/`Catalog`；
-指令用法見 [`docs/cli.md`](docs/cli.md)。`agent/cli.OpenForCLI(appName, level)`
+pricing snapshot 由 `provider pricing refresh` 預覽或明示寫入；指令用法見
+[`docs/cli.md`](docs/cli.md)。`agent/cli.OpenForCLI(appName, level)`
 為 sample 建立：
 
 ```text
@@ -307,6 +317,8 @@ Wizard 的設定詞彙來自 `spec`，provider 資料直接來自 `provider.Entr
 │   └── auth/*.json
 └── logs/<runID>.log
 ```
+
+此目錄不建立 SDK-level cost ledger；run state 只保存該 run 的彙總 metadata。
 
 `agent.Run` 是可嵌入 lifecycle：input validation → wall-clock deadline → 單次 Bootstrap → panic-safe Engine.Run → optional OnComplete，失敗直接回傳 `error`。`agent/cli.Main` 負責 signal binding，`agent/cli.Run` 才將錯誤轉成 exit code。
 
@@ -322,7 +334,7 @@ JSONL 對外 envelope 由 `agent/wire` 擁有，經
 | agent 設定檔 I/O | `agentsdk/utils/agentconfig`：`Decode`/`DecodeBytes`/`Encode`/`EncodeBytes`、`LoadFile`/`SaveFile`/`Marshal`/`FormatOf`、`Format`/`FORMAT_YAML`/`FORMAT_JSON`（re-export 自 `utils/configfile`） |
 | agent 組裝 | `agentsdk/agent`：`New`/`MustNew`/`Bootstrap`（實作 `agent.Runner`）、`Once`/`OnceStream`、`Option` 全部 `With*`、`BuildSources`、`Run`、`Interactive` |
 | prompt 內容管理 | `agentsdk/prompt`：`Slot`（system/user/reminder）、`Section`、`Source`、`Builder.Seed`/`Turn`、`Static`、`PersonaSource`/`ContextFileSource`/`EnvSource`/`ReminderSource` |
-| 狀態與 ports | `agentsdk/core`：`State`/`Budget`、`Event`/`Observation`、`Instruction`/`Decide`、最小 `Provider`、optional `StreamProvider`/`ModelLister`、`Tool` 與 persistence/presentation ports；檔案依 domain 分組，package/API 不拆 |
+| 狀態與 ports | `agentsdk/core`：`State`/`Budget`、`TokenUsage`/`Cost`、`Event`/`Observation`、`Instruction`/`Decide`、最小 `Provider`、optional `StreamProvider`/`ModelLister`、`Tool` 與 persistence/presentation ports；檔案依 domain 分組，package/API 不拆 |
 | 推理策略 | `agentsdk/reasoning`：`DecisionRule`、`NewRule` built-in factory、`NewDecide` dispatcher + 6 個 `New*` rule constructor |
 | runtime | `agentsdk/runtime`：`NewEngine`、`Run`、`RunWithEvent`、`Resume`、`SubmitHumanDecision` |
 | tools/safety | `agentsdk/tool`、`agentsdk/tool/builtin`：`Tool`、`CallWithRawMessage`、`NewRegistry`、`RegisterFunc`、allowlist-aware `Register`、`RegisterDefaults` |
@@ -339,6 +351,7 @@ JSONL 對外 envelope 由 `agent/wire` 擁有，經
 | middleware preset | `agentsdk/middleware/preset`：`Default()`（retry→timeout→budget→loopguard）、`Secure(sandbox, approval)`（再加 sandbox→approval→spotlight→sanitizer） |
 | credential | `agentsdk/provider/credential`：`RouteID`/`Kinds`/`Names`、`NewSource`/`NewAutoSource`/`Source.Decorator()`、`Login`；唯一 import `bizshuk/auth` 之處 |
 | provider registry | `agentsdk/provider`（package `provider`，非 `registry`）：`Entry` 單獨擁有 name / metadata / static catalog / model+image+video+music+audio factories；`Names`/`Entries`/`Lookup`/`Catalog`/`Capabilities`/`New`/`NewImage`/`NewVideo`/`NewMusic`/`NewTranscriber`/`NewSpeech`/`NewLive`/`NewTranslate`/`Options.Resolve`/`ResolvedConfig`/`DEFAULT_NAME`；`env` 查詢以 `LookupEnv` 注入 |
+| provider pricing | `agentsdk/provider/pricing`：checked-in OpenRouter snapshot、provider/model mapping、cost calculation、diff 與 refresh；Ollama free policy 與 `unpriced` fallback 的唯一 owner |
 | capability benchmark | `agentsdk/benchmark`：`Target`、`Case`、六組 case sets、`RunnableCapabilities` / `CasesForModel` / `CatalogCases`、`Main` / `Run` / `RunPair`、`Record`；`benchmark/gen` 產生 `benchmark/pkg/<provider-model>` 全部子套件，`benchmark/cmd` 是 flag runner，結果為 `pkg/<pair-slug>/tmp/<session-id>/case-NN-<name>/`（meta.json + outputs）+ session `summary.json` |
 | root CLI subcommands | `agentsdk/cmd`：`cmd.ProviderCmd`（`provider` 手動測試 CLI，不走 Engine；per-type handler 在 `cmd/provider` package：`Chat`/`Image`/`Music`/`Speech`/`Transcribe`/`WriteMatrix`/`Catalog`/`JoinCapabilities` + `Request`）、`cmd/agent/wizard.WizardCmd`（`wizard`/`w` 設定產生器）；flag 用法見 [`docs/cli.md`](docs/cli.md) |
 | authentication | 外部 module `github.com/bizshuk/auth`：只由 `provider/credential` 消費；API 契約見該 repo |

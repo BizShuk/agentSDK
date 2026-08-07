@@ -10,6 +10,7 @@
     "lint": "gofmt -l . && go vet ./...",
     "clean": "rm -rf bin",
     "run:setup": "./scripts/run.sh",
+    "run:pricing-refresh": "go run . provider pricing refresh",
     "run:verify-workspace": "./scripts/verify-workspace.sh",
     "run:list-providers": "./scripts/list-providers.sh"
   }

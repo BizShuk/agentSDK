@@ -19,6 +19,7 @@ func ParseStream(ctx context.Context, reader io.Reader) (<-chan core.ModelChunk,
 	go func() {
 		defer close(out)
 		decoder := sse.NewDecoder(reader)
+		var usage core.TokenUsage
 
 		for {
 			if ctx.Err() != nil {
@@ -26,7 +27,7 @@ func ParseStream(ctx context.Context, reader io.Reader) (<-chan core.ModelChunk,
 			}
 			frame, err := decoder.Next()
 			if errors.Is(err, io.EOF) {
-				emit(ctx, out, core.ModelChunk{Done: true})
+				emit(ctx, out, core.ModelChunk{Usage: usage, Done: true})
 				return
 			}
 			if err != nil {
@@ -37,15 +38,21 @@ func ParseStream(ctx context.Context, reader io.Reader) (<-chan core.ModelChunk,
 				continue
 			}
 			if payload == "[DONE]" {
-				if !emit(ctx, out, core.ModelChunk{Done: true}) {
-					return
-				}
-				continue
+				emit(ctx, out, core.ModelChunk{Usage: usage, Done: true})
+				return
 			}
 
 			var chunk streamChunk
 			if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
 				continue
+			}
+			if chunk.Usage != nil {
+				usage = core.TokenUsage{
+					InputTokens:          chunk.Usage.InputTokens,
+					OutputTokens:         chunk.Usage.OutputTokens,
+					InputCacheReadTokens: chunk.Usage.InputDetails.CachedTokens,
+					TotalTokens:          chunk.Usage.TotalTokens,
+				}
 			}
 			for _, choice := range chunk.Choices {
 				if choice.Delta.ReasoningContent != "" &&

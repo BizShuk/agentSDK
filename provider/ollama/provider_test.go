@@ -59,7 +59,33 @@ func TestProviderRoundTripAgainstFakeOllama(t *testing.T) {
 	assert.Equal(t, "hello from ollama", mr.Text)
 	assert.Equal(t, "stop", mr.StopReason)
 	assert.Equal(t, 9, mr.Usage.TotalTokens)
+	assert.Equal(t, core.FreeCost(), mr.Cost)
 	assert.Equal(t, "qwen2.5vl:3b", *gotModel)
+}
+
+func TestProviderStreamMarksTerminalChunkFree(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":4,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+
+	p, err := ollama.New(provider.ResolvedConfig{BaseURL: srv.URL})
+	require.NoError(t, err)
+	chunks, err := p.Stream(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"}}}},
+	})
+	require.NoError(t, err)
+
+	var terminal core.ModelChunk
+	for chunk := range chunks {
+		if chunk.Done {
+			terminal = chunk
+		}
+	}
+	assert.True(t, terminal.Done)
+	assert.Equal(t, 9, terminal.Usage.TotalTokens)
+	assert.Equal(t, core.FreeCost(), terminal.Cost)
 }
 
 func TestProviderIncludesBearerHeader(t *testing.T) {

@@ -99,6 +99,11 @@ func (e *Engine) runInstruction(ctx context.Context, s core.State, inst core.Ins
 			return s, nil, false, fmt.Errorf("model generate: %w", err)
 		}
 		mr = mr.NormalizeContent()
+		s.Usage = s.Usage.Add(mr.Usage)
+		s.Cost, err = s.Cost.Add(mr.Cost)
+		if err != nil {
+			return s, nil, false, fmt.Errorf("aggregate model cost: %w", err)
+		}
 		// Append assistant message with tool_use parts so the next
 		// CALL_MODEL sees the full Anthropic-style turn pairing
 		// (assistant tool_use → tool result). Parts also retains ordered

@@ -100,7 +100,7 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 		}
 
 		select {
-		case out <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Done: true}:
+		case out <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Usage: stop.Usage, Done: true}:
 		case <-ctx.Done():
 		}
 	}()

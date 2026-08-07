@@ -89,6 +89,27 @@ func TestRunStreamRejectsMissingTerminalChunk(t *testing.T) {
 	}
 }
 
+func TestRunStreamPrintsTerminalUsageAndCost(t *testing.T) {
+	var out bytes.Buffer
+	err := runStream(
+		context.Background(),
+		streamStub{chunks: []core.ModelChunk{
+			{Kind: core.PART_KIND_PLAIN_TEXT, Text: "done"},
+			{
+				Done:  true,
+				Usage: core.TokenUsage{InputTokens: 10, OutputTokens: 2, TotalTokens: 12},
+				Cost:  core.Cost{AmountUSD: "0.0010000000", Status: core.COST_STATUS_ESTIMATED},
+			},
+		}},
+		core.ModelRequest{},
+		&out,
+		false,
+	)
+	require.NoError(t, err)
+	assert.Contains(t, out.String(), "tokens=10/2")
+	assert.Contains(t, out.String(), "cost_usd=0.0010000000")
+}
+
 func TestImage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

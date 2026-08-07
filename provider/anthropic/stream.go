@@ -75,7 +75,7 @@ type StreamError struct {
 // the final stop_reason and usage that the runtime folds into ModelResult.
 type StreamStop struct {
 	StopReason string
-	Usage      Usage
+	Usage      core.TokenUsage
 }
 
 // ParseStream reads SSE from r and feeds core.ModelChunk events into the
@@ -112,6 +112,10 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 				continue // ignore malformed lines
 			}
 			switch ev.Type {
+			case "message_start":
+				if ev.Message != nil {
+					stop.Usage = mergeUsage(stop.Usage, toCoreUsage(ev.Message.Usage))
+				}
 			case "content_block_delta":
 				if ev.Delta == nil {
 					continue
@@ -164,7 +168,7 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 					stop.StopReason = ev.Delta.StopReason
 				}
 				if ev.Usage != nil {
-					stop.Usage = *ev.Usage
+					stop.Usage = mergeUsage(stop.Usage, toCoreUsage(*ev.Usage))
 				}
 			case "error":
 				if ev.Error != nil {
@@ -184,12 +188,40 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, *Str
 
 		// Terminal sentinel.
 		select {
-		case out <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Done: true}:
+		case out <- core.ModelChunk{Kind: core.PART_KIND_PLAIN_TEXT, Usage: stop.Usage, Done: true}:
 		case <-ctx.Done():
 		}
 	}()
 
 	return out, stop
+}
+
+func toCoreUsage(usage Usage) core.TokenUsage {
+	inputTokens := usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
+	return core.TokenUsage{
+		InputTokens:          inputTokens,
+		OutputTokens:         usage.OutputTokens,
+		InputCacheReadTokens: usage.CacheReadInputTokens,
+		WebSearchCount:       usage.ServerToolUse.WebSearchRequests,
+		TotalTokens:          inputTokens + usage.OutputTokens,
+	}
+}
+
+func mergeUsage(current, update core.TokenUsage) core.TokenUsage {
+	if update.InputTokens != 0 {
+		current.InputTokens = update.InputTokens
+	}
+	if update.OutputTokens != 0 {
+		current.OutputTokens = update.OutputTokens
+	}
+	if update.InputCacheReadTokens != 0 {
+		current.InputCacheReadTokens = update.InputCacheReadTokens
+	}
+	if update.WebSearchCount != 0 {
+		current.WebSearchCount = update.WebSearchCount
+	}
+	current.TotalTokens = current.InputTokens + current.OutputTokens
+	return current
 }
 
 func decodeArgs(raw json.RawMessage) map[string]any {

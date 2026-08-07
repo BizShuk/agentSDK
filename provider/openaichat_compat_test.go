@@ -138,14 +138,18 @@ func TestOpenAIChatGenerateGolden(t *testing.T) {
 			Args: map[string]any{"city": "Taipei"},
 		}},
 		Usage: core.TokenUsage{
-			PromptTokens:     8,
-			CompletionTokens: 3,
-			TotalTokens:      11,
+			InputTokens:  8,
+			OutputTokens: 3,
+			TotalTokens:  11,
 		},
 	}
 
 	for _, tc := range openAIChatAdapterCases() {
 		t.Run(tc.name, func(t *testing.T) {
+			expected := wantResult
+			if tc.name == "ollama" {
+				expected.Cost = core.FreeCost()
+			}
 			var gotBody []byte
 			var gotPath string
 			var gotAuth string
@@ -169,7 +173,7 @@ func TestOpenAIChatGenerateGolden(t *testing.T) {
 			assert.Equal(t, "/chat/completions", gotPath)
 			assert.Equal(t, "Bearer test-key", gotAuth)
 			assert.Empty(t, gotAccept)
-			assert.Equal(t, wantResult, got)
+			assert.Equal(t, expected, got)
 		})
 	}
 }
@@ -188,12 +192,20 @@ func TestOpenAIChatStreamGolden(t *testing.T) {
 				Args: map[string]any{"city": "Taipei"},
 			},
 		},
-		{Done: true},
-		{Done: true},
+		{
+			Done: true,
+			Usage: core.TokenUsage{
+				InputTokens: 8, OutputTokens: 3, TotalTokens: 11,
+			},
+		},
 	}
 
 	for _, tc := range openAIChatAdapterCases() {
 		t.Run(tc.name, func(t *testing.T) {
+			expected := append([]core.ModelChunk(nil), wantChunks...)
+			if tc.name == "ollama" {
+				expected[len(expected)-1].Cost = core.FreeCost()
+			}
 			var gotBody []byte
 			var gotAccept string
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -216,7 +228,7 @@ func TestOpenAIChatStreamGolden(t *testing.T) {
 			}
 			assert.Equal(t, wantRequest, gotBody)
 			assert.Equal(t, "text/event-stream", gotAccept)
-			assert.Equal(t, wantChunks, got)
+			assert.Equal(t, expected, got)
 		})
 	}
 }

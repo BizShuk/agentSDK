@@ -84,6 +84,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 	sawDone := false
 	for chunk := range ch {
 		if chunk.Done {
+			out.Usage = chunk.Usage
 			sawDone = true
 			break
 		}

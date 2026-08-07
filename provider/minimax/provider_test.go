@@ -89,8 +89,8 @@ func TestGenerateAgainstFakeServer(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hello from minimax", mr.Text)
 	assert.Equal(t, "end_turn", mr.StopReason)
-	assert.Equal(t, 7, mr.Usage.PromptTokens)
-	assert.Equal(t, 4, mr.Usage.CompletionTokens)
+	assert.Equal(t, 7, mr.Usage.InputTokens)
+	assert.Equal(t, 4, mr.Usage.OutputTokens)
 	assert.Equal(t, 11, mr.Usage.TotalTokens)
 }
 

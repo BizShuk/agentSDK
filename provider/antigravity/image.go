@@ -117,8 +117,8 @@ func (p *ImageProvider) GenerateImage(
 				model, DefaultImageModel)
 		}
 		out.Images = append(out.Images, images...)
-		out.Usage.InputTokens += res.Usage.PromptTokens
-		out.Usage.OutputTokens += res.Usage.CompletionTokens
+		out.Usage.InputTokens += res.Usage.InputTokens
+		out.Usage.OutputTokens += res.Usage.OutputTokens
 		out.Usage.TotalTokens += res.Usage.TotalTokens
 	}
 	return out, nil

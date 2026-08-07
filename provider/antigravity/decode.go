@@ -97,8 +97,8 @@ func toUsage(u *UsageMetadata) core.TokenUsage {
 		total = u.PromptTokenCount + completion
 	}
 	return core.TokenUsage{
-		PromptTokens:     u.PromptTokenCount,
-		CompletionTokens: completion,
-		TotalTokens:      total,
+		InputTokens:  u.PromptTokenCount,
+		OutputTokens: completion,
+		TotalTokens:  total,
 	}
 }

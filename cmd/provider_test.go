@@ -7,10 +7,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bizshuk/agentsdk/provider"
+	"github.com/bizshuk/agentsdk/provider/pricing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -64,6 +68,72 @@ func newFakeMessagesServer(t *testing.T, expectModel string) (*httptest.Server, 
 	return srv, &sawKey
 }
 
+func pricingCommandFixture(t *testing.T) (*httptest.Server, string) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{
+          "data": [{
+            "id": "meta/muse",
+            "pricing": {"prompt": "0.001", "completion": "0.002"}
+          }]
+        }`))
+	}))
+	t.Cleanup(server.Close)
+	path := filepath.Join(t.TempDir(), "snapshot.json")
+	old := pricing.Snapshot{
+		Source:      pricing.OPENROUTER_MODELS_URL,
+		PricingAsOf: time.Unix(0, 0).UTC().Format(time.RFC3339),
+		Models:      map[string]pricing.Rate{"old/model": {Prompt: "1"}},
+	}
+	require.NoError(t, pricing.WriteSnapshot(path, old))
+	return server, path
+}
+
+func usePricingCommandFixture(t *testing.T, server *httptest.Server, path string) {
+	t.Helper()
+	oldURL := providerPricingURL
+	oldClient := providerPricingHTTPClient
+	oldPath := providerPricingSnapshotPath
+	oldNow := providerPricingNow
+	providerPricingURL = server.URL
+	providerPricingHTTPClient = server.Client()
+	providerPricingSnapshotPath = path
+	providerPricingNow = func() time.Time { return time.Unix(1, 0).UTC() }
+	t.Cleanup(func() {
+		providerPricingURL = oldURL
+		providerPricingHTTPClient = oldClient
+		providerPricingSnapshotPath = oldPath
+		providerPricingNow = oldNow
+	})
+}
+
+func TestProviderPricingRefreshPreviewsWithoutWriting(t *testing.T) {
+	server, path := pricingCommandFixture(t)
+	usePricingCommandFixture(t, server, path)
+
+	stdout, _, err := runCLI(t, "pricing", "refresh")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "+ meta/muse")
+	assert.Contains(t, stdout, "- old/model")
+	raw, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(raw), `"old/model"`)
+	assert.NotContains(t, string(raw), `"meta/muse"`)
+}
+
+func TestProviderPricingRefreshWritesOnlyWithExplicitFlag(t *testing.T) {
+	server, path := pricingCommandFixture(t)
+	usePricingCommandFixture(t, server, path)
+
+	stdout, _, err := runCLI(t, "pricing", "refresh", "--write")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "updated")
+	raw, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(raw), `"meta/muse"`)
+	assert.NotContains(t, string(raw), `"old/model"`)
+}
+
 // runCLI drives ProviderCmd with the given args and returns the
 // captured stdout / stderr + error from Execute().
 func runCLI(t *testing.T, args ...string) (string, string, error) {
@@ -93,6 +163,8 @@ func TestProviderGenerateRoundTrip(t *testing.T) {
 	assert.Contains(t, stdout, "pong from fake")
 	assert.Contains(t, stdout, "[stop=end_turn")
 	assert.Contains(t, stdout, "tokens=11/7")
+	assert.Contains(t, stdout, "cost_usd=")
+	assert.Contains(t, stdout, "cost_status=estimated")
 	assert.Contains(t, stderr, "[provider] minimax")
 	assert.Equal(t, "sk-test", *sawKey,
 		"x-api-key header must carry the API key verbatim")
@@ -213,16 +285,16 @@ func TestProviderJSON(t *testing.T) {
 		Text       string `json:"text"`
 		StopReason string `json:"stop_reason"`
 		Usage      struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-			TotalTokens      int `json:"total_tokens"`
+			InputTokens  int `json:"input_tokens"`
+			OutputTokens int `json:"output_tokens"`
+			TotalTokens  int `json:"total_tokens"`
 		} `json:"usage"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(line), &got))
 	assert.Equal(t, "pong from fake", got.Text)
 	assert.Equal(t, "end_turn", got.StopReason)
-	assert.Equal(t, 11, got.Usage.PromptTokens)
-	assert.Equal(t, 7, got.Usage.CompletionTokens)
+	assert.Equal(t, 11, got.Usage.InputTokens)
+	assert.Equal(t, 7, got.Usage.OutputTokens)
 }
 
 // TestProviderCredentialsFromEnv verifies that when --api-key is omitted,

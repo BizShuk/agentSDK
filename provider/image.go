@@ -95,14 +95,13 @@ type ImageInputTokenDetails struct {
 	ImageTokens int `json:"image_tokens,omitempty"`
 }
 
-// ImageUsage is the common usage subset returned by OpenAI-compatible image
-// APIs. CostInUSDTicks preserves xAI's exact integer accounting when present.
+// ImageUsage is the common usage subset returned by image APIs.
 type ImageUsage struct {
 	TotalTokens       int                    `json:"total_tokens,omitempty"`
 	InputTokens       int                    `json:"input_tokens,omitempty"`
 	OutputTokens      int                    `json:"output_tokens,omitempty"`
 	InputTokenDetails ImageInputTokenDetails `json:"input_tokens_details,omitempty"`
-	CostInUSDTicks    int64                  `json:"cost_in_usd_ticks,omitempty"`
+	GeneratedImages   int                    `json:"generated_images,omitempty"`
 }
 
 // ImageResult is the folded response from one image-generation request.
@@ -110,6 +109,7 @@ type ImageResult struct {
 	Created int64      `json:"created,omitempty"`
 	Images  []Image    `json:"images"`
 	Usage   ImageUsage `json:"usage,omitempty"`
+	Cost    core.Cost  `json:"cost"`
 }
 
 type decoratedImage struct {

@@ -52,7 +52,9 @@ func (r TranslateRequest) Validate() error {
 
 // TranslateResult is the folded response from one translation request.
 type TranslateResult struct {
-	Text string `json:"text"`
+	Text  string          `json:"text"`
+	Usage core.TokenUsage `json:"usage,omitempty"`
+	Cost  core.Cost       `json:"cost"`
 }
 
 // TranslateChunk is one increment of a streaming translation.

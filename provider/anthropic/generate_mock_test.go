@@ -71,6 +71,42 @@ func TestGenerateParsesTextAndToolUse(t *testing.T) {
 	assert.Equal(t, 18, mr.Usage.TotalTokens, "input+output")
 }
 
+func TestGeneratePreservesCacheAndNativeWebSearchUsage(t *testing.T) {
+	body := `{
+      "id":"msg_usage",
+      "type":"message",
+      "role":"assistant",
+      "model":"claude-sonnet-5",
+      "stop_reason":"end_turn",
+      "content":[{"type":"text","text":"done"}],
+      "usage":{
+        "input_tokens":10,
+        "output_tokens":2,
+        "cache_creation_input_tokens":3,
+        "cache_read_input_tokens":4,
+        "server_tool_use":{"web_search_requests":2}
+      }
+    }`
+	p, err := anthropic.New(provider.ResolvedConfig{
+		Model:   "claude-sonnet-5",
+		BaseURL: newFakeAnthropic(t, body).URL,
+		Auth:    core.Auth{APIKey: "sk-test"},
+	})
+	require.NoError(t, err)
+
+	result, err := p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "search"}}}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, core.TokenUsage{
+		InputTokens:          17,
+		OutputTokens:         2,
+		InputCacheReadTokens: 4,
+		WebSearchCount:       2,
+		TotalTokens:          19,
+	}, result.Usage)
+}
+
 func TestGenerateRoundTripsThinking(t *testing.T) {
 	var gotThinking map[string]any
 	body := `{

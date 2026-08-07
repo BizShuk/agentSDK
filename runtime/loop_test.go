@@ -69,6 +69,39 @@ func TestReActEndTurnExitsLoop(t *testing.T) {
 	assert.Equal(t, 1, prov.calls)
 }
 
+func TestRunAggregatesModelUsageAndCost(t *testing.T) {
+	prov := testutil.NewScriptedProvider()
+	prov.Enqueue(core.ModelResult{
+		ToolCalls: []core.ToolCall{{ID: "c1", Name: "add", Args: map[string]any{"n1": 1, "n2": 2}}},
+		Usage:     core.TokenUsage{InputTokens: 10, OutputTokens: 2, TotalTokens: 12},
+		Cost:      core.Cost{AmountUSD: "0.0100000000", Status: core.COST_STATUS_ESTIMATED},
+	})
+	prov.Enqueue(core.ModelResult{
+		Text:       "done",
+		StopReason: "end_turn",
+		Usage:      core.TokenUsage{InputTokens: 8, OutputTokens: 1, TotalTokens: 9},
+		Cost:       core.Cost{AmountUSD: "0.0050000000", Status: core.COST_STATUS_ESTIMATED},
+	})
+
+	reg := tool.NewRegistry()
+	tool.RegisterFunc(reg, "add", "add two ints", core.RISK_LEVEL_LOW,
+		func(_ context.Context, a addArgs) (addOut, error) {
+			return addOut{Sum: a.N1 + a.N2}, nil
+		})
+	step := reasoning.NewDecide(map[string]reasoning.DecisionRule{
+		core.REASON_REACT: reasoning.NewThinkThenAct(),
+	})
+
+	final, err := runtime.NewEngine(step, prov, reg).Run(context.Background(), core.State{
+		ReasoningStyle: core.REASON_REACT,
+		Budget:         core.Budget{MaxTurns: 5},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, core.TokenUsage{InputTokens: 18, OutputTokens: 3, TotalTokens: 21}, final.Usage)
+	assert.Equal(t, "0.0150000000", final.Cost.AmountUSD)
+	assert.Equal(t, core.COST_STATUS_ESTIMATED, final.Cost.Status)
+}
+
 func TestModelReasoningPartIsRetainedInTranscript(t *testing.T) {
 	prov := testutil.NewScriptedProvider()
 	prov.Enqueue(core.ModelResult{

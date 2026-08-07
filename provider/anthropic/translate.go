@@ -169,12 +169,20 @@ func toSDKParams(body RequestBody) (anthropic.MessageNewParams, error) {
 // core.ModelResult. We deliberately keep the SDK import in this file
 // only — downstream of this call the runtime sees no Anthropic types.
 func fromSDKResponse(resp *anthropic.Message) core.ModelResult {
+	inputTokens := int(
+		resp.Usage.InputTokens +
+			resp.Usage.CacheCreationInputTokens +
+			resp.Usage.CacheReadInputTokens,
+	)
+	outputTokens := int(resp.Usage.OutputTokens)
 	out := core.ModelResult{
 		StopReason: string(resp.StopReason),
 		Usage: core.TokenUsage{
-			PromptTokens:     int(resp.Usage.InputTokens),
-			CompletionTokens: int(resp.Usage.OutputTokens),
-			TotalTokens:      int(resp.Usage.InputTokens + resp.Usage.OutputTokens),
+			InputTokens:          inputTokens,
+			OutputTokens:         outputTokens,
+			InputCacheReadTokens: int(resp.Usage.CacheReadInputTokens),
+			WebSearchCount:       int(resp.Usage.ServerToolUse.WebSearchRequests),
+			TotalTokens:          inputTokens + outputTokens,
 		},
 	}
 	for _, block := range resp.Content {

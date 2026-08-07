@@ -30,7 +30,9 @@ type ModelChunk struct {
 	Image     []byte `json:"image,omitempty"`
 	ImageMIME string `json:"image_mime,omitempty"`
 
-	Done bool `json:"done"`
+	Usage TokenUsage `json:"usage,omitzero"`
+	Cost  Cost       `json:"cost,omitzero"`
+	Done  bool       `json:"done"`
 }
 
 // ModelResult is the final, folded result of one model call.
@@ -42,6 +44,7 @@ type ModelResult struct {
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	StopReason string     `json:"stop_reason"`
 	Usage      TokenUsage `json:"usage"`
+	Cost       Cost       `json:"cost"`
 }
 
 // NormalizeContent makes Parts and the legacy Text/ToolCalls projections
@@ -79,14 +82,25 @@ func (r ModelResult) NormalizeContent() ModelResult {
 	return out
 }
 
-// TokenUsage tracks token accounting. Providers report approximate counts.
+// TokenUsage tracks the billing units reported by a model provider.
 type TokenUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	// InputTokens is the total input count, including InputCacheReadTokens.
+	InputTokens          int `json:"input_tokens"`
+	OutputTokens         int `json:"output_tokens"`
+	InputCacheReadTokens int `json:"input_cache_read_tokens,omitempty"`
+	WebSearchCount       int `json:"web_search_count,omitempty"`
+	// TotalTokens is InputTokens + OutputTokens when the provider reports
+	// both dimensions.
+	TotalTokens int `json:"total_tokens"`
 }
 
-// Add folds usage into a target accounting struct.
-func (u TokenUsage) Add() TokenUsage {
-	return u // value receiver; arithmetic lives at the call site to avoid double-counting
+// Add returns the component-wise sum of two usage values.
+func (u TokenUsage) Add(other TokenUsage) TokenUsage {
+	return TokenUsage{
+		InputTokens:          u.InputTokens + other.InputTokens,
+		OutputTokens:         u.OutputTokens + other.OutputTokens,
+		InputCacheReadTokens: u.InputCacheReadTokens + other.InputCacheReadTokens,
+		WebSearchCount:       u.WebSearchCount + other.WebSearchCount,
+		TotalTokens:          u.TotalTokens + other.TotalTokens,
+	}
 }

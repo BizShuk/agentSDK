@@ -47,9 +47,10 @@ func DecodeResponse(raw []byte) (core.ModelResult, error) {
 
 	out := core.ModelResult{
 		Usage: core.TokenUsage{
-			PromptTokens:     body.Usage.PromptTokens,
-			CompletionTokens: body.Usage.CompletionTokens,
-			TotalTokens:      body.Usage.TotalTokens,
+			InputTokens:          body.Usage.InputTokens,
+			OutputTokens:         body.Usage.OutputTokens,
+			InputCacheReadTokens: body.Usage.InputDetails.CachedTokens,
+			TotalTokens:          body.Usage.TotalTokens,
 		},
 	}
 	for _, choice := range body.Choices {

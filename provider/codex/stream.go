@@ -63,7 +63,7 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, erro
 			}
 			frame, err := decoder.Next()
 			if errors.Is(err, io.EOF) {
-				emitDone(ctx, out)
+				emitDone(ctx, out, core.TokenUsage{})
 				return
 			}
 			if err != nil {
@@ -74,7 +74,7 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, erro
 				continue
 			}
 			if payload == "[DONE]" {
-				emitDone(ctx, out)
+				emitDone(ctx, out, core.TokenUsage{})
 				return
 			}
 			var chunk StreamChunk
@@ -123,12 +123,21 @@ func ParseStream(ctx context.Context, r io.Reader) (<-chan core.ModelChunk, erro
 					return
 				}
 			case "response.completed":
-				emitDone(ctx, out)
+				usage := core.TokenUsage{}
+				if chunk.Response != nil && chunk.Response.Usage != nil {
+					usage = core.TokenUsage{
+						InputTokens:          chunk.Response.Usage.InputTokens,
+						OutputTokens:         chunk.Response.Usage.OutputTokens,
+						InputCacheReadTokens: chunk.Response.Usage.InputDetails.CachedTokens,
+						TotalTokens:          chunk.Response.Usage.TotalTokens,
+					}
+				}
+				emitDone(ctx, out, usage)
 				return
 			case "error":
 				// Surface as terminal chunk; the runtime treats
 				// any stream-end as the end of the response.
-				emitDone(ctx, out)
+				emitDone(ctx, out, core.TokenUsage{})
 				return
 			}
 		}
@@ -149,9 +158,9 @@ func reasoningSummaryText(summary []ContentBlock) string {
 // emitDone sends the terminal sentinel chunk. It uses a non-blocking
 // send on a buffered channel; if the consumer has already given up
 // we drop the chunk rather than block forever.
-func emitDone(ctx context.Context, out chan<- core.ModelChunk) {
+func emitDone(ctx context.Context, out chan<- core.ModelChunk, usage core.TokenUsage) {
 	select {
-	case out <- core.ModelChunk{Done: true}:
+	case out <- core.ModelChunk{Usage: usage, Done: true}:
 	case <-ctx.Done():
 	}
 }
