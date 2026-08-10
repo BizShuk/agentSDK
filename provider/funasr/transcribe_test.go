@@ -85,6 +85,53 @@ func TestTranscribeDefaultsModelAndDropsAutoLanguage(t *testing.T) {
 	assert.Empty(t, result.Words)
 }
 
+// Servers that hand the model's own value back emit a per-utterance list
+// here. A strict string field made that a decode error, throwing away a
+// transcription the server had already spent minutes producing.
+func TestTranscribeAcceptsListLanguage(t *testing.T) {
+	transcriber := newTestTranscriber(t, func(w http.ResponseWriter, _ *http.Request) {
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+			"text":     "你好",
+			"language": []string{"zh", "zh"},
+			"segments": []map[string]any{{"text": "你好", "start": 0.0, "end": 0.5}},
+		}))
+	})
+
+	result, err := transcriber.Transcribe(context.Background(), provider.TranscribeRequest{
+		Audio: provider.AudioSource{Bytes: []byte("RIFF"), Format: "wav"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "你好", result.Text)
+	assert.Equal(t, "zh", result.Language)
+	require.Len(t, result.Words, 1)
+}
+
+// The language is a hint; the transcript is the payload. No shape of this
+// field may cost the caller the transcription.
+func TestTranscribeToleratesUnknownLanguageShapes(t *testing.T) {
+	for name, value := range map[string]any{
+		"null":        nil,
+		"empty list":  []string{},
+		"blank entry": []string{"", "zh"},
+		"number":      7,
+		"object":      map[string]any{"code": "zh"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			transcriber := newTestTranscriber(t, func(w http.ResponseWriter, _ *http.Request) {
+				require.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+					"text": "hello", "language": value,
+				}))
+			})
+
+			result, err := transcriber.Transcribe(context.Background(), provider.TranscribeRequest{
+				Audio: provider.AudioSource{Bytes: []byte("RIFF"), Format: "wav"},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, "hello", result.Text)
+		})
+	}
+}
+
 func TestTranscribeRejectsUnrepresentableFields(t *testing.T) {
 	transcriber, err := NewTranscriber(provider.ResolvedConfig{})
 	require.NoError(t, err)

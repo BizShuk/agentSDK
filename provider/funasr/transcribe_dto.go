@@ -2,6 +2,7 @@ package funasr
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"math"
 	"mime/multipart"
@@ -16,8 +17,41 @@ import (
 // not decoded — Usage falls back to the request-side duration instead.
 type transcribeResponse struct {
 	Text     string              `json:"text"`
-	Language string              `json:"language"`
+	Language detectedLanguage    `json:"language"`
 	Segments []transcribeSegment `json:"segments"`
+}
+
+// detectedLanguage decodes the server's `language` field, which is not
+// consistently a string across builds. Servers that pass the model's own
+// value through emit a per-utterance list instead (`["zh"]`), and a strict
+// string field turns that into a decode error that discards an entire
+// transcription — minutes of compute lost to a metadata field nothing
+// downstream depends on.
+type detectedLanguage string
+
+// UnmarshalJSON accepts a string or a list of strings, taking the first
+// non-blank entry of a list because per-utterance values repeat the same
+// code. Any other shape (null, number, object) folds to empty and never
+// errors: the transcript is the payload, the language is a hint.
+func (l *detectedLanguage) UnmarshalJSON(data []byte) error {
+	*l = ""
+
+	var single string
+	if err := json.Unmarshal(data, &single); err == nil {
+		*l = detectedLanguage(single)
+		return nil
+	}
+
+	var list []string
+	if err := json.Unmarshal(data, &list); err == nil {
+		for _, entry := range list {
+			if strings.TrimSpace(entry) != "" {
+				*l = detectedLanguage(entry)
+				return nil
+			}
+		}
+	}
+	return nil
 }
 
 // transcribeSegment carries seconds as float and a nullable speaker index.
@@ -83,7 +117,7 @@ func transcribeFileName(format string) string {
 func foldTranscribeResponse(response transcribeResponse) provider.TranscribeResult {
 	result := provider.TranscribeResult{
 		Text:     response.Text,
-		Language: normalizeLanguage(response.Language),
+		Language: normalizeLanguage(string(response.Language)),
 	}
 	if len(response.Segments) == 0 {
 		return result
