@@ -33,6 +33,10 @@ import (
 
 const defaultModel = "MiniMax-M3"
 
+// defaultTimeout bounds a single blocking request when the caller does not
+// set Options.Timeout.
+const defaultTimeout = 120 * time.Second
+
 // Provider implements core.Provider against the minimax Anthropic-compat
 // API. We avoid anthropic-sdk-go here because minimax is a thin compat
 // surface — stdlib HTTP is enough and keeps the dependency footprint small.
@@ -51,11 +55,14 @@ func New(cfg provider.ResolvedConfig) (*Provider, error) {
 	if cfg.Model == "" {
 		cfg.Model = defaultModel
 	}
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = defaultTimeout
+	}
 	return &Provider{
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
 		auth:    cfg.Auth,
 		model:   cfg.Model,
-		client:  &http.Client{Timeout: 120 * time.Second},
+		client:  &http.Client{Timeout: cfg.Timeout},
 	}, nil
 }
 

@@ -18,6 +18,10 @@ import (
 
 const defaultModel = "gemini-3-flash-preview"
 
+// defaultTimeout bounds a single blocking request when the caller does not
+// set Options.Timeout.
+const defaultTimeout = 120 * time.Second
+
 // Provider implements model generation, model streaming, and image generation
 // against Google Generative AI's OpenAI-compatible endpoint.
 type Provider struct {
@@ -37,12 +41,15 @@ func New(cfg provider.ResolvedConfig) (*Provider, error) {
 	if cfg.Model == "" {
 		cfg.Model = defaultModel
 	}
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = defaultTimeout
+	}
 	return &Provider{
 		baseURL:     strings.TrimRight(cfg.BaseURL, "/"),
 		auth:        cfg.Auth,
 		model:       cfg.Model,
 		imageModel:  defaultImageModel,
-		client:      &http.Client{Timeout: 120 * time.Second},
+		client:      &http.Client{Timeout: cfg.Timeout},
 		imageClient: &http.Client{Timeout: 3 * time.Minute},
 	}, nil
 }

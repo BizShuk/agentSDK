@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bizshuk/agentsdk/core"
 	"github.com/bizshuk/agentsdk/provider"
@@ -92,6 +93,28 @@ func TestGenerateAgainstFakeServer(t *testing.T) {
 	assert.Equal(t, 7, mr.Usage.InputTokens)
 	assert.Equal(t, 4, mr.Usage.OutputTokens)
 	assert.Equal(t, 11, mr.Usage.TotalTokens)
+}
+
+// TestGenerateHonoursCallerTimeout pins that Options.Timeout reaches the
+// HTTP client: a hardcoded client timeout cut long analysis calls at 120s
+// no matter what the caller configured.
+func TestGenerateHonoursCallerTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(300 * time.Millisecond)
+		_, _ = w.Write([]byte(cannedAnthropicResponse))
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := minimaxConfig(srv.URL, "sk-test")
+	cfg.Timeout = 50 * time.Millisecond
+	p, err := minimax.New(cfg)
+	require.NoError(t, err)
+
+	_, err = p.Generate(context.Background(), core.ModelRequest{
+		Messages: []core.Message{{Role: core.ROLE_USER, Parts: []core.Part{{Kind: core.PART_KIND_PLAIN_TEXT, Text: "hi"}}}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Client.Timeout exceeded")
 }
 
 func TestThinkingRoundTrip(t *testing.T) {

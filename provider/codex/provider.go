@@ -16,6 +16,10 @@ import (
 
 const defaultModel = "gpt-5.5"
 
+// defaultTimeout bounds a single blocking request when the caller does not
+// set Options.Timeout.
+const defaultTimeout = 120 * time.Second
+
 // Provider implements core.Provider against the OpenAI Codex
 // endpoint (chatgpt.com/backend-api/codex/responses). It is the
 // sole entry point for clients.
@@ -38,11 +42,14 @@ func New(cfg provider.ResolvedConfig) (*Provider, error) {
 	if cfg.Model == "" {
 		cfg.Model = defaultModel
 	}
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = defaultTimeout
+	}
 	return &Provider{
 		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
 		auth:    cfg.Auth,
 		model:   cfg.Model,
-		client:  &http.Client{Timeout: 120 * time.Second},
+		client:  &http.Client{Timeout: cfg.Timeout},
 	}, nil
 }
 
