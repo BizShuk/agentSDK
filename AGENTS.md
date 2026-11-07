@@ -59,7 +59,7 @@
 ```text
 agentsdk/
 ├── README.md                         # 業務範疇與使用者導覽
-├── CLAUDE.md                         # 技術脈絡與架構決策（本檔）
+├── AGENTS.md                         # 技術脈絡與架構決策（本檔）
 ├── README.todo                       # 尚未完成的工作
 ├── go.work                           # root + sample/ 下各 module
 ├── go.mod                            # github.com/bizshuk/agentsdk
