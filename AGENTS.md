@@ -391,7 +391,7 @@ bash scripts/verify-workspace.sh   # go.work 全部 module 的 build + test
 - 歷史變更與已完成里程碑：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)。
 - 尚未完成與刻意保留的工作：[`README.todo`](README.todo)。
 - 仍在執行的落地計畫：`plans/`。
-- 已實作規格的濃縮索引：[`docs/specs/2026-08-04-summary.md`](docs/specs/2026-08-04-summary.md)。
+- 已實作規格的濃縮索引：[`docs/specs/2026-08-04-Summary.md`](docs/specs/2026-08-04-Summary.md)。
 
 ## 慣例與注意事項 (Conventions and Caveats)
 
