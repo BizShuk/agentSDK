@@ -260,7 +260,7 @@
 
 ### Agent skeleton `M1`–`M7`
 
-計畫：[`plans/2026-08-06-Refresh.md`](../plans/2026-08-06-Refresh.md)（原
+計畫：[`plans/2026-08-06-refresh.md`](../plans/2026-08-06-refresh.md)（原
 `2026-07-22-agent-skeleton-config-opt-in.md`，已整併）。
 
 - `M1`：`agent/spec` 提供 `Config`、八個 feature blocks、`Choice` metadata、
@@ -299,7 +299,7 @@
 
 ### Harness/UX skeleton
 
-計畫歷史：[`plans/2026-08-06-Refresh.md`](../plans/2026-08-06-Refresh.md)（原
+計畫歷史：[`plans/2026-08-06-refresh.md`](../plans/2026-08-06-refresh.md)（原
 `2026-08-03-refresh.md`，已整併）。
 來源調查：[`docs/memory/2026-07-19-agent-client-feature-catalog.md`](memory/2026-07-19-agent-client-feature-catalog.md)。
 

@@ -151,7 +151,7 @@ go run . --fake -p "看看這個專案"   # 不打 provider 的 print 模式
 - 歷史變更與已完成里程碑：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)
 - 尚未完成的工作：[`README.todo`](README.todo)
 - 已實作規格：
-  - [`2026-08-04-Summary.md`](docs/specs/2026-08-04-Summary.md)（2026-07-21 之前的歷史摘要）
+  - [`2026-08-04-summary.md`](docs/specs/2026-08-04-summary.md)（2026-07-21 之前的歷史摘要）
   - [`2026-07-27-agent-sdk-contract-alignment.md`](docs/specs/2026-07-27-agent-sdk-contract-alignment.md)
   - [`2026-07-27-provider-auth-image-capabilities.md`](docs/specs/2026-07-27-provider-auth-image-capabilities.md)
 
