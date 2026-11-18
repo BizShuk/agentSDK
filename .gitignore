@@ -403,6 +403,9 @@ sample/
 # 不進版控 — 對齊 CLAUDE.md「runtime data → data/」慣例。
 sample/**/data/
 example/
+# config/example/ 是 golang-dev 設定範例 (settings.example.json / .env.example),要進版控。
+!config/example/
+!config/example/**
 docs/_build/
 docs/build/
 site/
