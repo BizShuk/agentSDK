@@ -8,84 +8,93 @@ import (
 	"github.com/bizshuk/agentsdk/provider"
 )
 
-// Wire shapes for POST /v1/image_generation, kept in sync with
-// https://platform.minimax.io/docs/api-reference/image-generation-t2i and
-// the image-to-image variant (subject_reference) documented alongside it.
-
-type imageGenerationRequest struct {
-	Model            string                  `json:"model"`
-	Prompt           string                  `json:"prompt"`
-	AspectRatio      string                  `json:"aspect_ratio,omitempty"`
-	Width            int                     `json:"width,omitempty"`
-	Height           int                     `json:"height,omitempty"`
-	ResponseFormat   string                  `json:"response_format,omitempty"`
-	N                int                     `json:"n,omitempty"`
-	SubjectReference []imageSubjectReference `json:"subject_reference,omitempty"`
+// imageRequest is the shared body of /v1/images/generations and
+// /v1/images/edits (JSON variant). Images is set only for edits.
+type imageRequest struct {
+	Model             string           `json:"model"`
+	Prompt            string           `json:"prompt"`
+	Images            []imageReference `json:"images,omitempty"`
+	N                 int              `json:"n,omitempty"`
+	Size              string           `json:"size,omitempty"`
+	AspectRatio       string           `json:"aspect_ratio,omitempty"`
+	OutputFormat      string           `json:"output_format,omitempty"`
+	ResponseFormat    string           `json:"response_format,omitempty"`
+	OutputCompression *int             `json:"output_compression,omitempty"`
 }
 
-// imageSubjectReference is one image-to-image conditioning entry. Type is
-// "character" — the only value the API currently accepts; ImageFile is a
-// public URL or an RFC 2397 data URI.
-type imageSubjectReference struct {
-	Type      string `json:"type"`
-	ImageFile string `json:"image_file"`
+type imageReference struct {
+	ImageURL string `json:"image_url"`
 }
 
-type imageBaseResponse struct {
-	StatusCode int    `json:"status_code"`
-	StatusMsg  string `json:"status_msg"`
+// imageReservedFields are the wire keys Extra must not override: each has a
+// neutral ImageRequest field. Extra carries the MiniMax-only knobs (area,
+// disable_prompt_enhanced, stream is rejected: this adapter is blocking).
+var imageReservedFields = map[string]struct{}{
+	"model": {}, "prompt": {}, "images": {}, "n": {}, "size": {}, "aspect_ratio": {},
+	"output_format": {}, "response_format": {}, "output_compression": {}, "stream": {},
 }
 
-type imageGenerationResponse struct {
-	ID   string `json:"id"`
-	Data struct {
-		ImageURLs   []string `json:"image_urls"`
-		ImageBase64 []string `json:"image_base64"`
+type imageResponse struct {
+	Created      int64  `json:"created"`
+	OutputFormat string `json:"output_format"`
+	Data         []struct {
+		URL           string `json:"url"`
+		B64JSON       string `json:"b64_json"`
+		RevisedPrompt string `json:"revised_prompt"`
+		Error         *struct {
+			Code    any    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
 	} `json:"data"`
-	Metadata struct {
-		SuccessCount int `json:"success_count"`
-		FailedCount  int `json:"failed_count"`
-	} `json:"metadata"`
-	BaseResp imageBaseResponse `json:"base_resp"`
+	Usage struct {
+		GeneratedImages   int `json:"generated_images"`
+		TotalTokens       int `json:"total_tokens"`
+		InputTokens       int `json:"input_tokens"`
+		OutputTokens      int `json:"output_tokens"`
+		InputTokenDetails struct {
+			TextTokens  int `json:"text_tokens"`
+			ImageTokens int `json:"image_tokens"`
+		} `json:"input_tokens_details"`
+	} `json:"usage"`
+	RequestID string `json:"request_id"`
 }
 
-// imageReservedRequestFields are the wire keys the neutral request already
-// owns; an Extra entry may not override them.
-var imageReservedRequestFields = map[string]struct{}{
-	"model":             {},
-	"prompt":            {},
-	"aspect_ratio":      {},
-	"width":             {},
-	"height":            {},
-	"response_format":   {},
-	"n":                 {},
-	"subject_reference": {},
-}
-
-// encodeImageRequest converts the validated neutral request into the wire
-// payload, merging vendor extensions from Extra (seed, prompt_optimizer, ...).
-func encodeImageRequest(
-	request provider.ImageRequest,
-	model string,
-) ([]byte, error) {
-	wire := imageGenerationRequest{
-		Model:          model,
-		Prompt:         strings.TrimSpace(request.Prompt),
-		ResponseFormat: normalizeImageResponseFormat(request.ResponseFormat),
-		N:              request.Count,
+// imageResponseFormat maps the neutral vocabulary ("url", "base64",
+// "b64_json") onto the wire's url / b64_json.
+func imageResponseFormat(value string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "":
+		return "", nil
+	case "url":
+		return "url", nil
+	case "base64", "b64_json":
+		return "b64_json", nil
 	}
-	aspectRatio, width, height, err := parseImageSize(request.Size)
+	return "", fmt.Errorf("minimax image response format %q is not supported", value)
+}
+
+func encodeImageRequest(request provider.ImageRequest, model string) ([]byte, error) {
+	responseFormat, err := imageResponseFormat(request.ResponseFormat)
 	if err != nil {
 		return nil, err
 	}
-	wire.AspectRatio = aspectRatio
-	wire.Width = width
-	wire.Height = height
+	wire := imageRequest{
+		Model:             model,
+		Prompt:            request.Prompt,
+		N:                 request.Count,
+		OutputFormat:      strings.ToLower(strings.TrimSpace(request.OutputFormat)),
+		ResponseFormat:    responseFormat,
+		OutputCompression: request.OutputCompression,
+	}
+	// Size takes WIDTHxHEIGHT or auto; an X:Y value is an aspect ratio.
+	size := strings.TrimSpace(request.Size)
+	if strings.Contains(size, ":") {
+		wire.AspectRatio = size
+	} else {
+		wire.Size = size
+	}
 	for _, ref := range request.SubjectReferences {
-		wire.SubjectReference = append(wire.SubjectReference, imageSubjectReference{
-			Type:      "character",
-			ImageFile: imageReferenceFile(ref),
-		})
+		wire.Images = append(wire.Images, imageReference{ImageURL: imageReferenceURL(ref)})
 	}
 
 	raw, err := json.Marshal(wire)
@@ -100,81 +109,63 @@ func encodeImageRequest(
 		return nil, fmt.Errorf("minimax image: merge extra: %w", err)
 	}
 	for key, value := range request.Extra {
-		if _, reserved := imageReservedRequestFields[key]; reserved {
-			return nil, fmt.Errorf(
-				"minimax image extra field %q duplicates a standard field",
-				key,
-			)
+		if _, reserved := imageReservedFields[key]; reserved {
+			return nil, fmt.Errorf("minimax image extra field %q duplicates a standard field", key)
 		}
 		object[key] = value
 	}
-	merged, err := json.Marshal(object)
-	if err != nil {
-		return nil, fmt.Errorf("minimax image: merge extra: %w", err)
-	}
-	return merged, nil
+	return json.Marshal(object)
 }
 
-// imageReferenceFile renders one neutral reference as the image_file value:
-// a URL passes through, base64 payloads become a data URI.
-func imageReferenceFile(ref provider.ImageReference) string {
+// imageReferenceURL renders one neutral reference as image_url: a URL (or
+// mm_file:// id) passes through, base64 payloads become a data URI.
+func imageReferenceURL(ref provider.ImageReference) string {
 	if url := strings.TrimSpace(ref.URL); url != "" {
 		return url
 	}
 	mime := strings.TrimSpace(ref.MIMEType)
 	if mime == "" {
-		mime = DEFAULT_IMAGE_MIME
+		mime = "image/png"
 	}
 	return "data:" + mime + ";base64," + strings.TrimSpace(ref.Base64)
 }
 
-// normalizeImageResponseFormat maps the OpenAI-convention "b64_json" label
-// onto MiniMax's "base64"; url and base64 pass through, empty keeps the
-// vendor default (url).
-func normalizeImageResponseFormat(value string) string {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	if normalized == "b64_json" {
-		return "base64"
+func decodeImageResponse(raw []byte) (provider.ImageResult, error) {
+	var response imageResponse
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return provider.ImageResult{}, fmt.Errorf("minimax image: decode response: %w", err)
 	}
-	return normalized
-}
-
-// parseImageSize splits the neutral Size label into MiniMax's two mutually
-// exclusive shapes: "W:H" becomes aspect_ratio, "WxH" becomes width/height.
-func parseImageSize(value string) (string, int, int, error) {
-	trimmed := strings.ToLower(strings.TrimSpace(value))
-	if trimmed == "" {
-		return "", 0, 0, nil
+	mime := "image/" + response.OutputFormat
+	if response.OutputFormat == "" {
+		mime = "image/jpeg"
 	}
-	if strings.Contains(trimmed, ":") {
-		return trimmed, 0, 0, nil
+	result := provider.ImageResult{
+		Created: response.Created,
+		Usage: provider.ImageUsage{
+			TotalTokens:  response.Usage.TotalTokens,
+			InputTokens:  response.Usage.InputTokens,
+			OutputTokens: response.Usage.OutputTokens,
+			InputTokenDetails: provider.ImageInputTokenDetails{
+				TextTokens:  response.Usage.InputTokenDetails.TextTokens,
+				ImageTokens: response.Usage.InputTokenDetails.ImageTokens,
+			},
+			GeneratedImages: response.Usage.GeneratedImages,
+		},
 	}
-	widthRaw, heightRaw, found := strings.Cut(trimmed, "x")
-	if !found {
-		return "", 0, 0, fmt.Errorf(
-			"minimax image size %q must be an aspect ratio (16:9) or dimensions (1024x1024)",
-			value,
-		)
+	var firstError string
+	for _, item := range response.Data {
+		if item.Error != nil {
+			if firstError == "" {
+				firstError = item.Error.Message
+			}
+			continue
+		}
+		result.Images = append(result.Images, provider.Image{
+			URL: item.URL, Base64: item.B64JSON, MIMEType: mime, RevisedPrompt: item.RevisedPrompt,
+		})
 	}
-	var width, height int
-	if _, err := fmt.Sscanf(widthRaw+" "+heightRaw, "%d %d", &width, &height); err != nil {
-		return "", 0, 0, fmt.Errorf(
-			"minimax image size %q must be an aspect ratio (16:9) or dimensions (1024x1024)",
-			value,
-		)
+	if len(result.Images) == 0 {
+		return provider.ImageResult{}, newRESTError("generate image", 200, response.RequestID, "", "", "no image succeeded: "+firstError)
 	}
-	return "", width, height, nil
-}
-
-// foldImageResponse projects the wire response onto the neutral result. The
-// API returns either URLs or base64 payloads depending on response_format.
-func foldImageResponse(response imageGenerationResponse) provider.ImageResult {
-	result := provider.ImageResult{}
-	for _, url := range response.Data.ImageURLs {
-		result.Images = append(result.Images, provider.Image{URL: url})
-	}
-	for _, payload := range response.Data.ImageBase64 {
-		result.Images = append(result.Images, provider.Image{Base64: payload})
-	}
-	return result
+	return result, nil
 }

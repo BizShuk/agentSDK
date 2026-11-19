@@ -48,14 +48,14 @@ func DefaultCatalog() []provider.ModelSpec {
 			OutputModalities: []provider.Modality{provider.MODALITY_TEXT},
 			ContextWindow:    128000, MaxTokens: 8192},
 
-		// image-* — image_generation models reached through
-		// provider.ImageGenerator, not through Generate. Token bounds do
-		// not apply; the prompt is bounded by characters.
-		{ID: "image-01", Family: "image-01",
+		// MiniMax-H3-Image — images/generations (t2i) and images/edits
+		// (references), reached through provider.ImageGenerator. The prompt
+		// is bounded by characters (32,000); Highspeed shares every limit.
+		{ID: "MiniMax-H3-Image", Family: "MiniMax-H3-Image",
 			Capabilities:     []provider.Capability{provider.CAPABILITY_IMAGE},
 			InputModalities:  []provider.Modality{provider.MODALITY_TEXT, provider.MODALITY_IMAGE},
 			OutputModalities: []provider.Modality{provider.MODALITY_IMAGE}},
-		{ID: "image-01-live", Family: "image-01",
+		{ID: "MiniMax-H3-Image-Highspeed", Family: "MiniMax-H3-Image",
 			Capabilities:     []provider.Capability{provider.CAPABILITY_IMAGE},
 			InputModalities:  []provider.Modality{provider.MODALITY_TEXT, provider.MODALITY_IMAGE},
 			OutputModalities: []provider.Modality{provider.MODALITY_IMAGE}},

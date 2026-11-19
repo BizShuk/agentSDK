@@ -11,25 +11,35 @@ import (
 	"github.com/bizshuk/agentsdk/provider"
 )
 
+// Wire contracts:
+// https://platform.minimax.io/docs/api-reference/image-generation-h3-generations
+// https://platform.minimax.io/docs/api-reference/image-generation-h3-edits
 const (
-	defaultImageModel          = "image-01"
-	defaultImageRequestTimeout = 3 * time.Minute
+	imageGenerationsPath = "/v1/images/generations"
+	imageEditsPath       = "/v1/images/edits"
 
-	imagePromptMaxRunes = 1500
-	imageCountMax       = 9
-	imageDimensionMin   = 512
-	imageDimensionMax   = 2048
+	DefaultImageModel = "MiniMax-H3-Image"
+
+	// The server may hold a request for up to 600 seconds.
+	defaultImageRequestTimeout = 11 * time.Minute
+
+	imagePromptMaxRunes   = 32000
+	imageCountMax         = 10
+	imageReferenceMax     = 16
+	maxImageResponseBytes = 256 << 20
 )
 
-// ImageProvider implements provider.ImageGenerator against MiniMax's
-// /v1/image_generation endpoint. Text-to-image and image-to-image share the
-// endpoint: a request carrying SubjectReferences becomes the subject_reference
-// (i2i) variant.
+// ImageProvider implements provider.ImageGenerator against MiniMax-H3-Image.
+// A request without SubjectReferences is text-to-image; with references it
+// becomes an image edit, where the references are the images to edit or
+// compose from.
+//
+// Neither endpoint is idempotent — a retry generates and bills again — so the
+// adapter never retries.
 type ImageProvider struct {
-	baseURL string
-	model   string
-	auth    core.Auth
-	client  *http.Client
+	rest  restClient
+	model string
+	auth  core.Auth
 }
 
 // NewImage returns a MiniMax image generator from registry-resolved config.
@@ -39,26 +49,15 @@ func NewImage(cfg provider.ResolvedConfig) (*ImageProvider, error) {
 		timeout = defaultImageRequestTimeout
 	}
 	return &ImageProvider{
-		baseURL: imageBaseURL(cfg.BaseURL),
-		model:   strings.TrimSpace(cfg.Model),
-		auth:    cfg.Auth,
-		client:  &http.Client{Timeout: timeout},
+		rest:  restClient{baseURL: accountBaseURL(cfg.BaseURL), client: &http.Client{Timeout: timeout}},
+		model: strings.TrimSpace(cfg.Model),
+		auth:  cfg.Auth,
 	}, nil
 }
 
-// imageBaseURL resolves the image_generation root the same way speechBaseURL
-// does for t2a_v2: capability env or explicit base first, default root when
-// nothing resolved, and a trailing "/anthropic" trimmed because the media
-// endpoints are served one segment above the Anthropic-compat chat surface.
-func imageBaseURL(raw string) string {
-	trimmed := strings.TrimRight(strings.TrimSpace(raw), "/")
-	if trimmed == "" {
-		return DefaultImageBaseURL
-	}
-	return strings.TrimSuffix(trimmed, anthropicCompatSuffix)
-}
-
-// GenerateImage creates one batch of images.
+// GenerateImage creates one batch of images. HTTP 200 means at least one
+// image succeeded; per-image failures are dropped from Images, so a result
+// may hold fewer images than Count requested.
 func (p *ImageProvider) GenerateImage(
 	ctx context.Context,
 	request provider.ImageRequest,
@@ -66,108 +65,61 @@ func (p *ImageProvider) GenerateImage(
 	if err := request.Validate(); err != nil {
 		return provider.ImageResult{}, err
 	}
-	model := p.resolveImageModel(request)
 	if err := validateMiniMaxImageRequest(request); err != nil {
 		return provider.ImageResult{}, err
 	}
-
 	auth := p.auth.Merge(request.Auth)
 	if auth.Token() == "" {
 		return provider.ImageResult{}, fmt.Errorf("minimax image credential is required")
+	}
+	model := strings.TrimSpace(request.Model)
+	if model == "" {
+		model = p.model
+	}
+	if model == "" {
+		model = DefaultImageModel
+	}
+
+	path := imageGenerationsPath
+	if len(request.SubjectReferences) > 0 {
+		path = imageEditsPath
 	}
 	payload, err := encodeImageRequest(request, model)
 	if err != nil {
 		return provider.ImageResult{}, err
 	}
-	response, requestID, err := p.createImage(ctx, auth, payload)
+	raw, err := p.rest.post(ctx, auth, "generate image", path, "application/json", payload, maxImageResponseBytes)
 	if err != nil {
 		return provider.ImageResult{}, err
 	}
-	if response.BaseResp.StatusCode != 0 {
-		return provider.ImageResult{}, newImageAPIError(
-			http.StatusOK,
-			requestID,
-			response.BaseResp,
-		)
-	}
-	return foldImageResponse(response), nil
+	return decodeImageResponse(raw)
 }
 
-func (p *ImageProvider) resolveImageModel(request provider.ImageRequest) string {
-	if model := strings.TrimSpace(request.Model); model != "" {
-		return model
-	}
-	if p.model != "" {
-		return p.model
-	}
-	return defaultImageModel
-}
-
-// validateMiniMaxImageRequest rejects both what the API bounds (prompt
-// length, batch size, dimensions) and the neutral fields this endpoint has
-// no wire slot for — erroring beats silently dropping a knob the caller set.
+// validateMiniMaxImageRequest rejects what the API bounds and the neutral
+// fields H3 has no wire slot for — erroring beats silently dropping a knob
+// the caller set.
 func validateMiniMaxImageRequest(request provider.ImageRequest) error {
-	promptRunes := trimmedRuneCount(request.Prompt)
-	if promptRunes > imagePromptMaxRunes {
-		return fmt.Errorf(
-			"minimax image prompt has %d runes, exceeds limit of %d",
-			promptRunes,
-			imagePromptMaxRunes,
-		)
+	if n := trimmedRuneCount(request.Prompt); n > imagePromptMaxRunes {
+		return fmt.Errorf("minimax image prompt has %d runes, exceeds limit of %d", n, imagePromptMaxRunes)
 	}
 	if request.Count > imageCountMax {
-		return fmt.Errorf(
-			"minimax image count %d exceeds limit of %d",
-			request.Count,
-			imageCountMax,
-		)
+		return fmt.Errorf("minimax image count %d exceeds limit of %d", request.Count, imageCountMax)
 	}
-	switch normalizeImageResponseFormat(request.ResponseFormat) {
-	case "", "url", "base64":
-	default:
-		return fmt.Errorf(
-			"minimax image response format %q is not supported",
-			request.ResponseFormat,
-		)
+	if len(request.SubjectReferences) > imageReferenceMax {
+		return fmt.Errorf("minimax image accepts at most %d references, got %d", imageReferenceMax, len(request.SubjectReferences))
 	}
-	_, width, height, err := parseImageSize(request.Size)
-	if err != nil {
+	if _, err := imageResponseFormat(request.ResponseFormat); err != nil {
 		return err
 	}
-	if width != 0 || height != 0 {
-		for _, dimension := range []int{width, height} {
-			if dimension < imageDimensionMin ||
-				dimension > imageDimensionMax ||
-				dimension%8 != 0 {
-				return fmt.Errorf(
-					"minimax image dimensions %q must be %d-%d and divisible by 8",
-					request.Size,
-					imageDimensionMin,
-					imageDimensionMax,
-				)
-			}
+	for name, value := range map[string]string{
+		"quality":    request.Quality,
+		"background": request.Background,
+		"moderation": request.Moderation,
+		"user":       request.User,
+	} {
+		if strings.TrimSpace(value) != "" {
+			return fmt.Errorf("minimax image does not support %s", name)
 		}
-	}
-	if request.Quality != "" {
-		return fmt.Errorf("minimax image does not support quality")
-	}
-	if request.OutputFormat != "" {
-		return fmt.Errorf("minimax image does not support output format")
-	}
-	if request.OutputCompression != nil {
-		return fmt.Errorf("minimax image does not support output compression")
-	}
-	if request.Background != "" {
-		return fmt.Errorf("minimax image does not support background")
-	}
-	if request.Moderation != "" {
-		return fmt.Errorf("minimax image does not support moderation")
-	}
-	if request.User != "" {
-		return fmt.Errorf("minimax image does not support user attribution")
 	}
 	return nil
 }
-
-// Compile-time: ensure ImageProvider satisfies the image capability port.
-var _ provider.ImageGenerator = (*ImageProvider)(nil)

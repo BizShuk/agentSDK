@@ -144,7 +144,7 @@ chat surface 無法表達的欄位一律`明確拒收`不靜默忽略，`Subject
 | Surface | Endpoint / 行為                                                                                                    | Base override             |
 | ------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------- |
 | Chat    | HTTP + SSE；vision 以 content blocks 編碼                                                                          | `MINIMAX_BASE_URL`        |
-| Image   | `/v1/image_generation`（t2i + i2i 同 endpoint，預設 `image-01`；`Size` 收 `W:H` aspect ratio 或 `WxH` dimensions） | `MINIMAX_IMAGE_BASE_URL`  |
+| Image   | H3：無 reference 打 `/v1/images/generations`，有 `SubjectReferences` 打 `/v1/images/edits`（JSON `images[{image_url}]`）；預設 `MiniMax-H3-Image`；`Size` 收 `W:H`（→ `aspect_ratio`）或 `WxH`／`auto`；`area`／`disable_prompt_enhanced` 走 `Extra`；不重試（非 idempotent），逾時 11 分 | `MINIMAX_IMAGE_BASE_URL`  |
 | Video   | 四種 mode（text / image / startend / subject）、asynchronous poll、authenticated download、MP4 verification        | `MINIMAX_VIDEO_BASE_URL`  |
 | Music   | non-streaming text-to-music / cover；request validation、bounded response/error、typed API error                   | `MINIMAX_MUSIC_BASE_URL`  |
 | Speech  | `t2a_v2`（Bearer、hex 解碼、`extra_info` → `SpeechInfo`，預設 `speech-2.8-hd`）                                    | `MINIMAX_SPEECH_BASE_URL` |
@@ -152,8 +152,8 @@ chat surface 無法表達的欄位一律`明確拒收`不靜默忽略，`Subject
 | Translate | 走同一 chat surface（`/anthropic/v1/messages`，預設 `MiniMax-M3`），翻譯 system prompt；stream 只送 text delta，丟棄 thinking | `MINIMAX_BASE_URL` |
 
 - `ImageRequest.SubjectReferences` 是 provider-neutral 的 i2i 輸入：MiniMax 編成
-  `subject_reference`（type `character`，URL 或 data URI）；`openaiimage` codec
-  （Google/Grok）明確拒收。
+  edits 的 `images[].image_url`（URL、`mm_file://` 或 data URI，最多 16 張）；`openaiimage` codec
+  （Google/Grok）明確拒收。部分張數失敗時只回成功的張數，全數失敗回 error。
 - speech 的 resolved base 尾段 `/anthropic` 一律 trim——`ResolvedConfig` 不帶來源，
   trim 不分 env 出處。
 - voice list 走 `POST /v1/get_voice`（僅 `voice_type` 一參數），search 與 page-size

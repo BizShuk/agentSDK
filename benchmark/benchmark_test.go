@@ -117,7 +117,7 @@ func TestRunnableCapabilitiesUseCatalogMetadataAndApplicability(t *testing.T) {
 		{"elevenlabs", "eleven_multilingual_sts_v2", nil},
 		{"minimax", "MiniMax-M3", []provider.Capability{provider.CAPABILITY_CHAT}},
 		{"minimax", "MiniMax-Text-01", []provider.Capability{provider.CAPABILITY_CHAT}},
-		{"minimax", "image-01", []provider.Capability{provider.CAPABILITY_IMAGE}},
+		{"minimax", "MiniMax-H3-Image", []provider.Capability{provider.CAPABILITY_IMAGE}},
 		{"minimax", "MiniMax-H3", []provider.Capability{provider.CAPABILITY_VIDEO}},
 		{"minimax", "MiniMax-Hailuo-2.3", []provider.Capability{provider.CAPABILITY_VIDEO}},
 		{"minimax", "S2V-01", nil},

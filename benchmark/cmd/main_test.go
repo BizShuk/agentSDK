@@ -10,7 +10,7 @@ import (
 )
 
 func TestSelectCapabilitiesUsesModelMetadata(t *testing.T) {
-	entry, spec := catalogModel(t, "minimax", "image-01")
+	entry, spec := catalogModel(t, "minimax", "MiniMax-H3-Image")
 
 	got, err := selectCapabilities(entry, &spec, "")
 
@@ -19,7 +19,7 @@ func TestSelectCapabilitiesUsesModelMetadata(t *testing.T) {
 }
 
 func TestSelectCapabilitiesKeepsExplicitUnsupportedCapability(t *testing.T) {
-	entry, spec := catalogModel(t, "minimax", "image-01")
+	entry, spec := catalogModel(t, "minimax", "MiniMax-H3-Image")
 
 	got, err := selectCapabilities(entry, &spec, "chat")
 
@@ -28,7 +28,7 @@ func TestSelectCapabilitiesKeepsExplicitUnsupportedCapability(t *testing.T) {
 }
 
 func TestSelectCapabilitiesRejectsUnknownVocabulary(t *testing.T) {
-	entry, spec := catalogModel(t, "minimax", "image-01")
+	entry, spec := catalogModel(t, "minimax", "MiniMax-H3-Image")
 
 	_, err := selectCapabilities(entry, &spec, "embedding")
 
