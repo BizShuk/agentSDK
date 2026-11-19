@@ -104,7 +104,7 @@ func TestSpeechGeneratorAppliesDefaults(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	assert.Equal(t, "speech-02-hd", capturedBody["model"])
+	assert.Equal(t, "speech-2.8-hd", capturedBody["model"])
 	voiceSetting, ok := capturedBody["voice_setting"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "male-qn-qingse", voiceSetting["voice_id"])

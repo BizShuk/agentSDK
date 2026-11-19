@@ -147,7 +147,9 @@ chat surface 無法表達的欄位一律`明確拒收`不靜默忽略，`Subject
 | Image   | `/v1/image_generation`（t2i + i2i 同 endpoint，預設 `image-01`；`Size` 收 `W:H` aspect ratio 或 `WxH` dimensions） | `MINIMAX_IMAGE_BASE_URL`  |
 | Video   | 四種 mode（text / image / startend / subject）、asynchronous poll、authenticated download、MP4 verification        | `MINIMAX_VIDEO_BASE_URL`  |
 | Music   | non-streaming text-to-music / cover；request validation、bounded response/error、typed API error                   | `MINIMAX_MUSIC_BASE_URL`  |
-| Speech  | `t2a_v2`（Bearer、hex 解碼、`extra_info` → `SpeechInfo`，預設 `speech-02-hd`）                                     | `MINIMAX_SPEECH_BASE_URL` |
+| Speech  | `t2a_v2`（Bearer、hex 解碼、`extra_info` → `SpeechInfo`，預設 `speech-2.8-hd`）                                    | `MINIMAX_SPEECH_BASE_URL` |
+| Transcribe | `/v1/speech_to_text` multipart（預設 `asr-1.0`；一律 `verbose_json`，句級 `segments` + speaker 摺入 `Words`；`Language` 走 `language` header） | `MINIMAX_BASE_URL`（trim `/anthropic`） |
+| Translate | 走同一 chat surface（`/anthropic/v1/messages`，預設 `MiniMax-M3`），翻譯 system prompt；stream 只送 text delta，丟棄 thinking | `MINIMAX_BASE_URL` |
 
 - `ImageRequest.SubjectReferences` 是 provider-neutral 的 i2i 輸入：MiniMax 編成
   `subject_reference`（type `character`，URL 或 data URI）；`openaiimage` codec
@@ -157,6 +159,10 @@ chat surface 無法表達的欄位一律`明確拒收`不靜默忽略，`Subject
 - voice list 走 `POST /v1/get_voice`（僅 `voice_type` 一參數），search 與 page-size
   由 adapter local 補齊、pagination token 直接拒收。
 - caller 提供 `VideoRequest.OutputPath`，完成後取得 `VideoResult.Path`。
+- Transcribe 只收 bytes（`Audio.URL` 明確拒收）；上限 50 MB / 500 秒於 adapter 先擋。
+- 新 REST surface（transcribe 以及之後的 voice / H3 image）共用 `rest.go`：同時解讀
+  `base_resp.status_code != 0`（HTTP 200）與 OpenAI 形狀 `{"error":{...},"request_id"}`，
+  一律回 typed `*provider.APIError`；chat 的非 2xx 亦同。
 
 ## ElevenLabs（audio-only，`Entry.New` 為 nil）
 

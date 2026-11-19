@@ -94,7 +94,7 @@ func (p *Provider) Generate(ctx context.Context, req core.ModelRequest) (core.Mo
 		return core.ModelResult{}, fmt.Errorf("minimax: read: %w", err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return core.ModelResult{}, fmt.Errorf("minimax: status %d: %s", resp.StatusCode, respBody)
+		return core.ModelResult{}, decodeRESTError("chat", resp.StatusCode, speechRequestID(resp.Header), respBody)
 	}
 	var r Response
 	if err := json.Unmarshal(respBody, &r); err != nil {
@@ -110,6 +110,9 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 	if err != nil {
 		return nil, err
 	}
+	// Without stream=true the vendor answers with one JSON message, which the
+	// SSE parser reads as an empty stream that still terminates cleanly.
+	body.Stream = true
 	if err := body.Validate(); err != nil {
 		return nil, err
 	}
@@ -125,6 +128,11 @@ func (p *Provider) Stream(ctx context.Context, req core.ModelRequest) (<-chan co
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("minimax: http: %w", err)
+	}
+	if resp.StatusCode/100 != 2 {
+		defer resp.Body.Close()
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxRESTErrorResponseBytes))
+		return nil, decodeRESTError("chat", resp.StatusCode, speechRequestID(resp.Header), raw)
 	}
 	// Caller is responsible for closing resp.Body via channel completion;
 	// ParseStream drains to EOF.

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultSpeechModel          = "speech-02-hd"
+	defaultSpeechModel          = "speech-2.8-hd"
 	defaultSpeechVoiceID        = "male-qn-qingse"
 	defaultSpeechFormat         = "mp3"
 	defaultSpeechRequestTimeout = 2 * time.Minute

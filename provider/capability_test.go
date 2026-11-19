@@ -132,7 +132,8 @@ func TestRegisteredAudioCapabilitiesAreExplicit(t *testing.T) {
 	minimax, ok := provider.Lookup("minimax")
 	require.True(t, ok)
 	assert.True(t, minimax.Supports(provider.CAPABILITY_SPEECH))
-	assert.False(t, minimax.Supports(provider.CAPABILITY_TRANSCRIBE))
+	assert.True(t, minimax.Supports(provider.CAPABILITY_TRANSCRIBE))
+	assert.True(t, minimax.Supports(provider.CAPABILITY_TRANSLATE))
 
 	for _, name := range []string{
 		"anthropic", "antigravity", "codex", "google", "grok", "ollama",

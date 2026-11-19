@@ -16,6 +16,15 @@ var _ provider.MusicGenerator = (*MusicProvider)(nil)
 // Compile-time: ensure *SpeechProvider satisfies provider.SpeechGenerator.
 var _ provider.SpeechGenerator = (*SpeechProvider)(nil)
 
+// Compile-time: ensure *TranscribeProvider satisfies provider.Transcriber.
+var _ provider.Transcriber = (*TranscribeProvider)(nil)
+
+// Compile-time: ensure *TranslateProvider satisfies both translate surfaces.
+var (
+	_ provider.Translator        = (*TranslateProvider)(nil)
+	_ provider.TranslateStreamer = (*TranslateProvider)(nil)
+)
+
 func init() {
 	provider.Register(provider.Entry{
 		Name: "minimax",
@@ -44,6 +53,12 @@ func init() {
 		},
 		NewSpeech: func(cfg provider.ResolvedConfig) (provider.SpeechGenerator, error) {
 			return NewSpeech(cfg)
+		},
+		NewTranscriber: func(cfg provider.ResolvedConfig) (provider.Transcriber, error) {
+			return NewTranscriber(cfg)
+		},
+		NewTranslate: func(cfg provider.ResolvedConfig) (provider.Translator, error) {
+			return NewTranslate(cfg)
 		},
 		Catalog: DefaultCatalog,
 	})

@@ -304,7 +304,7 @@ func TestSpeechRejectsUnsupportedProvider(t *testing.T) {
 
 func TestTranscribeRejectsUnsupportedProvider(t *testing.T) {
 	err := Transcribe(context.Background(), Request{
-		Provider: "minimax",
+		Provider: "anthropic",
 		AudioURL: "https://example.test/clip.mp3",
 		Options:  provider.Options{LookupEnv: func(string) string { return "" }},
 	}, io.Discard)
@@ -355,7 +355,7 @@ func TestWriteMatrixShowsTypeAndAuthSupport(t *testing.T) {
 	want := map[string][9]string{
 		"google":     {"yes", "yes", "yes", "no", "no", "no", "no", "yes", "yes"},
 		"codex":      {"yes", "yes", "no", "no", "no", "no", "no", "yes", "no"},
-		"minimax":    {"yes", "yes", "yes", "yes", "yes", "no", "yes", "no", "no"},
+		"minimax":    {"yes", "yes", "yes", "yes", "yes", "yes", "yes", "no", "yes"},
 		"elevenlabs": {"no", "yes", "no", "no", "no", "yes", "yes", "no", "no"},
 	}
 	seen := map[string]bool{}

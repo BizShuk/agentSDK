@@ -23,11 +23,18 @@ import (
 func DefaultCatalog() []provider.ModelSpec {
 	return []provider.ModelSpec{
 		// MiniMax-M3 family — current flagship, supports reasoning.
+		// Both serve provider.Translator on the same chat surface.
 		{ID: "MiniMax-M3", Family: "MiniMax-M3", Reasoning: true,
-			Capabilities:     []provider.Capability{provider.CAPABILITY_CHAT},
+			Capabilities:     []provider.Capability{provider.CAPABILITY_CHAT, provider.CAPABILITY_TRANSLATE},
 			InputModalities:  []provider.Modality{provider.MODALITY_TEXT, provider.MODALITY_IMAGE},
 			OutputModalities: []provider.Modality{provider.MODALITY_TEXT},
-			ContextWindow:    256000, MaxTokens: 16384},
+			ContextWindow:    1000000, MaxTokens: 16384},
+		// MiniMax-M3.1-Flash — always thinks; rejects thinking=disabled.
+		{ID: "MiniMax-M3.1-Flash", Family: "MiniMax-M3", Reasoning: true,
+			Capabilities:     []provider.Capability{provider.CAPABILITY_CHAT, provider.CAPABILITY_TRANSLATE},
+			InputModalities:  []provider.Modality{provider.MODALITY_TEXT, provider.MODALITY_IMAGE},
+			OutputModalities: []provider.Modality{provider.MODALITY_TEXT},
+			ContextWindow:    1000000, MaxTokens: 16384},
 		// minimax-M2 — previous reasoning model, retained for explicit selection.
 		{ID: "minimax-M2", Family: "minimax-M2", Reasoning: true,
 			Capabilities:     []provider.Capability{provider.CAPABILITY_CHAT},
@@ -128,6 +135,12 @@ func DefaultCatalog() []provider.ModelSpec {
 			Capabilities:     []provider.Capability{provider.CAPABILITY_SPEECH},
 			InputModalities:  []provider.Modality{provider.MODALITY_TEXT},
 			OutputModalities: []provider.Modality{provider.MODALITY_AUDIO}},
+
+		// asr-1.0 — speech_to_text, reached through provider.Transcriber.
+		{ID: "asr-1.0", Family: "asr",
+			Capabilities:     []provider.Capability{provider.CAPABILITY_TRANSCRIBE},
+			InputModalities:  []provider.Modality{provider.MODALITY_AUDIO},
+			OutputModalities: []provider.Modality{provider.MODALITY_TEXT}},
 	}
 }
 
