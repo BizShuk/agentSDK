@@ -149,6 +149,7 @@ chat surface 無法表達的欄位一律`明確拒收`不靜默忽略，`Subject
 | Music   | non-streaming text-to-music / cover；request validation、bounded response/error、typed API error                   | `MINIMAX_MUSIC_BASE_URL`  |
 | Speech  | `t2a_v2`（Bearer、hex 解碼、`extra_info` → `SpeechInfo`，預設 `speech-2.8-hd`）                                    | `MINIMAX_SPEECH_BASE_URL` |
 | Transcribe | `/v1/speech_to_text` multipart（預設 `asr-1.0`；一律 `verbose_json`，句級 `segments` + speaker 摺入 `Words`；`Language` 走 `language` header） | `MINIMAX_BASE_URL`（trim `/anthropic`） |
+| Voice   | `provider.VoiceManager`：design `/v1/voice_design`（hex preview 解碼）、clone 先 `/v1/files/upload`（`voice_clone`／`prompt_audio`）再 `/v1/voice_clone`、delete `/v1/delete_voice`（category 必填）；voice_id 規則本地驗證 | `MINIMAX_SPEECH_BASE_URL` |
 | Translate | 走同一 chat surface（`/anthropic/v1/messages`，預設 `MiniMax-M3`），翻譯 system prompt；stream 只送 text delta，丟棄 thinking | `MINIMAX_BASE_URL` |
 
 - `ImageRequest.SubjectReferences` 是 provider-neutral 的 i2i 輸入：MiniMax 編成

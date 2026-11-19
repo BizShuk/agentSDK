@@ -22,8 +22,10 @@
   provider terminal semantics；Google／Ollama 共用 `openaichat`，Google／Grok 共用
   `openaiimage`，其餘 vendor payload DTO 保持 local。
 - Provider capability surface：media（`ImageGenerator`／`VideoGenerator`／
-  `MusicGenerator`／`Transcriber`／`SpeechGenerator`）與 realtime（`LiveConnector`／
-  `Translator`）都留在 provider layer，不進 `core.Provider`。`Entry.NewX` /
+  `MusicGenerator`／`Transcriber`／`SpeechGenerator`／`VoiceManager`）與 realtime（`LiveConnector`／
+  `Translator`）都留在 provider layer，不進 `core.Provider`。`VoiceManager`（design／clone／delete）
+  是獨立 capability `voice` 而非 speech 的選配介面：speech 的 decorator／accounting 逐一列舉
+  選配介面組合，再加三個會讓組合倍增。`Entry.NewX` /
   `provider.NewX` 是一致建構路徑，unsupported adapter 回 typed
   `ErrUnsupportedCapability`；`SpeechStreamer`／`VoiceLister`／`TranslateStreamer`
   這類同一 client 的附加能力以 type assertion 發現，decorator 包裝後仍保留。

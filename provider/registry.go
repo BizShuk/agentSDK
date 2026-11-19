@@ -58,6 +58,7 @@ type Entry struct {
 	NewSpeech      SpeechFactory
 	NewLive        LiveFactory
 	NewTranslate   TranslateFactory
+	NewVoice       VoiceFactory
 	Catalog        func() []ModelSpec
 }
 
@@ -100,7 +101,8 @@ func (e Entry) hasFactory() bool {
 		e.NewTranscriber != nil ||
 		e.NewSpeech != nil ||
 		e.NewLive != nil ||
-		e.NewTranslate != nil
+		e.NewTranslate != nil ||
+		e.NewVoice != nil
 }
 
 // Names lists the registered provider names, sorted.
@@ -351,6 +353,30 @@ func NewTranslate(name string, o Options) (Translator, error) {
 	return withTranslateAccounting(e.Name, resolved.Model, decorated, pricing.Default()), nil
 }
 
+// NewVoice builds the named provider's voice lifecycle capability. Voices
+// live on the speech host, so it shares the speech base URL override.
+func NewVoice(name string, o Options) (VoiceManager, error) {
+	e, err := lookup(name)
+	if err != nil {
+		return nil, err
+	}
+	if e.NewVoice == nil {
+		return nil, &UnsupportedCapabilityError{
+			Provider:   e.Name,
+			Capability: CAPABILITY_VOICE,
+		}
+	}
+	resolved, decorator, err := resolveSpeechOptions(e, o)
+	if err != nil {
+		return nil, err
+	}
+	manager, err := e.NewVoice(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s: voice: %w", e.Name, err)
+	}
+	return WithVoiceDecorator(e.Name, manager, decorator), nil
+}
+
 func lookup(name string) (Entry, error) {
 	e, ok := Lookup(name)
 	if !ok {
@@ -400,9 +426,9 @@ func resolveSpeechOptions(e Entry, o Options) (ResolvedConfig, Decorator, error)
 }
 
 // resolveLiveOptions applies the realtime-endpoint base URL override. It
-// serves both NewLive and NewTranslate: every registered translator rides the
-// same realtime socket, so a separate translate override would name the same
-// host twice.
+// serves both NewLive and NewTranslate: a translator rides either the
+// realtime socket (Google) or the chat surface (MiniMax, whose metadata has
+// no live override, so BaseURLEnv stays the chat base).
 func resolveLiveOptions(e Entry, o Options) (ResolvedConfig, Decorator, error) {
 	metadata := e.Metadata
 	if metadata.LiveBaseURLEnv != "" {

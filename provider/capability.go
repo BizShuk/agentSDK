@@ -19,6 +19,7 @@ const (
 	CAPABILITY_SPEECH     Capability = "speech"
 	CAPABILITY_LIVE       Capability = "live"
 	CAPABILITY_TRANSLATE  Capability = "translate"
+	CAPABILITY_VOICE      Capability = "voice"
 )
 
 // ErrUnsupportedCapability identifies a provider that is registered but does
@@ -61,6 +62,8 @@ func (e Entry) Supports(capability Capability) bool {
 		return e.NewLive != nil
 	case CAPABILITY_TRANSLATE:
 		return e.NewTranslate != nil
+	case CAPABILITY_VOICE:
+		return e.NewVoice != nil
 	default:
 		return false
 	}
@@ -78,6 +81,7 @@ func (e Entry) Capabilities() []Capability {
 		CAPABILITY_SPEECH,
 		CAPABILITY_LIVE,
 		CAPABILITY_TRANSLATE,
+		CAPABILITY_VOICE,
 	}
 	out := make([]Capability, 0, len(ordered))
 	for _, capability := range ordered {

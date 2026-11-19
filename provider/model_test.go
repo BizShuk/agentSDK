@@ -122,6 +122,7 @@ func TestBundledCatalogInvariants(t *testing.T) {
 		provider.CAPABILITY_SPEECH:     {input: provider.MODALITY_TEXT, output: provider.MODALITY_AUDIO},
 		provider.CAPABILITY_LIVE:       {input: provider.MODALITY_TEXT, output: provider.MODALITY_TEXT},
 		provider.CAPABILITY_TRANSLATE:  {input: provider.MODALITY_TEXT, output: provider.MODALITY_TEXT},
+		provider.CAPABILITY_VOICE:      {input: provider.MODALITY_TEXT, output: provider.MODALITY_AUDIO},
 	}
 
 	for _, entry := range provider.Entries() {

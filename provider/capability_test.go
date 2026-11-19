@@ -106,6 +106,9 @@ func TestCapabilitiesFollowCanonicalOrder(t *testing.T) {
 		NewTranslate: func(provider.ResolvedConfig) (provider.Translator, error) {
 			return nil, nil
 		},
+		NewVoice: func(provider.ResolvedConfig) (provider.VoiceManager, error) {
+			return nil, nil
+		},
 		Catalog: func() []provider.ModelSpec { return nil },
 	}
 	assert.Equal(t, []provider.Capability{
@@ -118,6 +121,7 @@ func TestCapabilitiesFollowCanonicalOrder(t *testing.T) {
 		provider.CAPABILITY_SPEECH,
 		provider.CAPABILITY_LIVE,
 		provider.CAPABILITY_TRANSLATE,
+		provider.CAPABILITY_VOICE,
 	}, entry.Capabilities())
 }
 

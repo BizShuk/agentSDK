@@ -351,17 +351,17 @@ func TestWriteMatrixShowsTypeAndAuthSupport(t *testing.T) {
 		}
 	}
 
-	// chat, catalog, image, video, music, transcribe, speech, live, translate — in header order.
-	want := map[string][9]string{
-		"google":     {"yes", "yes", "yes", "no", "no", "no", "no", "yes", "yes"},
-		"codex":      {"yes", "yes", "no", "no", "no", "no", "no", "yes", "no"},
-		"minimax":    {"yes", "yes", "yes", "yes", "yes", "yes", "yes", "no", "yes"},
-		"elevenlabs": {"no", "yes", "no", "no", "no", "yes", "yes", "no", "no"},
+	// chat, catalog, image, video, music, transcribe, speech, live, translate, voice — in header order.
+	want := map[string][10]string{
+		"google":     {"yes", "yes", "yes", "no", "no", "no", "no", "yes", "yes", "no"},
+		"codex":      {"yes", "yes", "no", "no", "no", "no", "no", "yes", "no", "no"},
+		"minimax":    {"yes", "yes", "yes", "yes", "yes", "yes", "yes", "no", "yes", "yes"},
+		"elevenlabs": {"no", "yes", "no", "no", "no", "yes", "yes", "no", "no", "no"},
 	}
 	seen := map[string]bool{}
 	for _, line := range strings.Split(text, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 10 {
+		if len(fields) < 11 {
 			continue
 		}
 		expected, ok := want[fields[0]]
@@ -369,7 +369,7 @@ func TestWriteMatrixShowsTypeAndAuthSupport(t *testing.T) {
 			continue
 		}
 		seen[fields[0]] = true
-		if got := [9]string(fields[1:10]); got != expected {
+		if got := [10]string(fields[1:11]); got != expected {
 			t.Errorf("%s capability row = %v, want %v", fields[0], got, expected)
 		}
 	}

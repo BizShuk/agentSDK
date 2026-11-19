@@ -101,14 +101,15 @@ func DefaultCatalog() []provider.ModelSpec {
 		// speech-* — t2a_v2 voices reached through provider.SpeechGenerator,
 		// not through Generate. ContextWindow / MaxTokens stay zero because
 		// t2a_v2 bounds a request by characters of input text, not tokens.
-		// speech-2.8 is the current generation (40 languages, 7 emotions);
+		// speech-2.8 is the current generation (40 languages, 7 emotions)
+		// and also serves voice clone previews (provider.VoiceManager);
 		// older families remain for explicit selection.
 		{ID: "speech-2.8-hd", Family: "speech-2.8",
-			Capabilities:     []provider.Capability{provider.CAPABILITY_SPEECH},
+			Capabilities:     []provider.Capability{provider.CAPABILITY_SPEECH, provider.CAPABILITY_VOICE},
 			InputModalities:  []provider.Modality{provider.MODALITY_TEXT},
 			OutputModalities: []provider.Modality{provider.MODALITY_AUDIO}},
 		{ID: "speech-2.8-turbo", Family: "speech-2.8",
-			Capabilities:     []provider.Capability{provider.CAPABILITY_SPEECH},
+			Capabilities:     []provider.Capability{provider.CAPABILITY_SPEECH, provider.CAPABILITY_VOICE},
 			InputModalities:  []provider.Modality{provider.MODALITY_TEXT},
 			OutputModalities: []provider.Modality{provider.MODALITY_AUDIO}},
 		{ID: "speech-2.5-hd-preview", Family: "speech-2.5",

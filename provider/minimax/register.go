@@ -16,6 +16,9 @@ var _ provider.MusicGenerator = (*MusicProvider)(nil)
 // Compile-time: ensure *SpeechProvider satisfies provider.SpeechGenerator.
 var _ provider.SpeechGenerator = (*SpeechProvider)(nil)
 
+// Compile-time: ensure *VoiceProvider satisfies provider.VoiceManager.
+var _ provider.VoiceManager = (*VoiceProvider)(nil)
+
 // Compile-time: ensure *TranscribeProvider satisfies provider.Transcriber.
 var _ provider.Transcriber = (*TranscribeProvider)(nil)
 
@@ -59,6 +62,9 @@ func init() {
 		},
 		NewTranslate: func(cfg provider.ResolvedConfig) (provider.Translator, error) {
 			return NewTranslate(cfg)
+		},
+		NewVoice: func(cfg provider.ResolvedConfig) (provider.VoiceManager, error) {
+			return NewVoice(cfg)
 		},
 		Catalog: DefaultCatalog,
 	})

@@ -30,6 +30,12 @@ const (
 // when the neutral request names no category.
 const voiceCategoryAll = "all"
 
+// Custom voice classes: cloned from a sample, or designed from a prompt.
+const (
+	voiceCategoryCloning    = "voice_cloning"
+	voiceCategoryGeneration = "voice_generation"
+)
+
 // voiceListRequest is the POST body. voice_type is the only parameter the
 // endpoint takes.
 type voiceListRequest struct {
@@ -159,7 +165,7 @@ func normalizeVoiceCategory(value string) (string, error) {
 	switch category {
 	case "":
 		return voiceCategoryAll, nil
-	case "system", "voice_cloning", "voice_generation", voiceCategoryAll:
+	case "system", voiceCategoryCloning, voiceCategoryGeneration, voiceCategoryAll:
 		return category, nil
 	default:
 		return "", fmt.Errorf(
@@ -179,8 +185,8 @@ func foldVoiceListResponse(
 		entries  []voiceListEntry
 	}{
 		{"system", decoded.SystemVoice},
-		{"voice_cloning", decoded.VoiceCloning},
-		{"voice_generation", decoded.VoiceGeneration},
+		{voiceCategoryCloning, decoded.VoiceCloning},
+		{voiceCategoryGeneration, decoded.VoiceGeneration},
 	} {
 		for _, entry := range group.entries {
 			voice := provider.Voice{
