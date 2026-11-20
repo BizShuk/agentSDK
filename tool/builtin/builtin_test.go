@@ -21,7 +21,7 @@ func TestRegisterDefaults_AllToolsRegistered(t *testing.T) {
 	require.NoError(t, err)
 
 	names := builtin.BuiltinNames()
-	assert.Len(t, names, 6)
+	assert.Len(t, names, 7)
 
 	for _, name := range names {
 		registered, ok := reg.Get(name)
@@ -43,6 +43,7 @@ func TestRegisterDefaults_MissingPolicy_Errors(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "write:")
 	assert.Contains(t, err.Error(), "edit:")
+	assert.Contains(t, err.Error(), "mv:")
 	assert.Contains(t, err.Error(), "bash:")
 }
 

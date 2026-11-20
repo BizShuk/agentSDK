@@ -121,7 +121,7 @@ type Memory struct {
 }
 
 // Tools enables the built-in tool set. Builtin is an allowlist: empty
-// means all six. WorkingDir empty means the process working directory.
+// means every built-in. WorkingDir empty means the process working directory.
 type Tools struct {
 	Builtin    []string `json:"builtin,omitempty"`
 	WorkingDir string   `json:"working_dir,omitempty"`

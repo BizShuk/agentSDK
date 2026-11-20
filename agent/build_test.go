@@ -118,7 +118,7 @@ func TestBootstrapWiresBlocksToEngineFields(t *testing.T) {
 			cfg:  agent.Config{Name: "x", Tier: spec.TIER_STANDARD},
 			verify: func(t *testing.T, e *runtime.Engine) {
 				require.NotNil(t, e.Tools)
-				assert.Len(t, e.Tools.List(), 6, "an empty allowlist means all six built-ins")
+				assert.Len(t, e.Tools.List(), len(builtin.BuiltinNames()), "an empty allowlist means every built-in")
 				assert.NotNil(t, e.Approval)
 				assert.NotNil(t, e.Middleware)
 			},

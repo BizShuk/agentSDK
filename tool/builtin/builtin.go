@@ -1,4 +1,4 @@
-// Package builtin ships built-in agent tools — Read, Write, Edit, Bash, Glob, Grep —
+// Package builtin ships built-in agent tools — Read, Write, Edit, Mv, Bash, Glob, Grep —
 // that any agent can register as a complete set or an allowlist.
 package builtin
 
@@ -13,7 +13,7 @@ import (
 
 // BuiltinNames lists every built-in tool name in a stable order.
 func BuiltinNames() []string {
-	return []string{NAME_READ, NAME_WRITE, NAME_EDIT, NAME_BASH, NAME_GLOB, NAME_GREP}
+	return []string{NAME_READ, NAME_WRITE, NAME_EDIT, NAME_MV, NAME_BASH, NAME_GLOB, NAME_GREP}
 }
 
 // Register constructs and registers the named built-in tools. An empty
@@ -59,6 +59,8 @@ func newTool(name string, opts Options) (core.Tool, error) {
 		return NewWrite(opts.Policy, opts.WorkingDir, opts.WriteOpts...)
 	case NAME_EDIT:
 		return NewEdit(opts.Policy, opts.WorkingDir, opts.EditOpts...)
+	case NAME_MV:
+		return NewMv(opts.Policy, opts.WorkingDir)
 	case NAME_BASH:
 		return NewBash(opts.Policy, opts.WorkingDir, opts.BashOpts...)
 	case NAME_GLOB:
@@ -79,7 +81,7 @@ func MustPolicy(policy tool.Sandbox) tool.Sandbox {
 	return policy
 }
 
-// errPolicyRequired is used by Write/Edit/Bash constructors.
+// errPolicyRequired is used by Write/Edit/Mv/Bash constructors.
 func errPolicyRequired(toolName string) error {
 	return fmt.Errorf("%s requires a non-nil sandbox Policy", toolName)
 }

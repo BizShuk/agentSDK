@@ -111,6 +111,7 @@ func VariantChoices(key string) []Choice {
 			{Value: "read", Label: "read", Default: true},
 			{Value: "write", Label: "write", Default: true},
 			{Value: "edit", Label: "edit", Default: true},
+			{Value: "mv", Label: "mv", Default: true},
 			{Value: "bash", Label: "bash", Default: true, Note: "highest risk — gate it with safety rules"},
 			{Value: "glob", Label: "glob", Default: true},
 			{Value: "grep", Label: "grep", Default: true},

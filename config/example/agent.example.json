@@ -31,6 +31,7 @@
       "read",
       "write",
       "edit",
+      "mv",
       "bash",
       "glob",
       "grep"

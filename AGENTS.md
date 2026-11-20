@@ -87,7 +87,7 @@ agentsdk/
 │   └── persistence.go / notification.go / hook.go / stream.go
 ├── reasoning/                        # DecisionRule/NewRule/NewDecide + 6 個純函式 FSM
 ├── tool/                             # core.Tool alias、RawMessage converter、Registry/RegisterFunc、sandbox
-│   └── builtin/                      # allowlist-aware Register + Read/Write/Edit/Bash/Glob/Grep
+│   └── builtin/                      # allowlist-aware Register + Read/Write/Edit/Mv/Bash/Glob/Grep
 ├── skill/                            # SKILL.md/commands/subagents registry（progressive disclosure + SubAgent/Spawner "task" tool）
 ├── utils/                            # 根層共用 utilities umbrella
 │   ├── agentconfig/                  # agent 設定檔 I/O：Decode/Encode/LoadFile/SaveFile（re-export utils/configfile）
@@ -189,7 +189,7 @@ observability 都在此。
   spotlight 標為 untrusted，prompt injection 命中會被 sanitizer 改寫。
 - WAL recovery 先載入 snapshot，再依 `LastInputSeq` replay Event；replay 不重新呼叫模型，避免 crash recovery 產生重複副作用。`memory/filestore` 使用 atomic state write + JSONL append。
 - `reasoning/` 擁有 `DecisionRule`、built-in factory `NewRule` 與 registry-backed `NewDecide`，因為 rule construction 與 dispatcher 都是 strategy 詞彙的 consumer；`DecisionRule.Kind()` 與 registry key 直接用 `string`。六個 strategy（ThinkThenAct、PlanThenRun、RunThenReview、OneShotReasoning、LearnFromFailure、ChooseAgent）都是 phase FSM。`core` 只保留 `Decide` function type，所以 `runtime` 不必反向依賴具體 reasoning package；working memory 是 rule 與 runtime/middleware 的通訊介面。
-- `core.Tool` 是唯一可執行工具契約（`Name`/`Spec`/`Call(json.RawMessage)`），`tool.Tool` 只是 alias，不另立平行介面。`ToolCall`/`ToolResult` 同時是 model chunk、transcript part、instruction/event 的 canonical payload，不另立串流或訊息專用衍生 struct。`tool.CallWithRawMessage` 在每個 concrete tool 的 `Call` 內把 raw JSON 轉成 typed args、驗證 required fields、執行 typed business function，再把輸出轉回 `ToolResult`；`RegisterFunc` 沿用同一 converter。`builtin.Register` 接受 allowlist（空 = 全部）並以 all-or-nothing 語意註冊 Read/Write/Edit/Bash/Glob/Grep；`RegisterDefaults` 是全選 convenience wrapper。
+- `core.Tool` 是唯一可執行工具契約（`Name`/`Spec`/`Call(json.RawMessage)`），`tool.Tool` 只是 alias，不另立平行介面。`ToolCall`/`ToolResult` 同時是 model chunk、transcript part、instruction/event 的 canonical payload，不另立串流或訊息專用衍生 struct。`tool.CallWithRawMessage` 在每個 concrete tool 的 `Call` 內把 raw JSON 轉成 typed args、驗證 required fields、執行 typed business function，再把輸出轉回 `ToolResult`；`RegisterFunc` 沿用同一 converter。`builtin.Register` 接受 allowlist（空 = 全部）並以 all-or-nothing 語意註冊 Read/Write/Edit/Mv/Bash/Glob/Grep；`Mv` 對 source 與 target 都做 sandbox 檢查、拒絕覆寫、不跨 filesystem；`RegisterDefaults` 是全選 convenience wrapper。
 - `core.ModelRequest` 同時是 provider request 與 `Instruction.CallModel` 的 canonical payload；`RequestID` 供 middleware/tracing 辨識，runtime 只在 request 未帶 tools 時補 registry list，其餘 `MaxTokens`/`StopReasons`/`Auth` 原樣轉送。`agent/spec.Subagents.MaxDepth` 直接注入 `skill.Spawner.MaxDepth`；OTel 是可組合的 `middleware/observability`，不走 config block。
 - `core.ModelResult.Parts` 是 provider 回應與 transcript 之間的 canonical ordered content；`NormalizeContent` 讓舊 provider 的 `Text` / `ToolCalls` 可合成 Parts，也讓新 provider 的 Parts 回填相容投影。reasoning 不併進 `Text`，避免 frontend 無意顯示 chain-of-thought；runtime 仍保留它供下一輪 provider continuation 使用。
 - Provider capability boundary：`core.Provider` 是 runtime 消費端定義的最小 port，只含
