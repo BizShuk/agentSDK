@@ -75,7 +75,7 @@ $RECYCLE.BIN/
 
 # ── C. Node / JavaScript / TypeScript ────────────────────────────────────────
 
-node_modules/
+**/node_modules/
 jspm_packages/
 .npm/
 .yarn/
