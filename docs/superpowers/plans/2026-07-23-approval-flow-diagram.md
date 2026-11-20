@@ -1,6 +1,6 @@
 # Approval Mechanism Flow Diagram
 
-> `SUPERSEDED 2026-07-24` — 已被 [`plans/2026-07-24-round-batch-and-interactive-seam.md`](../../../plans/2026-07-24-round-batch-and-interactive-seam.md) 取代。
+> `SUPERSEDED 2026-07-24` — 已被 [`plans/2026-11-20-Refresh.md`](../../../plans/2026-11-20-Refresh.md) 吸收（原 `plans/2026-07-24-round-batch-and-interactive-seam.md`）。
 > 修正版流程圖見新 plan §14；本檔的 §5 sequence diagram 畫的 `SubmitHumanDecision` → `Resume` 兩段驅動是錯的。
 
 > 對應 plan：[`2026-07-23-agent-approval-resolver.md`](2026-07-23-agent-approval-resolver.md)

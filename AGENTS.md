@@ -149,7 +149,7 @@ agentsdk/
 │   ├── memory/                       # retrospective 與來源研究
 │   └── tutorials/                    # 教學文件
 ├── scripts/                          # verify-workspace.sh 等專案腳本
-├── plans/                            # 進行中的落地計畫
+├── plans/                            # 歷史計畫摘要（2026-11-20-Refresh.md）
 └── tmp/                              # runtime symlink，不放 production logic
 ```
 
@@ -392,8 +392,8 @@ bash scripts/verify-workspace.sh   # go.work 全部 module 的 build + test
 - 領域術語單一定義：[`docs/terminology.md`](docs/terminology.md)。
 - 歷史變更與已完成里程碑：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)。
 - 尚未完成與刻意保留的工作：[`README.todo`](README.todo)。
-- 仍在執行的落地計畫：`plans/`。
-- 已實作規格的濃縮索引：[`docs/specs/2026-08-04-Summary.md`](docs/specs/2026-08-04-Summary.md)。
+- 歷史計畫摘要：[`plans/2026-11-20-Refresh.md`](plans/2026-11-20-Refresh.md)。
+- 已實作規格的濃縮索引：[`docs/specs/2026-11-20-Summary.md`](docs/specs/2026-11-20-Summary.md)。
 
 ## 慣例與注意事項 (Conventions and Caveats)
 

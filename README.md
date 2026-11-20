@@ -150,10 +150,8 @@ go run . --fake -p "看看這個專案"   # 不打 provider 的 print 模式
 - 領域術語：[`docs/terminology.md`](docs/terminology.md)
 - 歷史變更與已完成里程碑：[`docs/CHANGELOG.md`](docs/CHANGELOG.md)
 - 尚未完成的工作：[`README.todo`](README.todo)
-- 已實作規格：
-  - [`2026-08-04-summary.md`](docs/specs/2026-08-04-summary.md)（2026-07-21 之前的歷史摘要）
-  - [`2026-07-27-agent-sdk-contract-alignment.md`](docs/specs/2026-07-27-agent-sdk-contract-alignment.md)
-  - [`2026-07-27-provider-auth-image-capabilities.md`](docs/specs/2026-07-27-provider-auth-image-capabilities.md)
+- 已實作規格：[`2026-11-20-Summary.md`](docs/specs/2026-11-20-Summary.md)（2026-11-06 之前的歷史摘要；原 `2026-08-04-summary.md`、`2026-07-27-agent-sdk-contract-alignment.md`、`2026-07-27-provider-auth-image-capabilities.md`，已整併）
+- 已整併計畫：[`2026-11-20-Refresh.md`](plans/2026-11-20-Refresh.md)
 
 ## 已淘汰功能 (Deprecated Features)
 
@@ -161,3 +159,5 @@ go run . --fake -p "看看這個專案"   # 不打 provider 的 print 模式
 | -------- | ---- | -------- | ---- |
 | 2026-08-04 | Logdoctor proposal / approval lifecycle | `2026-07-18-continuous-logdoctor-minimax.md` | immutable proposal + digest 與 `list` / `show` / `approve` / `reject` 子指令已於 `879e246` 隨 log-agent-v2 重構移除；`sample/logdoctor-agent` 現只保留單一 `watch` 子指令 |
 | 2026-08-04 | `provider/openaicompat` | `2026-07-18-continuous-logdoctor-minimax.md` | 已於 `551410d` 移除；OpenAI-compatible wire 改由 `provider/protocol/openaichat` 共用 codec 承接 |
+| 2026-11-20 | `mcp.Client` | `2026-07-07-mcp-client.md` | 已於 `f1eecd0` 移除；目前只保留未接 production consumer 的 `tool.ToolSource` 介面 |
+| 2026-11-20 | `perception.Multi` / `perception.Normalizer` | `2026-07-07-perception-input-pillar.md` | 已於 `a23f41e` 移除；觀察輸入只保留 `core.ObservationSource` port |

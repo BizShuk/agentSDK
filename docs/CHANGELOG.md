@@ -152,8 +152,7 @@
 
 ### Provider contract 與 config pipeline
 
-參考：[`docs/specs/2026-07-27-provider-auth-image-capabilities.md`](specs/2026-07-27-provider-auth-image-capabilities.md)、
-[`docs/specs/2026-07-27-agent-sdk-contract-alignment.md`](specs/2026-07-27-agent-sdk-contract-alignment.md)。
+參考：[`docs/specs/2026-11-20-Summary.md`](specs/2026-11-20-Summary.md)（原 `2026-07-27-provider-auth-image-capabilities.md`、`2026-07-27-agent-sdk-contract-alignment.md`，已整併）。
 
 - Credential kind 只決定 request auth，不決定 endpoint 或 body；endpoint 統一由
   `ResolvedConfig.BaseURL` 管理，`core.Auth` 只保留 `APIKey`、`Bearer`、`Headers`。
@@ -215,7 +214,7 @@
 
 ### Provider 認證解耦
 
-計畫：[`plans/2026-07-26-auth-under-provider-and-config-dissolution.md`](../plans/2026-07-26-auth-under-provider-and-config-dissolution.md)。
+計畫：[`plans/2026-11-20-Refresh.md`](../plans/2026-11-20-Refresh.md)（原 `2026-07-26-auth-under-provider-and-config-dissolution.md`，已整併）。
 
 - `Phase A` 移除 agent 對 auth 的死連線：`RefreshingProvider` 歸入
   `provider/credential`，`Host` 移除零 caller 的 `AuthStore` / `AuthDir`。
@@ -238,7 +237,7 @@
 
 ### Round、batch 與 interactive seam
 
-計畫：[`plans/2026-07-24-round-batch-and-interactive-seam.md`](../plans/2026-07-24-round-batch-and-interactive-seam.md)。
+計畫：[`plans/2026-11-20-Refresh.md`](../plans/2026-11-20-Refresh.md)（原 `2026-07-24-round-batch-and-interactive-seam.md`，已整併）。
 
 - `Task 0`：`core.Budget` 新增 `MaxRounds`、`UsedRounds`、`MaxToolCalls`，
   `Exceeded()` 新增 `round_budget`；同步 `spec.Limits`、tier defaults、validation 與
@@ -260,8 +259,8 @@
 
 ### Agent skeleton `M1`–`M7`
 
-計畫：[`plans/2026-08-06-refresh.md`](../plans/2026-08-06-refresh.md)（原
-`2026-07-22-agent-skeleton-config-opt-in.md`，已整併）。
+計畫：[`plans/2026-11-20-Refresh.md`](../plans/2026-11-20-Refresh.md)（原
+`2026-08-06-refresh.md`，其前身為 `2026-07-22-agent-skeleton-config-opt-in.md`，已整併）。
 
 - `M1`：`agent/spec` 提供 `Config`、八個 feature blocks、`Choice` metadata、
   tier expansion、validation 與 JSON encoding。
@@ -299,8 +298,8 @@
 
 ### Harness/UX skeleton
 
-計畫歷史：[`plans/2026-08-06-refresh.md`](../plans/2026-08-06-refresh.md)（原
-`2026-08-03-refresh.md`，已整併）。
+計畫歷史：[`plans/2026-11-20-Refresh.md`](../plans/2026-11-20-Refresh.md)（原
+`2026-08-06-refresh.md`，其前身為 `2026-08-03-refresh.md`，已整併）。
 來源調查：[`docs/memory/2026-07-19-agent-client-feature-catalog.md`](memory/2026-07-19-agent-client-feature-catalog.md)。
 
 - `sample/code-agent` 接上 TUI、wire、hooks、permission、session、skills、commands、

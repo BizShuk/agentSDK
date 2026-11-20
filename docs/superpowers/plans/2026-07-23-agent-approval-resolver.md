@@ -1,6 +1,6 @@
 # Agent Approval Resolver Implementation Plan
 
-> `SUPERSEDED 2026-07-24` — 已被 [`plans/2026-07-24-round-batch-and-interactive-seam.md`](../../../plans/2026-07-24-round-batch-and-interactive-seam.md) 取代。
+> `SUPERSEDED 2026-07-24` — 已被 [`plans/2026-11-20-Refresh.md`](../../../plans/2026-11-20-Refresh.md) 吸收（原 `plans/2026-07-24-round-batch-and-interactive-seam.md`）。
 > 本檔保留作歷史紀錄，`不得`據以實作：三介面設計已收斂為單一 `app.Interactive`，
 > 且 Task 1 Step 5 編譯失敗、Task 3 的 `SubmitHumanDecision` + `Resume` 會重複執行 tool。
 > 完整修正清單見新 plan §13。
