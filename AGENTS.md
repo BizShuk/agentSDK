@@ -1,4 +1,4 @@
-# CLAUDE.md — agentsdk 技術脈絡 (Technical Context)
+# AGENTS.md — agentsdk 技術脈絡 (Technical Context)
 
 `agentsdk` 是 Go Agentic Loop SDK、provider adapter、認證整合與範例程式的 workspace。
 本文只記錄目前程式碼採用的邊界與決策；歷史變更見
@@ -302,6 +302,29 @@ observability 都在此。
 - Presets, not walls：設定挑 preset 而非組合細節（middleware 鏈的順序是正確性，
   不是偏好）；`WithCustomize` 在全部 stage 之後拿到組好的 `*runtime.Engine`，
   設定詞彙沒覆蓋的都還做得到。
+
+## 外部工具整合 (External Tool Integration)
+
+consumer 要讓 agent 使用既有 service 或 CLI 的能力時，不需要把 tool 實作搬進 agentsdk：
+`core.Tool` 是公開契約，consumer 在自己的 repo 實作後以 `agent.WithTools` /
+`agent.WithToolFunc` 注入。下表是目前可用的整合方式與其邊界。
+
+| 方式 | 現況 | 適用 | 風險 |
+| --- | --- | --- | --- |
+| consumer 自行實作 `core.Tool`，內部 exec CLI 或打 HTTP | ✅ 可用 | 歸檔類 tool（如 ocr_agent 的 `file_receipt`），或包裝 `img`、`pm2` 等 CLI | 最低：binary 與 argv 由程式決定，model 只提供參數值 |
+| builtin `Bash` tool | ✅ 可用 | 臨時任意指令 | 高：`tool.Policy` 只擋 command 危險子字串，指令內的路徑不受 `AllowedPathPrefixes` 約束 |
+| Skills（`SKILL.md`）+ `Bash` | ✅ 設定 `spec.Skills.Dirs` | 重用既有 skill 說明（如 `pm2`、`img`） | 同 `Bash`：實際執行仍由 model 組指令 |
+| `middleware/hook` 的 `Command`（外部 script，JSON stdin/stdout） | ✅ 可用 | `PreToolUse` gate、`PostToolUse` 稽核；不能當 tool | 低 |
+| `tool.ToolSource` / MCP 動態探索 | ❌ 只剩介面 | 外部 service 公開自身 tool 清單 | — |
+| 在 `agent.yaml` 宣告外部 CLI tool | ❌ `spec.Tools` 只有 `Builtin`、`WorkingDir` | 不寫 code 接 CLI | — |
+
+- 預設採第一種：exec 一律走固定 argv（`exec.CommandContext(ctx, bin, args...)`），
+  不經 shell 解譯，model 輸出不得決定 binary 或拼接 command 字串。
+- `tool.ToolSource`（`Discover` + `Call`）目前無實作、無 Registry adapter。MCP client
+  （`modelcontextprotocol/go-sdk`）曾存在，因無 production caller 於 `f1eecd0` 移除；
+  重新引入的前提是出現跨 process 共用 tool 的真實 consumer。
+- dry-run（預覽 model 想執行的 tool call 而不執行）可用 `PreToolUse` hook 記錄
+  `ToolCall.Args` 後回 `Block: true`；runtime 會把 block 轉成失敗 `ToolResult`。
 
 ## CLI、設定與持久化 (CLI, Config, Persistence)
 
